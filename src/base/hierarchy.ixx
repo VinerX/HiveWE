@@ -109,6 +109,18 @@ export class Hierarchy {
 		return std::unexpected(path_str + " could not be found in the hierarchy");
 	}
 
+	[[nodiscard]]
+	BinaryReader open_file_or_throw(const fs::path& path, std::string_view context = {}) const {
+		auto result = open_file(path);
+		if (!result) {
+			if (context.empty()) {
+				throw std::runtime_error(result.error());
+			}
+			throw std::runtime_error(std::format("{}: {}", context, result.error()));
+		}
+		return std::move(result.value());
+	}
+
 	bool file_exists(const fs::path& path) const {
 		if (path.empty()) {
 			return false;
@@ -116,7 +128,7 @@ export class Hierarchy {
 
 		const auto path_str = path.string();
 
-		return fs::exists("data/overrides" / path) || (local_files && fs::exists(root_directory / path))
+		return fs::is_regular_file("data/overrides" / path) || (local_files && fs::is_regular_file(root_directory / path))
 			|| (hd && teen && map_file_exists("_hd.w3mod:_teen.w3mod:" + path_str))
 			|| (hd && map_file_exists("_hd.w3mod:" + path_str)) || map_file_exists(path)
 			|| (hd && game_data.file_exists("war3.w3mod:_hd.w3mod:_tilesets/"s + tileset + ".w3mod:"s + path_str))
@@ -133,6 +145,18 @@ export class Hierarchy {
 	[[nodiscard]]
 	auto map_file_read(const fs::path& path) const -> std::expected<BinaryReader, std::string> {
 		return read_file(map_directory / path);
+	}
+
+	[[nodiscard]]
+	BinaryReader map_file_read_or_throw(const fs::path& path, std::string_view context = {}) const {
+		auto result = map_file_read(path);
+		if (!result) {
+			if (context.empty()) {
+				throw std::runtime_error(result.error());
+			}
+			throw std::runtime_error(std::format("{}: {}", context, result.error()));
+		}
+		return std::move(result.value());
 	}
 
 	/// source somewhere on disk, destination relative to the map
@@ -155,7 +179,7 @@ export class Hierarchy {
 	}
 
 	bool map_file_exists(const fs::path& path) const {
-		return fs::exists(map_directory / path);
+		return fs::is_regular_file(map_directory / path);
 	}
 
 	void map_file_rename(const fs::path& original, const fs::path& renamed) const {

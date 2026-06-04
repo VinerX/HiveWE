@@ -544,9 +544,11 @@ export class Triggers {
 
   public:
 	void load() {
-		BinaryReader reader = hierarchy.map_file_read("war3map.wtg").value();
+		BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.wtg", "Triggers::load");
 
-		trigger_strings.load("UI/TriggerStrings.txt");
+		if (hierarchy.open_file("UI/TriggerStrings.txt")) {
+			trigger_strings.load("UI/TriggerStrings.txt");
+		}
 		trigger_data.load("UI/TriggerData.txt");
 		trigger_data.substitute(world_edit_strings, "WorldEditStrings");
 
@@ -777,7 +779,7 @@ export class Triggers {
 
 	/// Can be Jass or Lua depending on the map
 	void load_scripts() {
-		BinaryReader reader = hierarchy.map_file_read("war3map.wct").value();
+		BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.wct", "Triggers::load_scripts");
 
 		const uint32_t version = reader.read<uint32_t>();
 		if (version != 0x80000004) {

@@ -55,7 +55,7 @@ export class Doodads {
 	std::vector<Doodad> doodads;
 
 	bool load(const Terrain& terrain, const MapInfo& info) {
-		BinaryReader reader = hierarchy.map_file_read("war3map.doo").value();
+		BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.doo", "Doodads::load");
 
 		const std::string magic_number = reader.read_string(4);
 		if (magic_number != "W3do") {
@@ -504,8 +504,18 @@ export class Doodads {
 			std::println("Invalid model file for {} with file path: {} ({})", id, mesh_path.string(), result.error());
 			result = resource_manager.load<SkinnedMesh>("Objects/Invalidmodel/Invalidmodel.mdx", "", std::nullopt);
 		}
+		if (!result) {
+			throw std::runtime_error(
+				std::format(
+					"Failed to load doodad model '{}' for id {} and the Invalidmodel fallback also failed ({})",
+					mesh_path.string(),
+					id,
+					result.error()
+				)
+			);
+		}
 
-		auto mesh = result.value();
+		auto mesh = *result;
 		{
 			std::lock_guard lock(mesh_mutex);
 			id_to_mesh.emplace(full_id, mesh);

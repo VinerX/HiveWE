@@ -294,7 +294,7 @@ export class Terrain: public QObject {
 	}
 
 	bool load(const Physics& physics) {
-		BinaryReader reader = hierarchy.map_file_read("war3map.w3e").value();
+		BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.w3e", "Terrain::load");
 
 		const std::string magic_number = reader.read_string(4);
 		if (magic_number != "W3E!") {
@@ -372,6 +372,16 @@ export class Terrain: public QObject {
 		terrain_slk.load("TerrainArt/Terrain.slk");
 		cliff_slk.load("TerrainArt/CliffTypes.slk");
 		const slk::SLK water_slk("TerrainArt/Water.slk");
+		const auto blight_texture_path = [&]() {
+			const auto tile_set_key = std::string(1, tileset);
+			if (world_edit_data.section_exists("TileSets") && world_edit_data.key_exists("TileSets", tile_set_key)) {
+				const auto configured = world_edit_data.data<std::string>("TileSets", tile_set_key, 1);
+				if (!configured.empty()) {
+					return configured;
+				}
+			}
+			return terrain_slk.data<std::string>("dir", tileset_ids.front()) + "/" + terrain_slk.data<std::string>("file", tileset_ids.front());
+		};
 
 		// Water Textures and Colours
 
@@ -436,9 +446,7 @@ export class Terrain: public QObject {
 		}
 		blight_texture = static_cast<int>(ground_textures.size());
 		ground_texture_to_id.emplace("blight", blight_texture);
-		ground_textures.push_back(
-			resource_manager.load<GroundTexture>(world_edit_data.data("TileSets", std::string(1, tileset), 1)).value()
-		);
+		ground_textures.push_back(resource_manager.load<GroundTexture>(blight_texture_path()).value());
 		gpu_ground_texture_handles.push_back(ground_textures.back()->bindless_handle);
 
 		// Cliff Textures
@@ -712,12 +720,21 @@ export class Terrain: public QObject {
 			ground_texture_to_id.emplace(tile_id, static_cast<int>(ground_textures.size() - 1));
 			gpu_ground_texture_handles.push_back(ground_textures.back()->bindless_handle);
 		}
+		const auto blight_texture_path = [&]() {
+			const auto tile_set_key = std::string(1, tileset);
+			if (world_edit_data.section_exists("TileSets") && world_edit_data.key_exists("TileSets", tile_set_key)) {
+				const auto configured = world_edit_data.data<std::string>("TileSets", tile_set_key, 1);
+				if (!configured.empty()) {
+					return configured;
+				}
+			}
+			return terrain_slk.data<std::string>("dir", tileset_ids.front()) + "/" + terrain_slk.data<std::string>("file", tileset_ids.front());
+		};
 		blight_texture = static_cast<int>(ground_textures.size());
 		ground_texture_to_id.emplace("blight", blight_texture);
 		ground_textures.push_back(resource_manager
 									  .load<GroundTexture>(
-										  world_edit_data.data("TileSets", std::string(1, tileset), 1)
-										  + (hierarchy.hd ? "_diffuse.dds" : ".dds")
+										  blight_texture_path() + (hierarchy.hd ? "_diffuse.dds" : ".dds")
 									  )
 									  .value());
 		gpu_ground_texture_handles.push_back(ground_textures.back()->bindless_handle);

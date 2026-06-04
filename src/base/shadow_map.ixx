@@ -26,7 +26,7 @@ export class ShadowMap {
 
   public:
 	bool load(size_t terrain_width, size_t terrain_height) {
-		BinaryReader reader = hierarchy.map_file_read("war3map.shd").value();
+		BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.shd", "ShadowMap::load");
 
 		width = terrain_width * 4;
 		height = terrain_height * 4;

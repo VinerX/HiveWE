@@ -32,7 +32,7 @@ export class CliffMesh : public Resource {
 			throw std::invalid_argument("CliffMesh requires .mdx file, got: " + path.string());
 		}
 
-		auto reader = hierarchy.open_file(path).value();
+		auto reader = hierarchy.open_file_or_throw(path, std::format("CliffMesh({})", path.string()));
 		mdx::MDX mdx = mdx::MDX(reader);
 
 		if (!mdx.is_valid()) {

@@ -25,9 +25,15 @@ namespace ini {
 			const auto buffer = [&] {
 				if (local) {
 					auto res = read_file(path);
+					if (!res) {
+						throw std::runtime_error(std::format("INI::load({}): {}", path.string(), res.error()));
+					}
 					return std::move(res.value().buffer);
 				} else {
 					auto res = hierarchy.open_file(path);
+					if (!res) {
+						throw std::runtime_error(std::format("INI::load({}): {}", path.string(), res.error()));
+					}
 					return std::move(res.value().buffer);
 				}
 			}();
@@ -113,6 +119,10 @@ namespace ini {
 
 		/// Replaces all values (not keys) which match one of the keys in substitution INI
 		void substitute(const INI& ini, const std::string_view section) {
+			if (!ini.section_exists(section)) {
+				return;
+			}
+
 			for (auto&& [section_key, section_value] : ini_data) {
 				for (auto&& [key, value] : section_value) {
 					for (auto&& part : value) {
@@ -129,7 +139,7 @@ namespace ini {
 			if (auto found = ini_data.find(section); found != ini_data.end()) {
 				return found->second;
 			} else {
-				throw std::runtime_error("section not found");
+				throw std::runtime_error(std::format("INI section not found: {}", section));
 			}
 		}
 
@@ -155,7 +165,7 @@ namespace ini {
 		[[nodiscard]] T data(const std::string_view section, const std::string_view key, const size_t argument = 0) const {
 			const auto sec = ini_data.find(section);
 			if (sec == ini_data.end()) {
-				throw std::runtime_error("section not found");
+				throw std::runtime_error(std::format("INI section not found: {}", section));
 			}
 			const auto value = sec->second.find(key);
 			if (value == sec->second.end()) {

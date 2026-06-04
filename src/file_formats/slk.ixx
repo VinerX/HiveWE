@@ -58,9 +58,15 @@ namespace slk {
 			const auto buffer = [&] {
 				if (local) {
 					auto res = read_file(path);
+					if (!res) {
+						throw std::runtime_error(std::format("SLK::load({}): {}", path.string(), res.error()));
+					}
 					return std::move(res.value().buffer);
 				} else {
 					auto res = hierarchy.open_file(path);
+					if (!res) {
+						throw std::runtime_error(std::format("SLK::load({}): {}", path.string(), res.error()));
+					}
 					return std::move(res.value().buffer);
 				}
 			}();
@@ -413,7 +419,9 @@ namespace slk {
 		/// Substitutes the data of the slk with data from the INI based on a certain section key.
 		/// The keys of the section are matched with all the cells in the table and if they match will replace the value
 		void substitute(const ini::INI& ini, const std::string_view section) {
-			assert(ini.section_exists(section));
+			if (!ini.section_exists(section)) {
+				return;
+			}
 
 			for (auto& [id, properties] : base_data) {
 				for (auto& [prop_id, prop_value] : properties) {

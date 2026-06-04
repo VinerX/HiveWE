@@ -45,6 +45,15 @@ import <glm/gtc/matrix_transform.hpp>;
 namespace fs = std::filesystem;
 using namespace std::literals::string_literals;
 
+namespace {
+	void log_map_load_line(const std::string& message) {
+		std::ofstream log("hivewe.log", std::ios::app);
+		log << message << '\n';
+		log.flush();
+		std::println("{}", message);
+	}
+}
+
 export struct FileUsage {
 	std::string path;
 	std::unordered_set<std::string> used_by; // empty = unused
@@ -96,9 +105,32 @@ export class Map: public QObject {
 		Timer full_timer;
 		Timer timer;
 
+		const auto log_phase = [&](std::string_view message) {
+			log_map_load_line(std::format("[MAP] {}", message));
+		};
+		const auto run_phase = [&](std::string_view phase_name, auto&& fn) {
+			log_phase(std::format("BEGIN {}", phase_name));
+			try {
+				std::forward<decltype(fn)>(fn)();
+				log_phase(std::format("END {}", phase_name));
+			} catch (const std::exception& ex) {
+				log_phase(std::format("FAIL {}: {}", phase_name, ex.what()));
+				throw std::runtime_error(std::format("Map load phase '{}' failed: {}", phase_name, ex.what()));
+			}
+		};
+		const auto load_optional_ini = [&](const fs::path& ini_path) {
+			const auto opened = hierarchy.open_file(ini_path);
+			if (!opened) {
+				log_phase(std::format("OPTIONAL game data missing, skipping {} ({})", ini_path.string(), opened.error()));
+				return ini::INI();
+			}
+			return ini::INI(ini_path);
+		};
+
 		hierarchy.map_directory = path;
 		filesystem_path = fs::absolute(path) / "";
 		name = (--(--filesystem_path.end()))->string();
+		log_phase(std::format("Loading map directory {}", filesystem_path.string()));
 
 		// ToDo So for the game data files we should actually load from _balance/custom_v0.w3mod/Units, _balance/custom_v1.w3mod/Units, _balance/melee_v0.w3mod/units or /Units depending on the Game Data set and Game Data Versions
 		// Maybe just ignore RoC so we only need to choose between _balance/custom_v1.w3mod/Units and /Units
@@ -116,33 +148,33 @@ export class Map: public QObject {
 			units_meta_slk.substitute(world_edit_strings, "WorldEditStrings");
 			units_meta_slk.build_meta_map();
 
-			unit_editor_data = ini::INI("UI/UnitEditorData.txt");
+			unit_editor_data = load_optional_ini("UI/UnitEditorData.txt");
 			unit_editor_data.substitute(world_edit_strings, "WorldEditStrings");
 			// Have to substitute twice since some keys refer to other keys in the same file
 			unit_editor_data.substitute(world_edit_strings, "WorldEditStrings");
 
-			units_slk.merge(ini::INI("Units/UnitSkin.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/UnitWeaponsFunc.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/UnitWeaponsSkin.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/UnitSkin.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/UnitWeaponsFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/UnitWeaponsSkin.txt"), units_meta_slk);
 
 			units_slk.merge(slk::SLK("Units/UnitBalance.slk"));
 			units_slk.merge(slk::SLK("Units/unitUI.slk"));
 			units_slk.merge(slk::SLK("Units/UnitWeapons.slk"));
 			units_slk.merge(slk::SLK("Units/UnitAbilities.slk"));
 
-			units_slk.merge(ini::INI("Units/HumanUnitFunc.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/OrcUnitFunc.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/UndeadUnitFunc.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/NightElfUnitFunc.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/NeutralUnitFunc.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/CampaignUnitFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/HumanUnitFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/OrcUnitFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/UndeadUnitFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/NightElfUnitFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/NeutralUnitFunc.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/CampaignUnitFunc.txt"), units_meta_slk);
 
-			units_slk.merge(ini::INI("Units/HumanUnitStrings.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/OrcUnitStrings.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/UndeadUnitStrings.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/NightElfUnitStrings.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/NeutralUnitStrings.txt"), units_meta_slk);
-			units_slk.merge(ini::INI("Units/CampaignUnitStrings.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/HumanUnitStrings.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/OrcUnitStrings.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/UndeadUnitStrings.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/NightElfUnitStrings.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/NeutralUnitStrings.txt"), units_meta_slk);
+			units_slk.merge(load_optional_ini("Units/CampaignUnitStrings.txt"), units_meta_slk);
 		});
 
 		auto items_future = std::async(std::launch::async, [&] {
@@ -151,9 +183,9 @@ export class Map: public QObject {
 			items_meta_slk.substitute(world_edit_strings, "WorldEditStrings");
 			items_meta_slk.build_meta_map();
 
-			items_slk.merge(ini::INI("Units/ItemSkin.txt"), items_meta_slk);
-			items_slk.merge(ini::INI("Units/ItemFunc.txt"), items_meta_slk);
-			items_slk.merge(ini::INI("Units/ItemStrings.txt"), items_meta_slk);
+			items_slk.merge(load_optional_ini("Units/ItemSkin.txt"), items_meta_slk);
+			items_slk.merge(load_optional_ini("Units/ItemFunc.txt"), items_meta_slk);
+			items_slk.merge(load_optional_ini("Units/ItemStrings.txt"), items_meta_slk);
 		});
 
 		auto doodads_future = std::async(std::launch::async, [&] {
@@ -162,7 +194,7 @@ export class Map: public QObject {
 			doodads_meta_slk.substitute(world_edit_strings, "WorldEditStrings");
 			doodads_meta_slk.build_meta_map();
 
-			doodads_slk.merge(ini::INI("Doodads/DoodadSkins.txt"), doodads_meta_slk);
+			doodads_slk.merge(load_optional_ini("Doodads/DoodadSkins.txt"), doodads_meta_slk);
 			doodads_slk.substitute(world_edit_strings, "WorldEditStrings");
 			doodads_slk.substitute(world_edit_game_strings, "WorldEditStrings");
 
@@ -193,7 +225,7 @@ export class Map: public QObject {
 			destructibles_meta_slk.substitute(world_edit_strings, "WorldEditStrings");
 			destructibles_meta_slk.build_meta_map();
 
-			destructibles_slk.merge(ini::INI("Units/DestructableSkin.txt"), destructibles_meta_slk);
+			destructibles_slk.merge(load_optional_ini("Units/DestructableSkin.txt"), destructibles_meta_slk);
 			destructibles_slk.substitute(world_edit_strings, "WorldEditStrings");
 			destructibles_slk.substitute(world_edit_game_strings, "WorldEditStrings");
 
@@ -217,24 +249,24 @@ export class Map: public QObject {
 		});
 
 		// Load shared files
-		const ini::INI ability_skin_ini("Units/AbilitySkin.txt");
-		const ini::INI ability_skin_strings_ini("Units/AbilitySkinStrings.txt");
-		const ini::INI human_ability_func_ini("Units/HumanAbilityFunc.txt");
-		const ini::INI orc_ability_func_ini("Units/OrcAbilityFunc.txt");
-		const ini::INI undead_ability_func_ini("Units/UndeadAbilityFunc.txt");
-		const ini::INI night_elf_ability_func_ini("Units/NightElfAbilityFunc.txt");
-		const ini::INI neutral_ability_func_ini("Units/NeutralAbilityFunc.txt");
-		const ini::INI item_ability_func_ini("Units/ItemAbilityFunc.txt");
-		const ini::INI common_ability_func_ini("Units/CommonAbilityFunc.txt");
-		const ini::INI campaign_ability_func_ini("Units/CampaignAbilityFunc.txt");
-		const ini::INI human_ability_strings_ini("Units/HumanAbilityStrings.txt");
-		const ini::INI orc_ability_strings_ini("Units/OrcAbilityStrings.txt");
-		const ini::INI undead_ability_strings_ini("Units/UndeadAbilityStrings.txt");
-		const ini::INI night_elf_ability_strings_ini("Units/NightElfAbilityStrings.txt");
-		const ini::INI neutral_ability_strings_ini("Units/NeutralAbilityStrings.txt");
-		const ini::INI item_ability_strings_ini("Units/ItemAbilityStrings.txt");
-		const ini::INI common_ability_strings_ini("Units/CommonAbilityStrings.txt");
-		const ini::INI campaign_ability_strings_ini("Units/CampaignAbilityStrings.txt");
+		const ini::INI ability_skin_ini = load_optional_ini("Units/AbilitySkin.txt");
+		const ini::INI ability_skin_strings_ini = load_optional_ini("Units/AbilitySkinStrings.txt");
+		const ini::INI human_ability_func_ini = load_optional_ini("Units/HumanAbilityFunc.txt");
+		const ini::INI orc_ability_func_ini = load_optional_ini("Units/OrcAbilityFunc.txt");
+		const ini::INI undead_ability_func_ini = load_optional_ini("Units/UndeadAbilityFunc.txt");
+		const ini::INI night_elf_ability_func_ini = load_optional_ini("Units/NightElfAbilityFunc.txt");
+		const ini::INI neutral_ability_func_ini = load_optional_ini("Units/NeutralAbilityFunc.txt");
+		const ini::INI item_ability_func_ini = load_optional_ini("Units/ItemAbilityFunc.txt");
+		const ini::INI common_ability_func_ini = load_optional_ini("Units/CommonAbilityFunc.txt");
+		const ini::INI campaign_ability_func_ini = load_optional_ini("Units/CampaignAbilityFunc.txt");
+		const ini::INI human_ability_strings_ini = load_optional_ini("Units/HumanAbilityStrings.txt");
+		const ini::INI orc_ability_strings_ini = load_optional_ini("Units/OrcAbilityStrings.txt");
+		const ini::INI undead_ability_strings_ini = load_optional_ini("Units/UndeadAbilityStrings.txt");
+		const ini::INI night_elf_ability_strings_ini = load_optional_ini("Units/NightElfAbilityStrings.txt");
+		const ini::INI neutral_ability_strings_ini = load_optional_ini("Units/NeutralAbilityStrings.txt");
+		const ini::INI item_ability_strings_ini = load_optional_ini("Units/ItemAbilityStrings.txt");
+		const ini::INI common_ability_strings_ini = load_optional_ini("Units/CommonAbilityStrings.txt");
+		const ini::INI campaign_ability_strings_ini = load_optional_ini("Units/CampaignAbilityStrings.txt");
 
 		auto abilities_future = std::async(std::launch::async, [&] {
 			abilities_slk = slk::SLK("Units/AbilityData.slk");
@@ -283,21 +315,21 @@ export class Map: public QObject {
 			upgrade_meta_slk.build_meta_map();
 
 			upgrade_slk.merge(ability_skin_ini, upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/UpgradeSkin.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/HumanUpgradeFunc.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/OrcUpgradeFunc.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/UndeadUpgradeFunc.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/NightElfUpgradeFunc.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/NeutralUpgradeFunc.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/CampaignUpgradeFunc.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/UpgradeSkin.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/HumanUpgradeFunc.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/OrcUpgradeFunc.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/UndeadUpgradeFunc.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/NightElfUpgradeFunc.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/NeutralUpgradeFunc.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/CampaignUpgradeFunc.txt"), upgrade_meta_slk);
 
-			upgrade_slk.merge(ini::INI("Units/CampaignUpgradeStrings.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/HumanUpgradeStrings.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/NeutralUpgradeStrings.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/NightElfUpgradeStrings.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/OrcUpgradeStrings.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/UndeadUpgradeStrings.txt"), upgrade_meta_slk);
-			upgrade_slk.merge(ini::INI("Units/UpgradeSkinStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/CampaignUpgradeStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/HumanUpgradeStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/NeutralUpgradeStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/NightElfUpgradeStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/OrcUpgradeStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/UndeadUpgradeStrings.txt"), upgrade_meta_slk);
+			upgrade_slk.merge(load_optional_ini("Units/UpgradeSkinStrings.txt"), upgrade_meta_slk);
 		});
 
 		auto buff_future = std::async(std::launch::async, [&] {
@@ -327,13 +359,13 @@ export class Map: public QObject {
 			buff_slk.merge(campaign_ability_strings_ini, buff_meta_slk);
 		});
 
-		units_future.get();
-		abilities_future.get();
-		items_future.get();
-		doodads_future.get();
-		destructibles_future.get();
-		upgrade_future.get();
-		buff_future.get();
+		run_phase("game data units", [&] { units_future.get(); });
+		run_phase("game data abilities", [&] { abilities_future.get(); });
+		run_phase("game data items", [&] { items_future.get(); });
+		run_phase("game data doodads", [&] { doodads_future.get(); });
+		run_phase("game data destructibles", [&] { destructibles_future.get(); });
+		run_phase("game data upgrades", [&] { upgrade_future.get(); });
+		run_phase("game data buffs", [&] { buff_future.get(); });
 
 		units_table = new TableModel(&units_slk, &units_meta_slk, &trigger_strings);
 		items_table = new TableModel(&items_slk, &items_meta_slk, &trigger_strings);
@@ -346,149 +378,165 @@ export class Map: public QObject {
 		std::println("\nSLK loading:\t {:>5}ms", timer.elapsed_ms());
 		timer.reset();
 
-		// Trigger strings
-		if (hierarchy.map_file_exists("war3map.wts")) {
-			trigger_strings.load();
-		}
-
-		// Triggers (GUI and JASS)
-		if (hierarchy.map_file_exists("war3map.wtg")) {
-			triggers.load();
-
-			// Custom text triggers (JASS)
-			if (hierarchy.map_file_exists("war3map.wct")) {
-				triggers.load_scripts();
+		run_phase("trigger strings", [&] {
+			if (hierarchy.map_file_exists("war3map.wts")) {
+				trigger_strings.load();
 			}
-		}
+		});
+
+		run_phase("triggers", [&] {
+			if (hierarchy.map_file_exists("war3map.wtg")) {
+				triggers.load();
+
+				// Custom text triggers (JASS)
+				if (hierarchy.map_file_exists("war3map.wct")) {
+					triggers.load_scripts();
+				}
+			}
+		});
 
 		std::println("Trigger loading: {:>5}ms", timer.elapsed_ms());
 		timer.reset();
 
-		gameplay_constants.load();
+		run_phase("gameplay constants", [&] {
+			gameplay_constants.load();
+		});
 
-		info.load();
+		run_phase("map info", [&] {
+			info.load();
+		});
 		profile_reset();
-		terrain.load(physics);
+		run_phase("terrain", [&] {
+			terrain.load(physics);
+		});
 
 		std::println("Terrain loading: {:>5}ms", timer.elapsed_ms());
 		profile_print();
 		timer.reset();
 
-		// Pathing Map
-		if (hierarchy.map_file_exists("war3map.wpm")) {
-			pathing_map.load(terrain.width, terrain.height);
-		} else {
-			pathing_map.resize(terrain.width * 4, terrain.height * 4);
-		}
+		run_phase("pathing map", [&] {
+			if (hierarchy.map_file_exists("war3map.wpm")) {
+				pathing_map.load(terrain.width, terrain.height);
+			} else {
+				pathing_map.resize(terrain.width * 4, terrain.height * 4);
+			}
+		});
 
 		std::println("Pathing loading: {:>5}ms", timer.elapsed_ms());
 		timer.reset();
 
 		// Doodads
-		if (hierarchy.map_file_exists("war3map.w3d")) {
-			load_modification_file("war3map.w3d", doodads_slk, doodads_meta_slk, true);
-		}
+		run_phase("doodad data", [&] {
+			if (hierarchy.map_file_exists("war3map.w3d")) {
+				load_modification_file("war3map.w3d", doodads_slk, doodads_meta_slk, true);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3d")) {
-			load_modification_file("war3mapSkin.w3d", doodads_slk, doodads_meta_slk, true);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3d")) {
+				load_modification_file("war3mapSkin.w3d", doodads_slk, doodads_meta_slk, true);
+			}
 
-		if (hierarchy.map_file_exists("war3map.w3b")) {
-			load_modification_file("war3map.w3b", destructibles_slk, destructibles_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3map.w3b")) {
+				load_modification_file("war3map.w3b", destructibles_slk, destructibles_meta_slk, false);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3b")) {
-			load_modification_file("war3mapSkin.w3b", destructibles_slk, destructibles_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3b")) {
+				load_modification_file("war3mapSkin.w3b", destructibles_slk, destructibles_meta_slk, false);
+			}
+		});
 
 		profile_reset();
-		doodads.load(terrain, info);
-		doodads.create(terrain, pathing_map);
-		glFinish(); // Ensure all GL work submitted on worker contexts is visible to the main context
+		run_phase("doodad instances", [&] {
+			doodads.load(terrain, info);
+			doodads.create(terrain, pathing_map);
+			glFinish(); // Ensure all GL work submitted on worker contexts is visible to the main context
+		});
 
 		std::println("Doodad loading:\t {:>5}ms", timer.elapsed_ms());
 		profile_print();
 		timer.reset();
 
-		if (hierarchy.map_file_exists("war3map.w3u")) {
-			load_modification_file("war3map.w3u", units_slk, units_meta_slk, false);
-		}
+		run_phase("unit/item object data", [&] {
+			if (hierarchy.map_file_exists("war3map.w3u")) {
+				load_modification_file("war3map.w3u", units_slk, units_meta_slk, false);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3u")) {
-			load_modification_file("war3mapSkin.w3u", units_slk, units_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3u")) {
+				load_modification_file("war3mapSkin.w3u", units_slk, units_meta_slk, false);
+			}
 
-		if (hierarchy.map_file_exists("war3map.w3t")) {
-			load_modification_file("war3map.w3t", items_slk, items_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3map.w3t")) {
+				load_modification_file("war3map.w3t", items_slk, items_meta_slk, false);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3t")) {
-			load_modification_file("war3mapSkin.w3t", items_slk, items_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3t")) {
+				load_modification_file("war3mapSkin.w3t", items_slk, items_meta_slk, false);
+			}
+		});
 
 		// Units/Items
 		profile_reset();
-		if (hierarchy.map_file_exists("war3mapUnits.doo")) {
-			units.load(terrain, info);
-			units.create();
-			glFinish(); // Ensure all GL work submitted on worker contexts is visible to the main context
-		}
+		run_phase("unit/item instances", [&] {
+			if (hierarchy.map_file_exists("war3mapUnits.doo")) {
+				units.load(terrain, info);
+				units.create();
+				glFinish(); // Ensure all GL work submitted on worker contexts is visible to the main context
+			}
+		});
 
 		std::println("Unit loading:\t {:>5}ms", timer.elapsed_ms());
 		profile_print();
 		timer.reset();
 
-		// Abilities
-		if (hierarchy.map_file_exists("war3map.w3a")) {
-			load_modification_file("war3map.w3a", abilities_slk, abilities_meta_slk, true);
-		}
+		run_phase("abilities/buffs/upgrades", [&] {
+			if (hierarchy.map_file_exists("war3map.w3a")) {
+				load_modification_file("war3map.w3a", abilities_slk, abilities_meta_slk, true);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3a")) {
-			load_modification_file("war3mapSkin.w3a", abilities_slk, abilities_meta_slk, true);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3a")) {
+				load_modification_file("war3mapSkin.w3a", abilities_slk, abilities_meta_slk, true);
+			}
 
-		// Buffs
-		if (hierarchy.map_file_exists("war3map.w3h")) {
-			load_modification_file("war3map.w3h", buff_slk, buff_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3map.w3h")) {
+				load_modification_file("war3map.w3h", buff_slk, buff_meta_slk, false);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3h")) {
-			load_modification_file("war3mapSkin.w3h", buff_slk, buff_meta_slk, false);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3h")) {
+				load_modification_file("war3mapSkin.w3h", buff_slk, buff_meta_slk, false);
+			}
 
-		// Upgrades
-		if (hierarchy.map_file_exists("war3map.w3q")) {
-			load_modification_file("war3map.w3q", upgrade_slk, upgrade_meta_slk, true);
-		}
+			if (hierarchy.map_file_exists("war3map.w3q")) {
+				load_modification_file("war3map.w3q", upgrade_slk, upgrade_meta_slk, true);
+			}
 
-		if (hierarchy.map_file_exists("war3mapSkin.w3q")) {
-			load_modification_file("war3mapSkin.w3q", upgrade_slk, upgrade_meta_slk, true);
-		}
+			if (hierarchy.map_file_exists("war3mapSkin.w3q")) {
+				load_modification_file("war3mapSkin.w3q", upgrade_slk, upgrade_meta_slk, true);
+			}
+		});
 
-		// Regions
-		if (hierarchy.map_file_exists("war3map.w3r")) {
-			regions.load(terrain.offset.x, terrain.offset.y);
-		}
+		run_phase("regions/cameras/sounds", [&] {
+			if (hierarchy.map_file_exists("war3map.w3r")) {
+				regions.load(terrain.offset.x, terrain.offset.y);
+			}
 
-		// Cameras
-		if (hierarchy.map_file_exists("war3map.w3c")) {
-			cameras.load(info.game_version_major, info.game_version_minor, terrain.offset.x, terrain.offset.y);
-		}
+			if (hierarchy.map_file_exists("war3map.w3c")) {
+				cameras.load(info.game_version_major, info.game_version_minor, terrain.offset.x, terrain.offset.y);
+			}
 
-		// Sounds
-		if (hierarchy.map_file_exists("war3map.w3s")) {
-			sounds.load();
-		}
+			if (hierarchy.map_file_exists("war3map.w3s")) {
+				sounds.load();
+			}
+		});
 
 		std::println("Misc loading:\t {:>5}ms", timer.elapsed_ms());
 		timer.reset();
 
-		// Shadow map
-		if (hierarchy.map_file_exists("war3map.shd")) {
-			shadow_map.load(terrain.width - 1, terrain.height - 1);
-		} else {
-			shadow_map.resize((terrain.width - 1) * 4, (terrain.height - 1) * 4);
-		}
+		run_phase("shadow map", [&] {
+			if (hierarchy.map_file_exists("war3map.shd")) {
+				shadow_map.load(terrain.width - 1, terrain.height - 1);
+			} else {
+				shadow_map.resize((terrain.width - 1) * 4, (terrain.height - 1) * 4);
+			}
+		});
 
 		std::println("Shadows loading: {:>5}ms", timer.elapsed_ms());
 		timer.reset();

@@ -116,11 +116,25 @@ export class SkinnedMesh: public Resource {
 			mdx = std::make_shared<mdx::MDX>(reader.value());
 		} else {
 			new_path.replace_extension(".mdl");
-			const auto reader = hierarchy.open_file(new_path).value();
+			const auto mdl_reader = hierarchy.open_file(new_path);
+			if (!mdl_reader) {
+				throw std::runtime_error(
+					std::format(
+						"Failed to open model '{}' (.mdx error: {}; .mdl error: {})",
+						path.string(),
+						reader.error(),
+						mdl_reader.error()
+					)
+				);
+			}
 
-			const auto view = std::string_view(reinterpret_cast<const char*>(reader.buffer.data()), reader.buffer.size());
+			const auto view = std::string_view(reinterpret_cast<const char*>(mdl_reader->buffer.data()), mdl_reader->buffer.size());
 			const auto result = mdx::MDX::from_mdl(view);
-			mdx = std::make_shared<mdx::MDX>(std::move(result.value()));
+			if (!result) {
+				throw std::runtime_error(std::format("Failed to parse model '{}' as MDL ({})", new_path.string(), result.error()));
+			}
+			auto parsed_model = result.value();
+			mdx = std::make_shared<mdx::MDX>(std::move(parsed_model));
 		}
 
 		if (!mdx->is_valid()) {
