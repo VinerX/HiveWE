@@ -31,6 +31,10 @@ export class UnitTreeModel : public BaseTreeModel {
 	};
 
 	BaseTreeItem* getFolderParent(const std::string& id) const override {
+		if (categories.empty()) {
+			return rootItem;
+		}
+
 		const std::string_view race = units_slk.data<std::string_view>("race", id);
 		const bool isBuilding = units_slk.data<std::string_view>("isbldg", id) == "1";
 		const bool isHero = isupper(id.front());
@@ -107,10 +111,12 @@ export class UnitTreeModel : public BaseTreeModel {
 		}
 
 		for (size_t i = 0; i < units_slk.rows(); i++) {
-			const std::string id = units_slk.index_to_row.at(i);
-			BaseTreeItem* item = new BaseTreeItem(UnitTreeModel::getFolderParent(id));
-			item->id = id;
-			items.emplace(id, item);
+			if (auto found = units_slk.index_to_row.find(i); found != units_slk.index_to_row.end()) {
+				const std::string id = found->second;
+				BaseTreeItem* item = new BaseTreeItem(UnitTreeModel::getFolderParent(id));
+				item->id = id;
+				items.emplace(id, item);
+			}
 		}
 
 		categoryChangeFields = { "race", "isbldg", "special" };

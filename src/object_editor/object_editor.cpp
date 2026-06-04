@@ -26,19 +26,20 @@ import SlkConversions;
 import "single_model.h";
 
 ObjectEditor::ObjectEditor(QWidget* parent) : QMainWindow(parent) {
+	try {
 	ui.setupUi(this);
 	setAttribute(Qt::WA_DeleteOnClose);
 
 	std::ifstream f("data/warcraft/ability_insights.json");
 	ability_insights = nlohmann::json::parse(f);
 
-	custom_unit_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewUnit")).value();
-	custom_item_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewItem")).value();
-	custom_doodad_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewDood")).value();
-	custom_destructible_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewDest")).value();
-	custom_ability_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewAbil")).value();
-	custom_buff_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewBuff")).value();
-	custom_upgrade_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewUpgr")).value();
+	custom_unit_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewUnit")).value_or(std::make_shared<QIconResource>());
+	custom_item_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewItem")).value_or(std::make_shared<QIconResource>());
+	custom_doodad_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewDood")).value_or(std::make_shared<QIconResource>());
+	custom_destructible_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewDest")).value_or(std::make_shared<QIconResource>());
+	custom_ability_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewAbil")).value_or(std::make_shared<QIconResource>());
+	custom_buff_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewBuff")).value_or(std::make_shared<QIconResource>());
+	custom_upgrade_icon = resource_manager.load<QIconResource>(world_edit_data.data("WorldEditArt", "ToolBarIcon_OE_NewUpgr")).value_or(std::make_shared<QIconResource>());
 
 	dock_manager = new ads::CDockManager;
 	dock_manager->setStyleSheet("");
@@ -134,6 +135,12 @@ ObjectEditor::ObjectEditor(QWidget* parent) : QMainWindow(parent) {
 	});
 
 	show();
+	} catch (const std::exception& ex) {
+		std::ofstream log("hivewe.log", std::ios::app);
+		log << "[ERROR] ObjectEditor constructor failed: " << ex.what() << "\n";
+		log.flush();
+		QMessageBox::critical(nullptr, "Object Editor Error", ex.what());
+	}
 }
 
 void ObjectEditor::itemClicked(const QSortFilterProxyModel* model, TableModel* table, const QModelIndex& index) {

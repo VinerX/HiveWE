@@ -27,6 +27,10 @@ export class DestructibleTreeModel : public BaseTreeModel {
 	std::vector<char> rowToCategory;
 
 	BaseTreeItem* getFolderParent(const std::string& id) const override {
+		if (categories.empty()) {
+			return rootItem;
+		}
+
 		const std::string_view category = destructibles_slk.data<std::string_view>("category", id);
 
 		return categories.at(category.front()).item;
@@ -53,6 +57,10 @@ export class DestructibleTreeModel : public BaseTreeModel {
 					return folderIcon;
 				}
 
+				if (rowToCategory.empty()) {
+					return folderIcon;
+				}
+
 				return categories.at(rowToCategory[index.parent().row()]).icon->icon;
 			default:
 				return BaseTreeModel::data(index, role);
@@ -65,7 +73,7 @@ export class DestructibleTreeModel : public BaseTreeModel {
 
 		for (const auto& [key, value] : world_edit_data.section("DestructibleCategories")) {
 			categories[key.front()].name = value[0];
-			categories[key.front()].icon = resource_manager.load<QIconResource>(value[1]).value();
+			categories[key.front()].icon = resource_manager.load<QIconResource>(value[1]).value_or(std::make_shared<QIconResource>());
 			categories[key.front()].item = new BaseTreeItem(rootItem);
 			categories[key.front()].item->baseCategory = true;
 			rowToCategory.push_back(key.front());

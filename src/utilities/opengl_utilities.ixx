@@ -62,8 +62,20 @@ export QIcon ground_texture_to_icon(uint8_t* data, const int width, const int he
 
 /// Loads a texture from the hierarchy and returns an icon
 export QIcon texture_to_icon(const fs::path& path) {
-	const auto tex = resource_manager.load<Texture>(path).value();
-	const QImage temp_image = QImage(tex->data.data(), tex->width, tex->height, tex->channels == 3 ? QImage::Format::Format_RGB888 : QImage::Format::Format_RGBA8888);
-	const auto pix = QPixmap::fromImage(temp_image);
-	return QIcon(pix);
+	if (path.empty()) {
+		return {};
+	}
+
+	if (const auto tex = resource_manager.load<Texture>(path); tex) {
+		const QImage temp_image = QImage(
+			tex.value()->data.data(),
+			tex.value()->width,
+			tex.value()->height,
+			tex.value()->channels == 3 ? QImage::Format::Format_RGB888 : QImage::Format::Format_RGBA8888
+		);
+		const auto pix = QPixmap::fromImage(temp_image);
+		return QIcon(pix);
+	}
+
+	return {};
 };

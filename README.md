@@ -1,3 +1,23 @@
+# HiveWE — VinerX Edition (fork for the "23 Races" map)
+
+> **About this fork.** This is a fork of [stijnherfst/HiveWE](https://github.com/stijnherfst/HiveWE),
+> tailored for development of the large custom Warcraft III map **"23 Races"** (up to 35 races at its
+> peak). That map has a huge number of units, abilities and items split across many races, which were
+> historically managed by hand through name prefixes — a process that took months.
+>
+> The goal of this fork is to remove that pain by adding mass-editing and organization tools directly
+> in the Object Editor:
+> - **Race column** in the unit table (reads the `urac` / SLK `race` field), sortable.
+> - **Filtering / grouping by race**.
+> - **Spreadsheet view** — all units as rows, configurable fields as editable columns.
+> - **Batch edit** — set a field for many selected objects at once.
+> - **Editor-only metadata** (group / note / status) stored so it never reaches the game build.
+>
+> All changes stay backward-compatible (maps still open in vanilla HiveWE/WE) and the fork remains
+> open-source under **AGPL-3.0**. See the upstream description below for the base editor.
+
+---
+
 # HiveWE
 HiveWE is a Warcraft III World Editor (WE) that focuses on speed and ease of use. 
 It improves massively on the vanilla WE, especially for large maps where the regular World Editor is often too slow and clunky.

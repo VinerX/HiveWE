@@ -34,7 +34,11 @@ export class BuffTreeModel : public BaseTreeModel {
 		const bool isEffect = buff_slk.data("iseffect", id) == "1";
 		const int subIndex = isEffect ? 1 : 0;
 
-		return categories.at(race).item->children[subIndex];
+		auto found = categories.find(race);
+		if (found != categories.end()) {
+			return found->second.item->children[subIndex];
+		}
+		return rootItem;
 	}
 
   public:
@@ -88,16 +92,18 @@ export class BuffTreeModel : public BaseTreeModel {
 		}
 
 		for (int i = 0; i < buff_slk.rows(); i++) {
-			const std::string& id = buff_slk.index_to_row.at(i);
+			if (auto found = buff_slk.index_to_row.find(i); found != buff_slk.index_to_row.end()) {
+				const std::string& id = found->second;
 
-			BaseTreeItem* parent_item = getFolderParent(id);
-			if (!parent_item) {
-				continue;
+				BaseTreeItem* parent_item = getFolderParent(id);
+				if (!parent_item) {
+					continue;
+				}
+
+				BaseTreeItem* item = new BaseTreeItem(parent_item);
+				item->id = id;
+				items.emplace(id, item);
 			}
-
-			BaseTreeItem* item = new BaseTreeItem(parent_item);
-			item->id = id;
-			items.emplace(id, item);
 		}
 
 		categoryChangeFields = { "race", "iseffect" };

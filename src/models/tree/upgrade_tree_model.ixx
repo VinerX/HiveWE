@@ -27,7 +27,11 @@ export class UpgradeTreeModel : public BaseTreeModel {
 			return nullptr;
 		}
 
-		return categories.at(race).item;
+		auto found = categories.find(race);
+		if (found != categories.end()) {
+			return found->second.item;
+		}
+		return rootItem;
 	}
 
 	QModelIndex mapToSource(const QModelIndex& proxyIndex) const override {
@@ -86,22 +90,24 @@ export class UpgradeTreeModel : public BaseTreeModel {
 		}
 
 		for (int i = 0; i < upgrade_slk.rows(); i++) {
-			const std::string& id = upgrade_slk.index_to_row.at(i);
+			if (auto found = upgrade_slk.index_to_row.find(i); found != upgrade_slk.index_to_row.end()) {
+				const std::string& id = found->second;
 
-			const std::string_view race = upgrade_slk.data<std::string_view>("race", id);
-			if (race.empty()) {
-				std::cout << "Empty race for " << i << " in items\n";
-				continue;
+				const std::string_view race = upgrade_slk.data<std::string_view>("race", id);
+				if (race.empty()) {
+					std::cout << "Empty race for " << i << " in items\n";
+					continue;
+				}
+
+				BaseTreeItem* parent_item = getFolderParent(id);
+				if (!parent_item) {
+					continue;
+				}
+
+				BaseTreeItem* item = new BaseTreeItem(parent_item);
+				item->id = id;
+				items.emplace(id, item);
 			}
-
-			BaseTreeItem* parent_item = getFolderParent(id);
-			if (!parent_item) {
-				continue;
-			}
-
-			BaseTreeItem* item = new BaseTreeItem(parent_item);
-			item->id = id;
-			items.emplace(id, item);
 		}
 
 		categoryChangeFields = { "race" };

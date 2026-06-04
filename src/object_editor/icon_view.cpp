@@ -196,7 +196,7 @@ QVariant IconModel::data(const QModelIndex& index, int role) const {
 			if (icon_cache.contains(string_path)) {
 				return icon_cache.at(string_path)->icon;
 			} else {
-				icon_cache.emplace(string_path, resource_manager.load<QIconResource>(string_path).value());
+				icon_cache.emplace(string_path, resource_manager.load<QIconResource>(string_path).value_or(std::make_shared<QIconResource>()));
 				return icon_cache.at(string_path)->icon;
 			}
 		}

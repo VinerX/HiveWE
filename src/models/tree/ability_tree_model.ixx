@@ -27,6 +27,10 @@ export class AbilityTreeModel : public BaseTreeModel {
 	};
 
 	BaseTreeItem* getFolderParent(const std::string& id) const override {
+		if (categories.empty()) {
+			return rootItem;
+		}
+
 		const std::string_view race = abilities_slk.data<std::string_view>("race", id);
 		auto found_race = categories.find(race);
 		if (found_race == categories.end()) {
@@ -91,16 +95,18 @@ export class AbilityTreeModel : public BaseTreeModel {
 		}
 
 		for (int i = 0; i < abilities_slk.rows(); i++) {
-			const std::string& id = abilities_slk.index_to_row.at(i);
+			if (auto found = abilities_slk.index_to_row.find(i); found != abilities_slk.index_to_row.end()) {
+				const std::string& id = found->second;
 
-			BaseTreeItem* parent_item = getFolderParent(id);
-			if (!parent_item) {
-				continue;
+				BaseTreeItem* parent_item = getFolderParent(id);
+				if (!parent_item) {
+					continue;
+				}
+
+				BaseTreeItem* item = new BaseTreeItem(parent_item);
+				item->id = id;
+				items.emplace(id, item);
 			}
-
-			BaseTreeItem* item = new BaseTreeItem(parent_item);
-			item->id = id;
-			items.emplace(id, item);
 		}
 
 		categoryChangeFields = { "race", "hero", "item" };

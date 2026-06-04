@@ -23,6 +23,10 @@ export class ItemTreeModel : public BaseTreeModel {
 	std::vector<std::string> rowToCategory;
 
 	BaseTreeItem* getFolderParent(const std::string& id) const override {
+		if (categories.empty()) {
+			return rootItem;
+		}
+
 		const std::string_view itemClass = items_slk.data<std::string_view>("class", id);
 		if (itemClass.empty()) {
 			std::cout << "Empty class for " << id << " in items\n";
@@ -69,15 +73,17 @@ export class ItemTreeModel : public BaseTreeModel {
 		}
 
 		for (int i = 0; i < items_slk.rows(); i++) {
-			const std::string& id = items_slk.index_to_row.at(i);
+			if (auto found = items_slk.index_to_row.find(i); found != items_slk.index_to_row.end()) {
+				const std::string& id = found->second;
 
-			BaseTreeItem* parent_item = getFolderParent(id);
-			if (!parent_item) {
-				continue;
+				BaseTreeItem* parent_item = getFolderParent(id);
+				if (!parent_item) {
+					continue;
+				}
+				BaseTreeItem* item = new BaseTreeItem(parent_item);
+				item->id = id;
+				items.emplace(id, item);
 			}
-			BaseTreeItem* item = new BaseTreeItem(parent_item);
-			item->id = id;
-			items.emplace(id, item);
 		}
 
 		categoryChangeFields = { "class" };

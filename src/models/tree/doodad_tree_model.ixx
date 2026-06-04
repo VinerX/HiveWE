@@ -25,6 +25,10 @@ export class DoodadTreeModel : public BaseTreeModel {
 	std::vector<char> rowToCategory;
 
 	BaseTreeItem* getFolderParent(const std::string& id) const override {
+		if (categories.empty()) {
+			return rootItem;
+		}
+
 		const std::string_view category = doodads_slk.data<std::string_view>("category", id);
 
 		if (category.empty()) {
@@ -60,6 +64,10 @@ export class DoodadTreeModel : public BaseTreeModel {
 					return folderIcon;
 				}
 
+				if (rowToCategory.empty()) {
+					return folderIcon;
+				}
+
 				return categories.at(rowToCategory[index.parent().row()]).icon->icon;
 			default:
 				return BaseTreeModel::data(index, role);
@@ -72,17 +80,19 @@ export class DoodadTreeModel : public BaseTreeModel {
 
 		for (const auto& [key, value] : world_edit_data.section("DoodadCategories")) {
 			categories[key.front()].name = value[0];
-			categories[key.front()].icon = resource_manager.load<QIconResource>(value[1]).value();
+			categories[key.front()].icon = resource_manager.load<QIconResource>(value[1]).value_or(std::make_shared<QIconResource>());
 			categories[key.front()].item = new BaseTreeItem(rootItem);
 			categories[key.front()].item->baseCategory = true;
 			rowToCategory.push_back(key.front());
 		}
 
 		for (size_t i = 0; i < doodads_slk.rows(); i++) {
-			const std::string& id = doodads_slk.index_to_row.at(i);
-			BaseTreeItem* item = new BaseTreeItem(getFolderParent(id));
-			item->id = id;
-			items.emplace(id, item);
+			if (auto found = doodads_slk.index_to_row.find(i); found != doodads_slk.index_to_row.end()) {
+				const std::string& id = found->second;
+				BaseTreeItem* item = new BaseTreeItem(getFolderParent(id));
+				item->id = id;
+				items.emplace(id, item);
+			}
 		}
 
 		categoryChangeFields = { "category" };

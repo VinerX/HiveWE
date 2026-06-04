@@ -136,10 +136,11 @@ namespace ini {
 		}
 
 		[[nodiscard]] const hive::unordered_map<std::string, std::vector<std::string>>& section(const std::string_view section) const {
+			static const hive::unordered_map<std::string, std::vector<std::string>> empty_section;
 			if (auto found = ini_data.find(section); found != ini_data.end()) {
 				return found->second;
 			} else {
-				throw std::runtime_error(std::format("INI section not found: {}", section));
+				return empty_section;
 			}
 		}
 
@@ -149,7 +150,14 @@ namespace ini {
 		}
 
 		[[nodiscard]] const std::vector<std::string>& whole_data(const std::string_view section, const std::string_view key) const {
-			return ini_data.at(section).at(key);
+			static const std::vector<std::string> empty_data;
+			if (const auto found_section = ini_data.find(section); found_section != ini_data.end()) {
+				if (const auto found_key = found_section->second.find(key); found_key != found_section->second.end()) {
+					return found_key->second;
+				}
+			}
+
+			return empty_data;
 		}
 
 		[[nodiscard]] bool key_exists(const std::string_view section, const std::string_view key) const {
@@ -165,7 +173,7 @@ namespace ini {
 		[[nodiscard]] T data(const std::string_view section, const std::string_view key, const size_t argument = 0) const {
 			const auto sec = ini_data.find(section);
 			if (sec == ini_data.end()) {
-				throw std::runtime_error(std::format("INI section not found: {}", section));
+				return T{};
 			}
 			const auto value = sec->second.find(key);
 			if (value == sec->second.end()) {

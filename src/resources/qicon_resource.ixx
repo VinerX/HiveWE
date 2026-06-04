@@ -21,9 +21,19 @@ export class QIconResource : public Resource {
 	explicit QIconResource() = default;
 
 	explicit QIconResource(const fs::path& path) {
-		const auto image = resource_manager.load<Texture>(path).value();
-		QImage temp_image(image->data.data(), image->width, image->height, image->channels == 3 ? QImage::Format::Format_RGB888 : QImage::Format::Format_RGBA8888);
-		auto pix = QPixmap::fromImage(temp_image);
-		icon = QIcon(pix);
+		if (path.empty()) {
+			return;
+		}
+
+		if (const auto image = resource_manager.load<Texture>(path); image) {
+			QImage temp_image(
+				image.value()->data.data(),
+				image.value()->width,
+				image.value()->height,
+				image.value()->channels == 3 ? QImage::Format::Format_RGB888 : QImage::Format::Format_RGBA8888
+			);
+			auto pix = QPixmap::fromImage(temp_image);
+			icon = QIcon(pix);
+		}
 	}
 };

@@ -105,6 +105,7 @@ void ModelEditor::open_file() {
 	const auto result = this->open_model(path, true);
 	if (!result.has_value()) {
 		QMessageBox::information(this, "Opening model failed", result.error().c_str());
+		return;
 	}
 	dock_manager->addDockWidget(ads::CenterDockWidgetArea, result.value(), dock_area);
 }
