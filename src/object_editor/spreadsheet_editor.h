@@ -6,6 +6,7 @@
 #include <QHeaderView>
 #include <QTabWidget>
 #include <QTableView>
+#include <QVariant>
 
 #include <string>
 #include <vector>
@@ -15,6 +16,20 @@
 import TableModel;
 import SLK;
 
+struct SpreadsheetComputedColumn {
+	enum class Kind {
+		FormulaNumber,
+		CombinedText,
+	};
+
+	QString key;
+	QString title;
+	QString group;
+	QString formula;
+	Kind kind = Kind::FormulaNumber;
+	bool builtin = false;
+};
+
 class SpreadsheetProxy : public QIdentityProxyModel {
 	Q_OBJECT
 
@@ -23,6 +38,7 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	                 slk::SLK* data_slk, slk::SLK* meta_slk,
 	                 std::string name_field,
 	                 std::string icon_field = {},
+	                 QString category_name = {},
 	                 QObject* parent = nullptr);
 
 	QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
@@ -51,14 +67,27 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 
 	int iconColumn() const { return icon_column; }
 	int nameColumn() const { return name_column; }
+	int sourceColumnCount() const;
+	bool isComputedColumn(int column) const;
+	bool isEditableColumn(int column) const;
+	QString columnKey(int column) const;
+	QString groupName(int column) const;
+	int findColumnByKey(const QString& key) const;
+	bool validateFormula(const QString& formula, QString* error_message = nullptr) const;
+	int addCustomFormulaColumn(const QString& title, const QString& formula,
+	                           const QString& group = "Computed",
+	                           QString* error_message = nullptr);
+	bool removeCustomFormulaColumn(const QString& key);
 
 	std::vector<int> visibleRowsForTest() const { return visible_rows_; }
+	std::vector<SpreadsheetComputedColumn> computedColumnsForTest() const { return computed_columns_; }
 
   public:
 	QString fieldDisplayName(int source_column) const;
 
 	std::string name_field;
 	std::string icon_field;
+	QString category_name;
 	int name_column = -1;
 	int icon_column = -1;
 	QString text_filter;
@@ -71,10 +100,20 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	QString field_filter_text;
 	int sort_column = -1;
 	Qt::SortOrder sort_order = Qt::AscendingOrder;
+	std::vector<SpreadsheetComputedColumn> computed_columns_;
 
 	std::vector<int> visible_rows_;
 	void rebuildVisibleRows();
 	void rebuildSortOrder();
+	void populateBuiltInComputedColumns();
+	void loadCustomComputedColumns();
+	void saveCustomComputedColumns() const;
+	QVariant computedData(int source_row, const SpreadsheetComputedColumn& column, int role) const;
+	bool evaluateFormula(const QString& formula, int source_row, double& value,
+	                     QString* error_message = nullptr) const;
+	QString computedTextValue(const SpreadsheetComputedColumn& column, int source_row) const;
+	std::string rowIdForSourceRow(int source_row) const;
+	double numericFieldValue(const QString& field_name, int source_row) const;
 
 	QVariant displayData(int source_row, int source_column) const;
 };
@@ -133,7 +172,7 @@ class SpreadsheetEditor : public QMainWindow {
 	);
 
 	void openBatchDialog(SpreadsheetView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column);
-	void openColumnDialog(SpreadsheetView* view, SpreadsheetProxy* proxy, TableModel* table,
+	void openColumnDialog(SpreadsheetView* view, SpreadsheetView* frozen_view, SpreadsheetProxy* proxy, TableModel* table,
 	                      const std::vector<std::string>& curated,
 	                      const std::function<void()>& full_reset);
 };

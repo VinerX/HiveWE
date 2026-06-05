@@ -10,6 +10,8 @@ class TestTableModel : public QAbstractTableModel {
   public:
 	slk::SLK* slk = nullptr;
 	slk::SLK* meta_slk = nullptr;
+	// Mirrors the real TableModel's war3map.wts table: "TRIGSTR_xxx" -> resolved text.
+	std::map<std::string, QString> trigger_strings;
 
 	explicit TestTableModel(slk::SLK* data_slk, slk::SLK* meta, QObject* parent = nullptr)
 		: QAbstractTableModel(parent), slk(data_slk), meta_slk(meta) {}
@@ -20,8 +22,16 @@ class TestTableModel : public QAbstractTableModel {
 	QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override {
 		if (!index.isValid()) return {};
 		if (role == Qt::DisplayRole || role == Qt::EditRole) {
-			return QString::fromStdString(
-				slk->data<std::string>(static_cast<size_t>(index.column()), static_cast<size_t>(index.row())));
+			const std::string raw =
+				slk->data<std::string>(static_cast<size_t>(index.column()), static_cast<size_t>(index.row()));
+			// Resolve TRIGSTR references like the real TableModel does (localized maps
+			// store string fields as war3map.wts references rather than inline text).
+			if (raw.starts_with("TRIGSTR")) {
+				if (const auto it = trigger_strings.find(raw); it != trigger_strings.end()) {
+					return it->second;
+				}
+			}
+			return QString::fromStdString(raw);
 		}
 		if (role == Qt::CheckStateRole) {
 			const std::string& field = slk->index_to_column.at(index.column());
@@ -433,5 +443,108 @@ TEST_CASE("delegate – sizeHint meets minimum") {
 	SpreadsheetDelegate delegate;
 	QStyleOptionViewItem opt;
 	QSize sz = delegate.sizeHint(opt, QModelIndex());
-	CHECK(sz.height() >= 20);
+CHECK(sz.height() >= 20);
+}
+
+TEST_CASE("proxy вЂ“ editor suffix filter decodes cp1251 russian text") {
+	ensure_qapp();
+	TestData d;
+	d.data_slk.set_shadow_data("editorsuffix", "hpea", std::string("\xCA\xE0\xEC\xEF\xE0\xED\xE8\xFF", 8));
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.setEditorSuffixFilter(QString::fromUtf8(u8"камп"));
+	CHECK(proxy.rowCount() == 1);
+	CHECK(proxy.data(proxy.index(0, 0), Qt::DisplayRole).toString() == "Peasant");
+}
+
+TEST_CASE("proxy – editor suffix filter resolves TRIGSTR (russian/localized maps)") {
+	ensure_qapp();
+	TestData d;
+	// Russian-localized maps store the suffix as a war3map.wts reference, not the literal
+	// text. The filter must resolve it (as the grid does) or kyrillic suffixes never match.
+	d.data_slk.set_shadow_data("editorsuffix", "hpea", "TRIGSTR_008");
+	d.data_slk.set_shadow_data("editorsuffix", "hfoo", "TRIGSTR_009");
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	tm.trigger_strings["TRIGSTR_008"] = QString::fromUtf8(u8"ЭК");
+	tm.trigger_strings["TRIGSTR_009"] = QString::fromUtf8(u8"Кампания");
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.setEditorSuffixFilter(QString::fromUtf8(u8"ЭК"));
+	CHECK(proxy.rowCount() == 1);
+	CHECK(proxy.data(proxy.index(0, 0), Qt::DisplayRole).toString() == "Peasant");
+
+	// Case-insensitive match on kyrillic.
+	proxy.setEditorSuffixFilter(QString::fromUtf8(u8"эк"));
+	CHECK(proxy.rowCount() == 1);
+
+	proxy.setEditorSuffixFilter(QString::fromUtf8(u8"камп"));
+	CHECK(proxy.rowCount() == 1);
+	CHECK(proxy.data(proxy.index(0, 0), Qt::DisplayRole).toString() == "Footman");
+
+	proxy.setEditorSuffixFilter("");
+	CHECK(proxy.rowCount() == 5);
+}
+
+TEST_CASE("proxy вЂ“ units tab exposes built-in computed columns") {
+	ensure_qapp();
+	TestData d;
+	d.data_slk.add_column("abillist");
+	d.data_slk.add_column("heroabillist");
+	d.data_slk.add_column("abilskinlist");
+	d.data_slk.add_column("heroabilskinlist");
+	d.data_slk.add_column("dmgplus1");
+	d.data_slk.add_column("dice1");
+	d.data_slk.add_column("sides1");
+	d.data_slk.add_column("cool1");
+
+	d.data_slk.set_shadow_data("abillist", "hpea", "Adef,Aatk");
+	d.data_slk.set_shadow_data("heroabillist", "hpea", "AHhb");
+	d.data_slk.set_shadow_data("abilskinlist", "hpea", "Aatk");
+	d.data_slk.set_shadow_data("dmgplus1", "hpea", "10");
+	d.data_slk.set_shadow_data("dice1", "hpea", "5");
+	d.data_slk.set_shadow_data("sides1", "hpea", "2");
+	d.data_slk.set_shadow_data("cool1", "hpea", "2");
+
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name", {}, "Units");
+
+	const int abilities_col = proxy.findColumnByKey("__builtin_abilities");
+	const int avg_col = proxy.findColumnByKey("__builtin_avgattack");
+	const int dps_col = proxy.findColumnByKey("__builtin_dps");
+	const int spellcount_col = proxy.findColumnByKey("__builtin_spellcount");
+
+	CHECK(abilities_col >= 0);
+	CHECK(avg_col >= 0);
+	CHECK(dps_col >= 0);
+	CHECK(spellcount_col >= 0);
+	CHECK(proxy.columnCount() == static_cast<int>(d.data_slk.columns()) + 4);
+
+	const QString abilities_text = proxy.data(proxy.index(0, abilities_col), Qt::DisplayRole).toString();
+	CHECK(abilities_text.contains("AHhb"));
+	CHECK(abilities_text.contains("Adef"));
+	CHECK(proxy.data(proxy.index(0, avg_col), Qt::DisplayRole).toString() == "17.5");
+	CHECK(proxy.data(proxy.index(0, dps_col), Qt::DisplayRole).toString() == "8.75");
+	CHECK(proxy.data(proxy.index(0, spellcount_col), Qt::DisplayRole).toString() == "3");
+}
+
+TEST_CASE("proxy вЂ“ custom formula columns evaluate arithmetic expressions") {
+	ensure_qapp();
+	TestData d;
+	d.data_slk.add_column("dmgplus1");
+	d.data_slk.add_column("dice1");
+	d.data_slk.add_column("sides1");
+	d.data_slk.set_shadow_data("dmgplus1", "hpea", "12");
+	d.data_slk.set_shadow_data("dice1", "hpea", "3");
+	d.data_slk.set_shadow_data("sides1", "hpea", "4");
+
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	QString error;
+	const int formula_col = proxy.addCustomFormulaColumn("Burst", "dmgplus1 + dice1 * sides1", "Computed", &error);
+	CHECK(error.isEmpty());
+	CHECK(formula_col >= 0);
+	CHECK(proxy.isComputedColumn(formula_col));
+	CHECK(proxy.data(proxy.index(0, formula_col), Qt::DisplayRole).toString() == "24");
 }
