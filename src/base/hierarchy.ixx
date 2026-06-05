@@ -1,7 +1,3 @@
-module;
-
-#include <QSettings>
-
 export module Hierarchy;
 
 import std;
@@ -31,17 +27,12 @@ export class Hierarchy {
 	bool teen = false;
 	bool local_files = true;
 
-	Hierarchy() {
-		QSettings war3reg("HKEY_CURRENT_USER\\Software\\Blizzard Entertainment\\Warcraft III", QSettings::NativeFormat);
-		local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
-	}
+	Hierarchy() = default;
 
+	// Flavour flags (ptr/hd/teen) and local_files are configured by the caller before
+	// open_casc. The GUI fills them from QSettings / the WC3 registry in main.cpp; the
+	// headless CLI sets them from arguments. This keeps Hierarchy free of any Qt dependency.
 	bool open_casc(const fs::path& directory) {
-		QSettings settings;
-		ptr = settings.value("flavour", "Retail").toString() == "PTR";
-		hd = settings.value("hd", "False").toString() == "True";
-		teen = settings.value("teen", "False").toString() == "True";
-
 		warcraft_directory = directory;
 
 		bool open = game_data.open(warcraft_directory / (ptr ? ":w3t" : ":w3"));

@@ -161,6 +161,16 @@ int main(int argc, char* argv[]) {
 		world_edit_data.substitute(world_edit_strings, "WorldEditStrings");
 	};
 
+	// Hierarchy used to read these from QSettings/registry itself; that pulled Qt into the
+	// Qt-free data layer, so the GUI now configures the flavour flags before opening CASC.
+	hierarchy.ptr = settings.value("flavour", "Retail").toString() == "PTR";
+	hierarchy.hd = settings.value("hd", "False").toString() == "True";
+	hierarchy.teen = settings.value("teen", "False").toString() == "True";
+	{
+		QSettings war3reg("HKEY_CURRENT_USER\\Software\\Blizzard Entertainment\\Warcraft III", QSettings::NativeFormat);
+		hierarchy.local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
+	}
+
 	bool is_casc_open = false;
 	const auto casc_future = std::async(std::launch::async, [&]() {
 		const fs::path directory = find_warcraft_directory();
