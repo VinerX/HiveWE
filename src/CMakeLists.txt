@@ -5,6 +5,7 @@ target_sources(HiveWE_lib PUBLIC FILE_SET yeet TYPE CXX_MODULES FILES
 	"gl_globals.ixx"
 
 	"base/map/map.ixx"
+	"base/object_data.ixx"
 	"base/map/resize.cpp"
 	"base/map/unused_files.cpp"
 	"base/binary_reader.ixx"
