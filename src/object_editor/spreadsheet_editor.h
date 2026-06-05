@@ -1,39 +1,55 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QSortFilterProxyModel>
+#include <QIdentityProxyModel>
 #include <QTabWidget>
 #include <QTableView>
 
 #include <string>
 #include <vector>
+#include <set>
 
 import TableModel;
 import SLK;
 
-// Proxy over a TableModel (rows = objects, columns = SLK fields).
-// Adds proper, localized horizontal headers (field display names) and
-// object-id vertical headers. Row filtering is layered on in a later step.
-class SpreadsheetProxy : public QSortFilterProxyModel {
+// Transparent proxy over a TableModel (rows = objects, columns = SLK fields).
+// Provides localized column headers (field display names) and object-id
+// vertical headers.  Manual filtering replaces QSortFilterProxyModel to avoid
+// SIGSEGV crashes caused by Qt's internal proxy-mapping engine.
+class SpreadsheetProxy : public QIdentityProxyModel {
 	Q_OBJECT
 
   public:
-	// `name_field` is the SLK column used for text search (e.g. "name",
-	// "name1", "editorname").
-	SpreadsheetProxy(TableModel* table, std::string name_field, QObject* parent = nullptr);
+	// `source_model` is the underlying QAbstractItemModel (normally a TableModel).
+	// `data_slk` / `meta_slk` provide the SLK handles needed for header lookups
+	// and filter checks. `name_field` is the SLK column used for text search.
+	SpreadsheetProxy(QAbstractItemModel* source_model,
+	                 slk::SLK* data_slk, slk::SLK* meta_slk,
+	                 std::string name_field,
+	                 QObject* parent = nullptr);
 
 	QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
+	QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+	Qt::ItemFlags flags(const QModelIndex& index) const override;
+
+	// Flat list – no hierarchy.
+	QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
+	QModelIndex parent(const QModelIndex&) const override { return {}; }
+	int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+	int columnCount(const QModelIndex& parent = QModelIndex()) const override;
 
 	slk::SLK* slk = nullptr;
 	slk::SLK* meta_slk = nullptr;
 
-  public slots:
 	void setTextFilter(const QString& text);
 	void setCustomOnly(bool custom_only);
 	void setRaceFilter(const QString& race_key); // empty = all races
 
-  protected:
-	bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
+	// Returns the *source* model index for the given visible proxy row.
+	QModelIndex mapToSource(QModelIndex proxyIndex) const;
+
+	// Re-fills visible_rows_ from the source model, applying all active filters.
+	void reapplyFilters();
 
   private:
 	QString fieldDisplayName(int source_column) const;
@@ -42,11 +58,13 @@ class SpreadsheetProxy : public QSortFilterProxyModel {
 	int name_column = -1;
 	QString text_filter;
 	bool custom_only = false;
-	std::string race_filter; // empty = no race filtering
+	std::string race_filter;
+
+	// Ordered list of source rows that currently pass all filters.
+	std::vector<int> visible_rows_;
+	void rebuildVisibleRows();
 };
 
-// Separate, read-/edit-capable global table view of all object types, sitting
-// next to (and deliberately independent of) the regular Object Editor.
 class SpreadsheetEditor : public QMainWindow {
 	Q_OBJECT
 
@@ -56,9 +74,6 @@ class SpreadsheetEditor : public QMainWindow {
   private:
 	QTabWidget* tabs = nullptr;
 
-	// Builds one category tab: a QTableView over `table`, defaulting to the
-	// `curated` set of visible field columns plus a "Columns…" toggle, a name
-	// search box, a custom-only toggle and (when race_filter) a race combo.
 	void addCategoryTab(
 		const QString& name,
 		TableModel* table,
@@ -67,8 +82,5 @@ class SpreadsheetEditor : public QMainWindow {
 		bool race_filter = false
 	);
 
-	// Batch edit: set / add / multiply / percent a chosen field across all
-	// currently selected rows. `preferred_column` is the source column under
-	// the cursor (or -1) used to preselect the target field.
 	void openBatchDialog(QTableView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column);
 };

@@ -20,114 +20,171 @@ import std;
 import Globals;
 
 // ---------------------------------------------------------------------------
-// SpreadsheetProxy
+// SpreadsheetProxy (QIdentityProxyModel — no internal mapping, no SIGSEGV risk)
 // ---------------------------------------------------------------------------
 
-SpreadsheetProxy::SpreadsheetProxy(TableModel* table, std::string name_field, QObject* parent)
-	: QSortFilterProxyModel(parent), slk(table->slk), meta_slk(table->meta_slk), name_field(std::move(name_field)) {
-	setSourceModel(table);
-	// Sort on the raw stored value so numeric columns sort numerically-ish and
-	// strings alphabetically, matching what the user typed/sees.
-	setSortRole(Qt::EditRole);
-	setFilterCaseSensitivity(Qt::CaseInsensitive);
+SpreadsheetProxy::SpreadsheetProxy(QAbstractItemModel* source_model,
+                                   slk::SLK* data_slk, slk::SLK* meta_slk,
+                                   std::string name_field, QObject* parent)
+	: QIdentityProxyModel(parent), slk(data_slk), meta_slk(meta_slk), name_field(std::move(name_field)) {
+	setSourceModel(source_model);
 
 	if (const auto found = slk->column_headers.find(this->name_field); found != slk->column_headers.end()) {
 		name_column = static_cast<int>(found->second);
 	}
+
+	// Build initial visible_rows_ and notify any attached views.
+	beginResetModel();
+	rebuildVisibleRows();
+	endResetModel();
+}
+
+void SpreadsheetProxy::rebuildVisibleRows() {
+	visible_rows_.clear();
+	if (!slk) return;
+
+	const int total = static_cast<int>(slk->index_to_row.size());
+	visible_rows_.reserve(total);
+
+	for (int r = 0; r < total; ++r) {
+		const std::string& id = slk->index_to_row.at(static_cast<size_t>(r));
+
+		if (custom_only) {
+			const auto it = slk->shadow_data.find(id);
+			if (it == slk->shadow_data.end() || !it->second.contains("oldid")) {
+				continue;
+			}
+		}
+
+		if (!race_filter.empty() && slk->column_headers.contains("race")) {
+			auto race_val = slk->data<std::string_view>("race", id);
+			if (race_val != race_filter) {
+				continue;
+			}
+		}
+
+		if (!text_filter.isEmpty() && name_column >= 0) {
+			const QModelIndex src_idx = sourceModel()->index(r, name_column);
+			const QString name = sourceModel()->data(src_idx, Qt::DisplayRole).toString();
+			if (!name.contains(text_filter, Qt::CaseInsensitive)) {
+				continue;
+			}
+		}
+
+		visible_rows_.push_back(r);
+	}
+}
+
+void SpreadsheetProxy::reapplyFilters() {
+	beginResetModel();
+	rebuildVisibleRows();
+	endResetModel();
 }
 
 void SpreadsheetProxy::setTextFilter(const QString& text) {
-	beginFilterChange();
+	if (text_filter == text) return;
 	text_filter = text;
-	endFilterChange(Direction::Rows);
+	reapplyFilters();
 }
 
 void SpreadsheetProxy::setCustomOnly(bool only) {
-	beginFilterChange();
+	if (custom_only == only) return;
 	custom_only = only;
-	endFilterChange(Direction::Rows);
+	reapplyFilters();
 }
 
 void SpreadsheetProxy::setRaceFilter(const QString& race_key) {
-	beginFilterChange();
-	race_filter = race_key.toStdString();
-	endFilterChange(Direction::Rows);
+	auto s = race_key.toStdString();
+	if (race_filter == s) return;
+	race_filter = std::move(s);
+	reapplyFilters();
 }
 
-bool SpreadsheetProxy::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const {
-	if (source_row < 0 || static_cast<size_t>(source_row) >= slk->index_to_row.size()) {
-		return false;
-	}
-	const std::string& id = slk->index_to_row.at(source_row);
+// --- Model geometry ---
 
-	// Custom-only: keep just objects with a custom shadow override (oldid).
-	if (custom_only) {
-		const auto it = slk->shadow_data.find(id);
-		if (it == slk->shadow_data.end() || !it->second.contains("oldid")) {
-			return false;
+QModelIndex SpreadsheetProxy::index(int row, int column, const QModelIndex& parent) const {
+	if (parent.isValid() || row < 0 || column < 0 || row >= static_cast<int>(visible_rows_.size()))
+		return {};
+	return createIndex(row, column);
+}
+
+int SpreadsheetProxy::rowCount(const QModelIndex& parent) const {
+	if (parent.isValid()) return 0;
+	return static_cast<int>(visible_rows_.size());
+}
+
+int SpreadsheetProxy::columnCount(const QModelIndex& parent) const {
+	return sourceModel() ? sourceModel()->columnCount() : 0;
+}
+
+QModelIndex SpreadsheetProxy::mapToSource(QModelIndex proxyIndex) const {
+	if (!proxyIndex.isValid()) return {};
+	const int src_row = visible_rows_.at(static_cast<size_t>(proxyIndex.row()));
+	return sourceModel()->index(src_row, proxyIndex.column());
+}
+
+// --- Data / Headers ---
+
+QVariant SpreadsheetProxy::data(const QModelIndex& index, int role) const {
+	if (!index.isValid() || !sourceModel()) return {};
+	try {
+		const QModelIndex src = mapToSource(index);
+		return sourceModel()->data(src, role);
+	} catch (...) {
+		return {};
+	}
+}
+
+Qt::ItemFlags SpreadsheetProxy::flags(const QModelIndex& index) const {
+	if (!index.isValid() || !sourceModel()) return Qt::NoItemFlags;
+	try {
+		const QModelIndex src = mapToSource(index);
+		return sourceModel()->flags(src);
+	} catch (...) {
+		return Qt::NoItemFlags;
+	}
+}
+
+QVariant SpreadsheetProxy::headerData(int section, Qt::Orientation orientation, int role) const {
+	if (role == Qt::DisplayRole) {
+		if (orientation == Qt::Horizontal) {
+			return fieldDisplayName(section);
+		} else {
+			if (section >= 0 && section < static_cast<int>(visible_rows_.size())) {
+				const std::string& id = slk->index_to_row.at(static_cast<size_t>(visible_rows_.at(static_cast<size_t>(section))));
+				return QString::fromStdString(id);
+			}
 		}
 	}
-
-	// Race filter (units): compare the raw race key.
-	if (!race_filter.empty() && slk->column_headers.contains("race")) {
-		if (slk->data<std::string_view>("race", id) != race_filter) {
-			return false;
-		}
-	}
-
-	// Name text search on the display value of the name column.
-	if (!text_filter.isEmpty() && name_column >= 0) {
-		const QString name = sourceModel()->data(sourceModel()->index(source_row, name_column), Qt::DisplayRole).toString();
-		if (!name.contains(text_filter, Qt::CaseInsensitive)) {
-			return false;
-		}
-	}
-
-	return true;
+	return QIdentityProxyModel::headerData(section, orientation, role);
 }
 
 QString SpreadsheetProxy::fieldDisplayName(int source_column) const {
+	if (!slk) return {};
 	if (source_column < 0 || static_cast<size_t>(source_column) >= slk->index_to_column.size()) {
 		return {};
 	}
 
 	const std::string& field = slk->index_to_column.at(source_column);
 
-	// Resolve the human-readable field name through the meta SLK, the same path
-	// the Object Editor's SingleModel uses. Display name is independent of the
-	// concrete object, so any existing row works as the lookup anchor.
 	if (slk->rows() > 0) {
-		const std::string& rep_id = slk->index_to_row.at(0);
-		if (const auto meta_id = slk->field_to_meta_id(*meta_slk, field, rep_id)) {
-			const std::string_view dn = meta_slk->data<std::string_view>("displayname", *meta_id);
-			if (!dn.empty()) {
-				QString s = QString::fromUtf8(dn);
-				s.replace('&', "");
-				return s;
-			}
-		}
-	}
-
-	// Fallback: the raw field key (still meaningful, e.g. "hp", "goldcost").
-	return QString::fromStdString(field);
-}
-
-QVariant SpreadsheetProxy::headerData(int section, Qt::Orientation orientation, int role) const {
-	if (role == Qt::DisplayRole) {
-		if (orientation == Qt::Horizontal) {
-			// Columns are never reordered/filtered by this proxy, so the proxy
-			// column index equals the source column index.
-			return fieldDisplayName(section);
-		} else {
-			if (section >= 0 && section < rowCount()) {
-				const QModelIndex src = mapToSource(index(section, 0));
-				if (src.isValid() && static_cast<size_t>(src.row()) < slk->index_to_row.size()) {
-					return QString::fromStdString(slk->index_to_row.at(src.row()));
+		try {
+			const std::string& rep_id = slk->index_to_row.at(0);
+			if (const auto meta_id = slk->field_to_meta_id(*meta_slk, field, rep_id)) {
+				const std::string_view dn = meta_slk->data<std::string_view>("displayname", *meta_id);
+				if (!dn.empty()) {
+					QString s = QString::fromUtf8(dn.data(), static_cast<int>(dn.size()));
+					s.replace('&', "");
+					return s;
 				}
 			}
+		} catch (...) {
+			// slk::field_to_meta_id can throw std::bad_optional_access for
+			// fields not present in the meta SLK (slk.ixx line 248).
 		}
 	}
-	return QSortFilterProxyModel::headerData(section, orientation, role);
+
+	return QString::fromStdString(field);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,28 +196,45 @@ SpreadsheetEditor::SpreadsheetEditor(QWidget* parent) : QMainWindow(parent) {
 	setWindowTitle("Spreadsheet");
 	resize(1280, 800);
 
+	if (!units_table) {
+		QMessageBox::warning(nullptr, "Spreadsheet", "Please load a map first.");
+		close();
+		return;
+	}
+
 	tabs = new QTabWidget;
 	tabs->setDocumentMode(true);
 	setCentralWidget(tabs);
 
 	using S = std::vector<std::string>;
 
-	// Curated default columns per category (lowercased SLK field keys; missing
-	// keys are silently skipped). Everything else is reachable via "Columns…".
-	addCategoryTab("Units", units_table, "name",
+	auto safe_add = [this](const QString& name, TableModel* table, const std::string& nf,
+	                        const std::vector<std::string>& curated, bool rf = false) {
+		try {
+			addCategoryTab(name, table, nf, curated, rf);
+		} catch (const std::exception& e) {
+			QMessageBox::warning(this, "Spreadsheet",
+				QString("Tab '%1' failed: %2").arg(name, e.what()));
+		} catch (...) {
+			QMessageBox::warning(this, "Spreadsheet",
+				QString("Tab '%1' failed: unknown error").arg(name));
+		}
+	};
+
+	safe_add("Units", units_table, "name",
 		S{ "name", "race", "hp", "manan", "regenhp", "regenmana", "def", "dmgplus1", "dice1", "sides1",
 		   "spd", "goldcost", "lumbercost", "fmade", "fused", "level", "primary", "sight" }, true);
-	addCategoryTab("Items", items_table, "name",
+	safe_add("Items", items_table, "name",
 		S{ "name", "goldcost", "lumbercost", "level", "class", "prio", "perishable", "pickrandom", "hp" });
-	addCategoryTab("Abilities", abilities_table, "name",
+	safe_add("Abilities", abilities_table, "name",
 		S{ "name", "code", "race", "levels", "targs1" });
-	addCategoryTab("Doodads", doodads_table, "name",
+	safe_add("Doodads", doodads_table, "name",
 		S{ "name", "category", "file" });
-	addCategoryTab("Destructibles", destructibles_table, "name",
+	safe_add("Destructibles", destructibles_table, "name",
 		S{ "name", "category", "file" });
-	addCategoryTab("Upgrades", upgrade_table, "name1",
+	safe_add("Upgrades", upgrade_table, "name1",
 		S{ "name1", "race", "class", "maxlevel", "goldbase", "lumberbase" });
-	addCategoryTab("Buffs", buff_table, "editorname",
+	safe_add("Buffs", buff_table, "editorname",
 		S{ "editorname", "bufftip", "race" });
 
 	show();
@@ -173,11 +247,15 @@ void SpreadsheetEditor::addCategoryTab(
 	const std::vector<std::string>& curated,
 	bool race_filter
 ) {
-	SpreadsheetProxy* proxy = new SpreadsheetProxy(table, name_field, this);
+	if (!table || !table->slk) {
+		return;
+	}
+
+	SpreadsheetProxy* proxy = new SpreadsheetProxy(table, table->slk, table->meta_slk, name_field, this);
 
 	QTableView* view = new QTableView;
 	view->setModel(proxy);
-	view->setSortingEnabled(true);
+	view->setSortingEnabled(false);
 	view->setAlternatingRowColors(true);
 	view->setSelectionBehavior(QAbstractItemView::SelectRows);
 	view->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -188,21 +266,16 @@ void SpreadsheetEditor::addCategoryTab(
 	view->verticalHeader()->setDefaultSectionSize(22);
 	view->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 
-	// Columns are not reordered by the proxy, so view/source column indices match.
 	const int columns = table->slk->columns();
 	const std::set<std::string> visible(curated.begin(), curated.end());
 	for (int c = 0; c < columns; c++) {
-		const std::string& field = table->slk->index_to_column.at(c);
+		const std::string& field = table->slk->index_to_column.at(static_cast<size_t>(c));
 		view->setColumnHidden(c, !visible.contains(field));
 	}
 
-	// Fallback so a tab is never fully blank if none of the curated keys exist.
 	bool any_visible = false;
 	for (int c = 0; c < columns; c++) {
-		if (!view->isColumnHidden(c)) {
-			any_visible = true;
-			break;
-		}
+		if (!view->isColumnHidden(c)) { any_visible = true; break; }
 	}
 	if (!any_visible) {
 		for (int c = 0; c < columns; c++) {
@@ -210,9 +283,7 @@ void SpreadsheetEditor::addCategoryTab(
 		}
 	}
 
-	view->resizeColumnsToContents();
-
-	// Right-click → Batch edit the selected rows.
+	// Right-click → Batch edit
 	connect(view, &QTableView::customContextMenuRequested, this, [this, view, proxy, table](const QPoint& pos) {
 		QMenu menu;
 		QAction* batch = menu.addAction("Batch edit…");
@@ -225,7 +296,7 @@ void SpreadsheetEditor::addCategoryTab(
 		menu.exec(view->viewport()->mapToGlobal(pos));
 	});
 
-	// Toolbar: search, filters and the "Columns…" visibility toggle.
+	// Toolbar
 	QToolBar* bar = new QToolBar;
 	bar->setMovable(false);
 
@@ -236,7 +307,6 @@ void SpreadsheetEditor::addCategoryTab(
 	connect(search, &QLineEdit::textChanged, proxy, &SpreadsheetProxy::setTextFilter);
 	bar->addWidget(search);
 
-	// Race filter (units only), sourced from the same unitRace section the tree uses.
 	if (race_filter && unit_editor_data.section_exists("unitRace")) {
 		QComboBox* race_combo = new QComboBox;
 		race_combo->addItem("All races", QString());
@@ -271,28 +341,27 @@ void SpreadsheetEditor::addCategoryTab(
 	QToolButton* columns_button = new QToolButton;
 	columns_button->setText("Columns…");
 	columns_button->setPopupMode(QToolButton::InstantPopup);
-
-	QMenu* menu = new QMenu(columns_button);
+	QMenu* col_menu = new QMenu(columns_button);
 
 	std::vector<std::pair<QString, int>> entries;
 	entries.reserve(columns);
 	for (int c = 0; c < columns; c++) {
 		QString label = proxy->headerData(c, Qt::Horizontal, Qt::DisplayRole).toString();
 		if (label.isEmpty()) {
-			label = QString::fromStdString(table->slk->index_to_column.at(c));
+			label = QString::fromStdString(table->slk->index_to_column.at(static_cast<size_t>(c)));
 		}
 		entries.emplace_back(label, c);
 	}
 	std::ranges::sort(entries, [](const auto& a, const auto& b) { return a.first.localeAwareCompare(b.first) < 0; });
 
 	for (const auto& [label, c] : entries) {
-		QAction* act = menu->addAction(label);
+		QAction* act = col_menu->addAction(label);
 		act->setCheckable(true);
 		act->setChecked(!view->isColumnHidden(c));
 		const int col = c;
 		connect(act, &QAction::toggled, view, [view, col](bool on) { view->setColumnHidden(col, !on); });
 	}
-	columns_button->setMenu(menu);
+	columns_button->setMenu(col_menu);
 	bar->addWidget(columns_button);
 
 	QWidget* container = new QWidget;
@@ -309,7 +378,6 @@ void SpreadsheetEditor::openBatchDialog(QTableView* view, SpreadsheetProxy* prox
 	slk::SLK* slk = table->slk;
 	slk::SLK* meta_slk = table->meta_slk;
 
-	// Collect selected rows as source rows.
 	std::vector<int> source_rows;
 	for (const QModelIndex& idx : view->selectionModel()->selectedRows()) {
 		const QModelIndex src = proxy->mapToSource(idx);
@@ -336,26 +404,19 @@ void SpreadsheetEditor::openBatchDialog(QTableView* view, SpreadsheetProxy* prox
 
 	QFormLayout* form = new QFormLayout(&dialog);
 
-	// Target field: the currently visible columns.
 	QComboBox* field_combo = new QComboBox;
 	for (int c = 0; c < slk->columns(); c++) {
-		if (view->isColumnHidden(c)) {
-			continue;
-		}
+		if (view->isColumnHidden(c)) continue;
 		QString label = proxy->headerData(c, Qt::Horizontal, Qt::DisplayRole).toString();
 		if (label.isEmpty()) {
-			label = QString::fromStdString(slk->index_to_column.at(c));
+			label = QString::fromStdString(slk->index_to_column.at(static_cast<size_t>(c)));
 		}
 		field_combo->addItem(label, c);
 	}
-	if (field_combo->count() == 0) {
-		return;
-	}
+	if (field_combo->count() == 0) return;
 	if (preferred_column >= 0) {
-		const int i = field_combo->findData(preferred_column);
-		if (i >= 0) {
-			field_combo->setCurrentIndex(i);
-		}
+		int i = field_combo->findData(preferred_column);
+		if (i >= 0) field_combo->setCurrentIndex(i);
 	}
 
 	QComboBox* op_combo = new QComboBox;
@@ -377,40 +438,31 @@ void SpreadsheetEditor::openBatchDialog(QTableView* view, SpreadsheetProxy* prox
 	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
 	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
 
-	// Arithmetic operations only make sense for numeric fields.
 	auto refresh_ops = [&]() {
-		const std::string field = slk->index_to_column.at(field_combo->currentData().toInt());
+		const std::string field = slk->index_to_column.at(static_cast<size_t>(field_combo->currentData().toInt()));
 		const bool numeric = is_numeric(field_type(field));
 		op_combo->setEnabled(numeric);
-		if (!numeric) {
-			op_combo->setCurrentIndex(0); // Set
-		}
+		if (!numeric) op_combo->setCurrentIndex(0);
 	};
 	connect(field_combo, &QComboBox::currentIndexChanged, &dialog, [&](int) { refresh_ops(); });
 	refresh_ops();
 
-	if (dialog.exec() != QDialog::Accepted) {
-		return;
-	}
+	if (dialog.exec() != QDialog::Accepted) return;
 
 	const int col = field_combo->currentData().toInt();
-	const std::string field = slk->index_to_column.at(col);
+	const std::string field = slk->index_to_column.at(static_cast<size_t>(col));
 	const QString op = op_combo->currentData().toString();
 	const std::string_view type = field_type(field);
 	const bool numeric = is_numeric(type);
 	const bool is_int = type == "int";
 
 	auto format_number = [is_int](double v) -> std::string {
-		if (is_int) {
-			return std::to_string(static_cast<long long>(std::llround(v)));
-		}
+		if (is_int) return std::to_string(static_cast<long long>(std::llround(v)));
 		return std::format("{}", v);
 	};
 
-	// Non-numeric Set: write the raw string to every selected row.
 	if (!numeric || op == "set") {
 		if (numeric && op == "set") {
-			// Validate the number once, then store the canonical form.
 			bool ok = false;
 			const double v = value_edit->text().toDouble(&ok);
 			if (!ok) {
@@ -430,7 +482,6 @@ void SpreadsheetEditor::openBatchDialog(QTableView* view, SpreadsheetProxy* prox
 		return;
 	}
 
-	// Arithmetic operations.
 	bool ok = false;
 	const double operand = value_edit->text().toDouble(&ok);
 	if (!ok) {
@@ -439,23 +490,15 @@ void SpreadsheetEditor::openBatchDialog(QTableView* view, SpreadsheetProxy* prox
 	}
 
 	for (const int r : source_rows) {
-		const std::string& id = slk->index_to_row.at(r);
+		const std::string& id = slk->index_to_row.at(static_cast<size_t>(r));
 		double current = 0.0;
 		const std::string cur_str{ slk->data<std::string_view>(field, id) };
-		try {
-			current = std::stod(cur_str);
-		} catch (...) {
-			current = 0.0;
-		}
+		try { current = std::stod(cur_str); } catch (...) { current = 0.0; }
 
 		double result = current;
-		if (op == "add") {
-			result = current + operand;
-		} else if (op == "mul") {
-			result = current * operand;
-		} else if (op == "pct") {
-			result = current * (1.0 + operand / 100.0);
-		}
+		if (op == "add") result = current + operand;
+		else if (op == "mul") result = current * operand;
+		else if (op == "pct") result = current * (1.0 + operand / 100.0);
 
 		table->setData(table->index(r, col), QString::fromStdString(format_number(result)), Qt::EditRole);
 	}
