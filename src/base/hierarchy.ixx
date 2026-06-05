@@ -128,8 +128,6 @@ export class Hierarchy {
 
 		TRY_OPEN(game_data.open_file("war3.w3mod:"s + path_str));
 		TRY_OPEN(game_data.open_file("war3.w3mod:_deprecated.w3mod:"s + path_str));
-		TRY_OPEN(game_data.open_file("war3.w3mod:"s + path_str, 2)); // Retry with CASC_LOCALE_ENUS
-		TRY_OPEN(game_data.open_file("war3.w3mod:_deprecated.w3mod:"s + path_str, 2));
 
 		#undef TRY_OPEN
 

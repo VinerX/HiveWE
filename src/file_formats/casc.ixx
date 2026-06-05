@@ -71,9 +71,9 @@ namespace casc {
 			return files;
 		}
 
-		[[nodiscard]] std::expected<BinaryReader, std::string> open_file(const fs::path& path, DWORD locale_flags = 0) const {
+		[[nodiscard]] std::expected<BinaryReader, std::string> open_file(const fs::path& path) const {
 			HANDLE file_handle = nullptr;
-			const bool opened = CascOpenFile(handle, path.string().c_str(), locale_flags, CASC_OPEN_BY_NAME, &file_handle);
+			const bool opened = CascOpenFile(handle, path.string().c_str(), 0, CASC_OPEN_BY_NAME, &file_handle);
 			if (!opened) {
 				return std::unexpected(std::format("Error opening {} with error: {}\n", path.string(), GetCascError()));
 			}
