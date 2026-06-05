@@ -299,10 +299,16 @@ TEST_CASE("proxy – building filter") {
 
 	CHECK(proxy.rowCount() == 5);
 
-	proxy.setBuildingFilter(true);
+	// buildings only
+	proxy.setUnitTypeFilter(true, false);
 	CHECK(proxy.rowCount() == 2);
 
-	proxy.setBuildingFilter(false);
+	// units only (non-buildings)
+	proxy.setUnitTypeFilter(false, true);
+	CHECK(proxy.rowCount() == 3);
+
+	// all
+	proxy.setUnitTypeFilter(true, true);
 	CHECK(proxy.rowCount() == 5);
 }
 
@@ -417,7 +423,7 @@ TEST_CASE("proxy – triple filter: race + building + text") {
 	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
 
 	proxy.setRaceFilter("human");
-	proxy.setBuildingFilter(true);
+	proxy.setUnitTypeFilter(true, false); // buildings only
 	proxy.setTextFilter("Foot");
 	CHECK(proxy.rowCount() == 1);
 }

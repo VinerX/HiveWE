@@ -38,7 +38,7 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	void setTextFilter(const QString& text);
 	void setCustomOnly(bool custom_only);
 	void setRaceFilter(const QString& race_key);
-	void setBuildingFilter(bool buildings_only);
+	void setUnitTypeFilter(bool show_buildings, bool show_units);
 	void setEditorSuffixFilter(const QString& suffix);
 	void setFieldFilter(const QString& field_name, const QString& text);
 
@@ -62,7 +62,8 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	QString text_filter;
 	bool custom_only = false;
 	std::string race_filter;
-	bool building_only = false;
+	bool show_buildings = true;
+	bool show_units = true;
 	QString editor_suffix;
 	std::string field_filter_name;
 	QString field_filter_text;
@@ -90,6 +91,8 @@ class SpreadsheetView : public QTableView {
 	Q_OBJECT
   public:
 	using QTableView::QTableView;
+
+	SpreadsheetView* peer = nullptr;
 
   protected:
 	void wheelEvent(QWheelEvent* event) override;

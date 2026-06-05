@@ -1,4 +1,5 @@
 #include "main_ribbon.h"
+#include <QMenu>
 
 MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	// Home
@@ -184,6 +185,14 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	open_map_mpq->setIconSize({ 32, 32 });
 	open_map_mpq->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	addMenuItem(open_map_mpq);
+
+	open_recent_map->setText("Recent Maps");
+	open_recent_map->setIcon(QIcon("data/icons/ribbon/open.png"));
+	open_recent_map->setIconSize({ 32, 32 });
+	open_recent_map->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	open_recent_map->setPopupMode(QToolButton::InstantPopup);
+	open_recent_map->setMenu(new QMenu(open_recent_map));
+	addMenuItem(open_recent_map);
 
 	save_map->setText("Save Map");
 	save_map->setIcon(QIcon("data/icons/ribbon/save.png"));

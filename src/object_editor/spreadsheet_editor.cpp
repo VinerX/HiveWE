@@ -24,6 +24,7 @@
 #include <QSplitter>
 #include <QScrollBar>
 #include <QPushButton>
+#include <QSharedPointer>
 #include <map>
 #include <algorithm>
 
@@ -83,18 +84,24 @@ void SpreadsheetProxy::rebuildVisibleRows() {
 			if (race_val != race_filter) continue;
 		}
 
-		if (building_only && slk->column_headers.contains("isbldg")) {
+		if (slk->column_headers.contains("isbldg") && (!show_buildings || !show_units)) {
 			auto isbldg = slk->data<std::string_view>("isbldg", id);
-			if (isbldg != "1") continue;
+			bool is_building = (isbldg == "1");
+			if (is_building && !show_buildings) continue;
+			if (!is_building && !show_units) continue;
 		}
 
 		if (!editor_suffix.isEmpty()) {
 			if (slk->column_headers.contains("editorSuffix")) {
-				auto suffix = slk->data<std::string_view>("editorSuffix", id);
-				if (!suffix.data() || suffix != editor_suffix.toStdString()) continue;
+				auto sv = slk->data<std::string_view>("editorSuffix", id);
+				QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
+				if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
 			} else if (slk->column_headers.contains("version")) {
-				auto suffix = slk->data<std::string_view>("version", id);
-				if (!suffix.data() || suffix != editor_suffix.toStdString()) continue;
+				auto sv = slk->data<std::string_view>("version", id);
+				QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
+				if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
+			} else {
+				continue;
 			}
 		}
 
@@ -163,9 +170,10 @@ void SpreadsheetProxy::setRaceFilter(const QString& race_key) {
 	reapplyFilters();
 }
 
-void SpreadsheetProxy::setBuildingFilter(bool buildings) {
-	if (building_only == buildings) return;
-	building_only = buildings;
+void SpreadsheetProxy::setUnitTypeFilter(bool buildings, bool units) {
+	if (show_buildings == buildings && show_units == units) return;
+	show_buildings = buildings;
+	show_units = units;
 	reapplyFilters();
 }
 
@@ -219,9 +227,14 @@ QVariant SpreadsheetProxy::displayData(int source_row, int source_column) const 
 QVariant SpreadsheetProxy::data(const QModelIndex& index, int role) const {
 	if (!index.isValid() || !sourceModel()) return {};
 
-	if (role == Qt::DecorationRole && icon_column >= 0) {
-		const int src_row = visible_rows_.at(static_cast<size_t>(index.row()));
-		return sourceModel()->data(sourceModel()->index(src_row, icon_column), Qt::DecorationRole);
+	if (role == Qt::DecorationRole) {
+		// Show icon in the name column (decoration comes from the icon field)
+		if (icon_column >= 0 && name_column >= 0 && index.column() == name_column) {
+			const int src_row = visible_rows_.at(static_cast<size_t>(index.row()));
+			return sourceModel()->data(sourceModel()->index(src_row, icon_column), Qt::DecorationRole);
+		}
+		// For all other columns, let source model decide (icon column returns its own icon)
+		if (index.column() != icon_column) return {};
 	}
 
 	try {
@@ -340,7 +353,7 @@ QSize SpreadsheetDelegate::sizeHint(const QStyleOptionViewItem& option, const QM
 }
 
 // ============================================================================
-// SpreadsheetView — Ctrl+wheel zoom, Shift+wheel horizontal scroll
+// SpreadsheetView — Ctrl+wheel zoom (syncs peer), Shift+wheel horizontal scroll
 // ============================================================================
 
 void SpreadsheetView::wheelEvent(QWheelEvent* event) {
@@ -351,11 +364,14 @@ void SpreadsheetView::wheelEvent(QWheelEvent* event) {
 #endif
 	if (event->modifiers() & Qt::ControlModifier) {
 		if (delta != 0) {
-			int h = verticalHeader()->defaultSectionSize();
-			h = std::clamp(h + (delta > 0 ? 2 : -2), 10, 80);
+			int h = std::clamp(verticalHeader()->defaultSectionSize() + (delta > 0 ? 2 : -2), 10, 80);
 			verticalHeader()->setDefaultSectionSize(h);
 			int icon_sz = std::clamp(h - 6, 8, 64);
 			setIconSize({icon_sz, icon_sz});
+			if (peer) {
+				peer->verticalHeader()->setDefaultSectionSize(h);
+				peer->setIconSize({icon_sz, icon_sz});
+			}
 		}
 		event->accept();
 		return;
@@ -373,7 +389,6 @@ void SpreadsheetView::wheelEvent(QWheelEvent* event) {
 // ============================================================================
 
 static QString groupForField(const std::string& field) {
-	// General: identity / classification / name
 	if (field == "name" || field == "name1" || field == "editorname" ||
 	    field == "bufftip" || field == "buff" || field == "code" || field == "comment" ||
 	    field == "version" || field == "editorSuffix" || field == "useSpecific" ||
@@ -381,13 +396,11 @@ static QString groupForField(const std::string& field) {
 	    field == "unitType" || field == "unitClass")
 		return "General";
 
-	// Race / Class / Level
 	if (field == "race" || field == "class" || field == "level" || field == "levels" ||
 	    field == "primary" || field == "tilesets" || field == "campaign" ||
 	    field == "special" || field == "inBeta")
 		return "Race / Class";
 
-	// Combat
 	if (field.starts_with("def") || field.starts_with("dmg") || field.starts_with("dice") ||
 	    field.starts_with("sides") || field.starts_with("range") || field.starts_with("targs") ||
 	    field.starts_with("weap") || field.starts_with("cool") || field.starts_with("dur") ||
@@ -398,14 +411,12 @@ static QString groupForField(const std::string& field) {
 	    field == "nbrandom" || field == "half" || field == "naval")
 		return "Combat";
 
-	// HP / Mana / Regen
 	if (field.starts_with("hp") || field.starts_with("mana") || field == "regenhp" ||
 	    field == "regenmana" || field == "regenType" || field == "regen" ||
 	    field == "starthp" || field == "startmana" || field == "food" ||
 	    field == "bldtm" || field == "regenMana" || field == "regenHP")
 		return "HP / Mana / Regen";
 
-	// Cost
 	if (field.starts_with("gold") || field.starts_with("lumber") ||
 	    field.starts_with("fmad") || field.starts_with("fuse") ||
 	    field.starts_with("stock") || field.starts_with("sell") ||
@@ -413,7 +424,6 @@ static QString groupForField(const std::string& field) {
 	    field == "used" || field == "uses" || field == "useCost")
 		return "Cost / Resources";
 
-	// Art / Icons / Models
 	if (field == "file" || field.starts_with("Art") || field.starts_with("Icon") ||
 	    field.starts_with("model") || field.starts_with("Model") || field == "portrait" ||
 	    field.starts_with("Button") || field.starts_with("anim") || field == "Extra" ||
@@ -423,23 +433,21 @@ static QString groupForField(const std::string& field) {
 	    field.starts_with("projectile") || field.starts_with("targetart") ||
 	    field.starts_with("effect") || field.starts_with("caster") ||
 	    field.starts_with("lightning") || field.starts_with("spawn") ||
-	    field == "occH" || field == "tilesetSpecific")
+	    field == "occH" || field == "tilesetSpecific" ||
+	    field == "art" || field == "art1")
 		return "Art / Model";
 
-	// Sound
 	if (field.starts_with("sound") || field.starts_with("Sound") ||
 	    field == "moveSound" || field == "constructionSound" ||
 	    field == "loopSound" || field == "randomSound")
 		return "Sound";
 
-	// Pathing / Movement
 	if (field.starts_with("path") || field.starts_with("coll") ||
 	    field == "turnRate" || field == "propwin" || field == "movetp" ||
 	    field == "moveHeight" || field == "walk" || field == "targType" ||
 	    field == "setu" || field == "setd")
 		return "Pathing / Movement";
 
-	// Techtree
 	if (field.starts_with("research") || field.starts_with("upgrade") ||
 	    field.starts_with("require") || field.starts_with("dep") ||
 	    field.starts_with("techtree") || field.starts_with("parent") ||
@@ -448,7 +456,6 @@ static QString groupForField(const std::string& field) {
 	    field.starts_with("build") || field.starts_with("revive"))
 		return "Techtree";
 
-	// Text / Tooltips
 	if (field.starts_with("tooltip") || field.starts_with("tip") ||
 	    field.starts_with("ubertip") || field.starts_with("description") ||
 	    field.starts_with("hotkey") || field.starts_with("name") ||
@@ -490,16 +497,16 @@ SpreadsheetEditor::SpreadsheetEditor(QWidget* parent) : QMainWindow(parent) {
 		}
 	};
 
-	safe_add("Units", units_table, "name", "file",
+	safe_add("Units", units_table, "name", "art",
 		S{ "name", "race", "hp", "manan", "regenhp", "regenmana", "def", "dmgplus1", "dice1", "sides1",
 		   "spd", "goldcost", "lumbercost", "fmade", "fused", "level", "primary", "sight" }, true);
-	safe_add("Items", items_table, "name", "file",
+	safe_add("Items", items_table, "name", "art",
 		S{ "name", "goldcost", "lumbercost", "level", "class", "prio", "perishable", "pickrandom", "hp" });
 	safe_add("Abilities", abilities_table, "name", "Art",
 		S{ "name", "code", "race", "levels", "targs1" });
-	safe_add("Doodads", doodads_table, "name", "file",
+	safe_add("Doodads", doodads_table, "name", "",
 		S{ "name", "category", "file" });
-	safe_add("Destructibles", destructibles_table, "name", "file",
+	safe_add("Destructibles", destructibles_table, "name", "",
 		S{ "name", "category", "file" });
 	safe_add("Upgrades", upgrade_table, "name1", "Art",
 		S{ "name1", "race", "class", "maxlevel", "goldbase", "lumberbase" });
@@ -526,7 +533,14 @@ void SpreadsheetEditor::addCategoryTab(
 
 	const int columns = table->slk->columns();
 
-	// --- frozen view: shows only the name column ---
+	// Determine initially frozen columns: name column always frozen, icon column too if present
+	auto frozen_cols = QSharedPointer<QSet<int>>::create();
+	frozen_cols->insert(proxy->nameColumn());
+	if (proxy->iconColumn() >= 0 && proxy->iconColumn() != proxy->nameColumn()) {
+		frozen_cols->insert(proxy->iconColumn());
+	}
+
+	// --- frozen view: rawcode in vertical header + frozen columns ---
 	SpreadsheetView* frozen_view = new SpreadsheetView;
 	frozen_view->setModel(proxy);
 	frozen_view->setSortingEnabled(false);
@@ -540,17 +554,24 @@ void SpreadsheetEditor::addCategoryTab(
 	frozen_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	frozen_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	frozen_view->verticalHeader()->setDefaultSectionSize(22);
-	frozen_view->verticalHeader()->setVisible(false);
-	frozen_view->horizontalHeader()->setMinimumSectionSize(40);
-	frozen_view->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+	frozen_view->verticalHeader()->setVisible(true);   // shows rawcode
+	frozen_view->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+	frozen_view->horizontalHeader()->setMinimumSectionSize(24);
+	frozen_view->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
 	frozen_view->horizontalHeader()->setStretchLastSection(false);
-	frozen_view->horizontalHeader()->setMinimumHeight(36);
+	frozen_view->horizontalHeader()->setMinimumHeight(40);
+	frozen_view->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
 	QFont frozen_font = frozen_view->horizontalHeader()->font();
 	frozen_font.setPointSize(std::max(7, frozen_font.pointSize() - 1));
 	frozen_view->horizontalHeader()->setFont(frozen_font);
-	// Show only column 0 (name)
+
+	// Show only frozen columns in frozen view
 	for (int c = 0; c < columns; c++) {
-		frozen_view->setColumnHidden(c, c != proxy->nameColumn());
+		frozen_view->setColumnHidden(c, !frozen_cols->contains(c));
+	}
+	// Set icon column width
+	if (proxy->iconColumn() >= 0 && frozen_cols->contains(proxy->iconColumn())) {
+		frozen_view->setColumnWidth(proxy->iconColumn(), 32);
 	}
 
 	// --- main view ---
@@ -564,20 +585,26 @@ void SpreadsheetEditor::addCategoryTab(
 	view->horizontalHeader()->setSectionsMovable(true);
 	view->horizontalHeader()->setStretchLastSection(false);
 	view->horizontalHeader()->setMinimumSectionSize(40);
+	view->horizontalHeader()->setMinimumHeight(40);
+	view->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
 	view->verticalHeader()->setDefaultSectionSize(22);
+	view->verticalHeader()->setVisible(false);  // rawcode shown in frozen view
 	view->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 	view->setIconSize({16, 16});
 	view->setItemDelegate(new SpreadsheetDelegate(view));
 
-	view->horizontalHeader()->setMinimumHeight(36);
 	QFont hdr_font = view->horizontalHeader()->font();
 	hdr_font.setPointSize(std::max(7, hdr_font.pointSize() - 1));
 	view->horizontalHeader()->setFont(hdr_font);
 
-	// Hide name column in main view (shown frozen)
-	view->setColumnHidden(proxy->nameColumn(), true);
+	// Hide frozen columns from main view
+	for (int c = 0; c < columns; c++) {
+		if (frozen_cols->contains(c)) {
+			view->setColumnHidden(c, true);
+		}
+	}
 
-	// Column visibility from QSettings
+	// Column visibility from QSettings (for non-frozen columns)
 	QString settings_key = "Spreadsheet/columns/" + name;
 	QSettings settings;
 	const QStringList saved_hidden = settings.value(settings_key).toString().split(',',
@@ -587,7 +614,7 @@ void SpreadsheetEditor::addCategoryTab(
 	bool has_saved = !saved_hidden.isEmpty();
 
 	for (int c = 0; c < columns; c++) {
-		if (c == proxy->nameColumn()) continue; // handled by frozen view
+		if (frozen_cols->contains(c)) continue; // managed by frozen view
 		const std::string& field = table->slk->index_to_column.at(static_cast<size_t>(c));
 		if (has_saved) {
 			view->setColumnHidden(c, saved_hidden.contains(QString::fromStdString(field)));
@@ -598,23 +625,21 @@ void SpreadsheetEditor::addCategoryTab(
 
 	bool any_visible = false;
 	for (int c = 0; c < columns; c++) {
-		if (c != proxy->nameColumn() && !view->isColumnHidden(c)) {
+		if (!frozen_cols->contains(c) && !view->isColumnHidden(c)) {
 			any_visible = true; break;
 		}
 	}
 	if (!any_visible) {
 		for (int c = 0; c < columns; c++) {
-			if (c != proxy->nameColumn()) view->setColumnHidden(c, false);
+			if (!frozen_cols->contains(c)) view->setColumnHidden(c, false);
 		}
 	}
 
-	// Auto-size icon column
-	if (proxy->iconColumn() >= 0 && proxy->iconColumn() != proxy->nameColumn() &&
-	    !view->isColumnHidden(proxy->iconColumn())) {
-		view->setColumnWidth(proxy->iconColumn(), 40);
-	}
+	// Link peer views for zoom sync
+	frozen_view->peer = view;
+	view->peer = frozen_view;
 
-	// Sync vertical scrolling between frozen and main view
+	// Sync vertical scrolling
 	connect(view->verticalScrollBar(), &QScrollBar::valueChanged,
 	        frozen_view->verticalScrollBar(), &QScrollBar::setValue);
 	connect(frozen_view->verticalScrollBar(), &QScrollBar::valueChanged,
@@ -639,8 +664,6 @@ void SpreadsheetEditor::addCategoryTab(
 	});
 
 	// Sort via header clicks
-	view->setSortingEnabled(false);
-	frozen_view->setSortingEnabled(false);
 	auto sort_fn = [proxy](int logicalIndex) {
 		static int last_col = -1;
 		static Qt::SortOrder last_order = Qt::AscendingOrder;
@@ -654,41 +677,58 @@ void SpreadsheetEditor::addCategoryTab(
 		proxy->sort(logicalIndex, last_order);
 	};
 	connect(view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, sort_fn);
-	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, [proxy](int) {
-		proxy->sort(proxy->nameColumn(),
-			(proxy->sort_column == proxy->nameColumn() && proxy->sort_order == Qt::AscendingOrder)
-				? Qt::DescendingOrder : Qt::AscendingOrder);
+	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, sort_fn);
+
+	// ---- Right-click on main view column header → Freeze ----
+	view->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(view->horizontalHeader(), &QHeaderView::customContextMenuRequested,
+	        this, [=](const QPoint& pos) {
+		int logical = view->horizontalHeader()->logicalIndexAt(pos);
+		if (logical < 0) return;
+		QMenu menu;
+		QAction* freeze_act = menu.addAction("Freeze column");
+		if (menu.exec(view->horizontalHeader()->mapToGlobal(pos)) == freeze_act) {
+			frozen_cols->insert(logical);
+			view->setColumnHidden(logical, true);
+			frozen_view->setColumnHidden(logical, false);
+		}
 	});
 
-	// Right-click → Batch edit
+	// ---- Right-click on frozen view column header → Unfreeze ----
+	frozen_view->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(frozen_view->horizontalHeader(), &QHeaderView::customContextMenuRequested,
+	        this, [=](const QPoint& pos) {
+		int logical = frozen_view->horizontalHeader()->logicalIndexAt(pos);
+		if (logical < 0) return;
+		QMenu menu;
+		QAction* unfreeze_act = menu.addAction("Unfreeze column");
+		if (menu.exec(frozen_view->horizontalHeader()->mapToGlobal(pos)) == unfreeze_act) {
+			frozen_cols->remove(logical);
+			frozen_view->setColumnHidden(logical, true);
+			view->setColumnHidden(logical, false);
+		}
+	});
+
+	// ---- Right-click on cells → Batch edit ----
+	auto batch_menu = [this](SpreadsheetView* v, SpreadsheetProxy* px, TableModel* tbl, const QPoint& pos) {
+		QMenu menu;
+		QAction* batch = menu.addAction("Batch edit...");
+		batch->setEnabled(!v->selectionModel()->selectedRows().isEmpty());
+		const QModelIndex at = v->indexAt(pos);
+		const int preferred_column = at.isValid() ? at.column() : -1;
+		connect(batch, &QAction::triggered, this,
+		        [this, v, px, tbl, preferred_column]() {
+			openBatchDialog(v, px, tbl, preferred_column);
+		});
+		menu.exec(v->viewport()->mapToGlobal(pos));
+	};
+
 	connect(view, &QTableView::customContextMenuRequested, this,
-	        [this, view, proxy, table](const QPoint& pos) {
-		QMenu menu;
-		QAction* batch = menu.addAction("Batch edit...");
-		batch->setEnabled(!view->selectionModel()->selectedRows().isEmpty());
-		const QModelIndex at = view->indexAt(pos);
-		const int preferred_column = at.isValid() ? at.column() : -1;
-		connect(batch, &QAction::triggered, this,
-		        [this, view, proxy, table, preferred_column]() {
-			openBatchDialog(view, proxy, table, preferred_column);
-		});
-		menu.exec(view->viewport()->mapToGlobal(pos));
-	});
+	        [=](const QPoint& pos) { batch_menu(view, proxy, table, pos); });
 	connect(frozen_view, &QTableView::customContextMenuRequested, this,
-	        [this, frozen_view, proxy, table](const QPoint& pos) {
-		QMenu menu;
-		QAction* batch = menu.addAction("Batch edit...");
-		batch->setEnabled(!frozen_view->selectionModel()->selectedRows().isEmpty());
-		const QModelIndex at = frozen_view->indexAt(pos);
-		const int preferred_column = at.isValid() ? at.column() : -1;
-		connect(batch, &QAction::triggered, this,
-		        [this, frozen_view, proxy, table, preferred_column]() {
-			openBatchDialog(frozen_view, proxy, table, preferred_column);
-		});
-		menu.exec(frozen_view->viewport()->mapToGlobal(pos));
-	});
+	        [=](const QPoint& pos) { batch_menu(frozen_view, proxy, table, pos); });
 
-	// Toolbar
+	// ---- Toolbar ----
 	QToolBar* bar = new QToolBar;
 	bar->setMovable(false);
 
@@ -718,22 +758,30 @@ void SpreadsheetEditor::addCategoryTab(
 	}
 
 	if (race_filter) {
-		QToolButton* building = new QToolButton;
-		building->setText("Building");
-		building->setCheckable(true);
-		building->setToolTip("Show only buildings (isbldg = 1)");
-		connect(building, &QToolButton::toggled, proxy, &SpreadsheetProxy::setBuildingFilter);
+		// Two checkboxes: Buildings + Units (replacing the single "Building" toggle)
+		QCheckBox* chk_buildings = new QCheckBox("Buildings");
+		chk_buildings->setChecked(true);
+		QCheckBox* chk_units = new QCheckBox("Units");
+		chk_units->setChecked(true);
+
+		auto update_filter = [proxy, chk_buildings, chk_units]() {
+			proxy->setUnitTypeFilter(chk_buildings->isChecked(), chk_units->isChecked());
+		};
+		connect(chk_buildings, &QCheckBox::toggled, this, update_filter);
+		connect(chk_units, &QCheckBox::toggled, this, update_filter);
+
 		bar->addSeparator();
-		bar->addWidget(building);
+		bar->addWidget(chk_buildings);
+		bar->addWidget(chk_units);
 	}
 
-	// Editor suffix as text input
+	// Editor suffix filter
 	{
 		QLineEdit* suffix_edit = new QLineEdit;
 		suffix_edit->setPlaceholderText("editor suffix");
 		suffix_edit->setClearButtonEnabled(true);
 		suffix_edit->setMaximumWidth(120);
-		suffix_edit->setToolTip("Filter by editorSuffix / version field");
+		suffix_edit->setToolTip("Filter by editorSuffix / version field (substring, case-insensitive)");
 		connect(suffix_edit, &QLineEdit::textChanged, proxy, &SpreadsheetProxy::setEditorSuffixFilter);
 		bar->addSeparator();
 		bar->addWidget(new QLabel(" Suffix: "));
@@ -765,7 +813,7 @@ void SpreadsheetEditor::addCategoryTab(
 	splitter->setChildrenCollapsible(false);
 	splitter->addWidget(frozen_view);
 	splitter->addWidget(view);
-	splitter->setSizes({170, 900});
+	splitter->setSizes({220, 900});
 
 	QWidget* container = new QWidget;
 	QVBoxLayout* layout = new QVBoxLayout(container);
@@ -815,7 +863,7 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 	const int columns = table->slk->columns();
 	const std::set<std::string> default_set(curated.begin(), curated.end());
 
-	// Build groups
+	// Build groups (exclude name column — managed by frozen view)
 	std::map<QString, std::vector<std::pair<int, QString>>> groups;
 	for (int c = 0; c < columns; c++) {
 		if (c == proxy->nameColumn()) continue;
@@ -826,17 +874,14 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 		groups[gname].push_back({c, label});
 	}
 
-	// Desired order of top-level groups
 	const std::vector<QString> ordered_groups = {
 		"General", "Race / Class", "Combat", "HP / Mana / Regen",
 		"Cost / Resources", "Art / Model", "Sound",
 		"Pathing / Movement", "Techtree", "Text / Tooltips", "Other",
 	};
 
-	// Create tree items
 	QMap<QString, QTreeWidgetItem*> group_items;
 	std::map<QTreeWidgetItem*, int> item_to_col;
-	std::map<QTreeWidgetItem*, bool> item_to_checked;
 
 	for (const auto& gname : ordered_groups) {
 		auto it = groups.find(gname);
@@ -855,13 +900,11 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 			bool is_visible = !view->isColumnHidden(col);
 			child->setCheckState(0, is_visible ? Qt::Checked : Qt::Unchecked);
 			item_to_col[child] = col;
-			item_to_checked[child] = is_visible;
 		}
 	}
 
 	tree->expandAll();
 
-	// Search filter
 	connect(search_bar, &QLineEdit::textChanged, tree, [tree](const QString& text) {
 		for (int i = 0; i < tree->topLevelItemCount(); ++i) {
 			QTreeWidgetItem* gitem = tree->topLevelItem(i);
@@ -877,7 +920,6 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 		}
 	});
 
-	// Buttons
 	QHBoxLayout* btn_row = new QHBoxLayout;
 	QPushButton* defaults_btn = new QPushButton("Restore defaults");
 	connect(defaults_btn, &QPushButton::clicked, tree, [tree, proxy, columns, default_set, &item_to_col]() {
@@ -915,7 +957,6 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 
 	if (dlg.exec() != QDialog::Accepted) return;
 
-	// Apply visibility
 	QStringList hidden_fields;
 	for (int i = 0; i < tree->topLevelItemCount(); ++i) {
 		QTreeWidgetItem* gitem = tree->topLevelItem(i);
