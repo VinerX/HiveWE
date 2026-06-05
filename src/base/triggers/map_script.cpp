@@ -7,6 +7,13 @@ module Triggers;
 
 import std;
 import INI;
+import Units;
+import Doodads;
+import Regions;
+import GameCameras;
+import Sounds;
+import Terrain;
+import MapInfo;
 namespace fs = std::filesystem;
 
 void generate_global_variables(

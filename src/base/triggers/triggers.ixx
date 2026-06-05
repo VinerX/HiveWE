@@ -5,16 +5,17 @@ import Hierarchy;
 import Utilities;
 import Globals;
 import <glm/glm.hpp>;
-import Units;
-import Doodads;
-import Regions;
-import GameCameras;
-import Sounds;
-import Terrain;
-import MapInfo;
 import BinaryReader;
 import BinaryWriter;
 import INI;
+
+export class Units;
+export class Doodads;
+export class Regions;
+export class GameCameras;
+export class Sounds;
+export class Terrain;
+export class MapInfo;
 
 namespace fs = std::filesystem;
 using namespace std::literals::string_literals;
