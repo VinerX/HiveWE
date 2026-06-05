@@ -1,7 +1,3 @@
-module;
-
-#include "main_window/glwidget.h"
-
 export module Globals;
 
 import INI;
@@ -32,5 +28,3 @@ export inline slk::SLK upgrade_meta_slk;
 
 export inline slk::SLK buff_slk;
 export inline slk::SLK buff_meta_slk;
-
-export inline GLWidget* context;

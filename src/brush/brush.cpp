@@ -5,6 +5,7 @@ import Camera;
 import OpenGLUtilities;
 import ResourceManager;
 import Globals;
+import GLGlobals;
 import <glad/glad.h>;
 import <glm/glm.hpp>;
 import <glm/gtc/matrix_transform.hpp>;

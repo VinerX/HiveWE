@@ -7,6 +7,7 @@ import Hierarchy;
 import MPQ;
 import Camera;
 import Globals;
+import GLGlobals;
 import Map;
 import <soil2/SOIL2.h>;
 import MapGlobal;
@@ -492,6 +493,10 @@ void HiveWE::moveEvent(QMoveEvent* event) {
 
 void HiveWE::switch_warcraft() {
 	QSettings settings;
+	// Hierarchy no longer reads these itself (keeps it Qt-free); refresh before reopening.
+	hierarchy.ptr = settings.value("flavour", "Retail").toString() == "PTR";
+	hierarchy.hd = settings.value("hd", "False").toString() == "True";
+	hierarchy.teen = settings.value("teen", "False").toString() == "True";
 	fs::path directory;
 	do {
 		directory = QFileDialog::getExistingDirectory(this, "Select Warcraft Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();

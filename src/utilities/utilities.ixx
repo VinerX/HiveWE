@@ -1,7 +1,3 @@
-module;
-
-#include <QSettings>
-
 export module Utilities;
 
 import std;
@@ -270,11 +266,12 @@ transform_aabb_non_uniform(const glm::vec3& min, const glm::vec3& max, glm::vec3
 	new_max = glm::max(p1, glm::max(p2, glm::max(p3, glm::max(p4, glm::max(p5, glm::max(p6, glm::max(p7, p8)))))));
 }
 
+// Best-effort guess of the Warcraft III install directory from well-known
+// filesystem locations. Qt-free so the headless data layer (and CLI) can reuse
+// it. The GUI prefers a user-configured path (QSettings "warcraftDirectory")
+// and only falls back to this probe; that lookup lives in main.cpp.
 export fs::path find_warcraft_directory() {
-	QSettings settings;
-	if (settings.contains("warcraftDirectory")) {
-		return settings.value("warcraftDirectory").toString().toStdString();
-	} else if (fs::exists("C:/Program Files/Warcraft III")) {
+	if (fs::exists("C:/Program Files/Warcraft III")) {
 		return "C:/Program Files/Warcraft III";
 	} else if (fs::exists("C:/Program Files (x86)/Warcraft III")) {
 		return "C:/Program Files (x86)/Warcraft III";

@@ -15,6 +15,7 @@ import PathingMap;
 import SkinnedMesh;
 import SkeletalModelInstance;
 import Globals;
+import GLGlobals;
 import MapGlobal;
 import Rects;
 import <glad/glad.h>;

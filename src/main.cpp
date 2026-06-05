@@ -161,9 +161,29 @@ int main(int argc, char* argv[]) {
 		world_edit_data.substitute(world_edit_strings, "WorldEditStrings");
 	};
 
+	// Hierarchy used to read these from QSettings/registry itself; that pulled Qt into the
+	// Qt-free data layer, so the GUI now configures the flavour flags before opening CASC.
+	hierarchy.ptr = settings.value("flavour", "Retail").toString() == "PTR";
+	hierarchy.hd = settings.value("hd", "False").toString() == "True";
+	hierarchy.teen = settings.value("teen", "False").toString() == "True";
+	{
+		QSettings war3reg("HKEY_CURRENT_USER\\Software\\Blizzard Entertainment\\Warcraft III", QSettings::NativeFormat);
+		hierarchy.local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
+	}
+
+	// Prefer the user-configured Warcraft directory (QSettings), falling back to
+	// the Qt-free filesystem probe in Utilities. Kept here so Utilities stays
+	// headless.
+	const auto warcraft_directory = [&]() -> fs::path {
+		if (settings.contains("warcraftDirectory")) {
+			return settings.value("warcraftDirectory").toString().toStdString();
+		}
+		return find_warcraft_directory();
+	};
+
 	bool is_casc_open = false;
 	const auto casc_future = std::async(std::launch::async, [&]() {
-		const fs::path directory = find_warcraft_directory();
+		const fs::path directory = warcraft_directory();
 
 		is_casc_open = hierarchy.open_casc(directory);
 		if (is_casc_open) {
@@ -176,7 +196,7 @@ int main(int argc, char* argv[]) {
 	casc_future.wait();
 
 	if (!is_casc_open) {
-		fs::path directory = find_warcraft_directory();
+		fs::path directory = warcraft_directory();
 
 		while (!hierarchy.open_casc(directory)) {
 			directory = QFileDialog::getExistingDirectory(nullptr, "Select Warcraft Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();
