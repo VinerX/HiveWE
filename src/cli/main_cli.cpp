@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -167,6 +168,11 @@ struct CloseWindowContext {
 	bool posted = false;
 };
 
+struct WindowLookupContext {
+	DWORD pid = 0;
+	HWND hwnd = nullptr;
+};
+
 std::optional<LaunchedProcess> launch_process(const std::wstring& command_line, const fs::path& working_dir) {
 	STARTUPINFOW si{};
 	si.cb = sizeof(si);
@@ -203,6 +209,67 @@ BOOL CALLBACK close_windows_for_pid(HWND hwnd, LPARAM lparam) {
 	return TRUE;
 }
 
+BOOL CALLBACK find_window_for_pid(HWND hwnd, LPARAM lparam) {
+	auto* ctx = reinterpret_cast<WindowLookupContext*>(lparam);
+	DWORD hwnd_pid = 0;
+	GetWindowThreadProcessId(hwnd, &hwnd_pid);
+	if (hwnd_pid != ctx->pid || !IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != nullptr) {
+		return TRUE;
+	}
+	ctx->hwnd = hwnd;
+	return FALSE;
+}
+
+HWND find_main_window(DWORD pid) {
+	WindowLookupContext ctx{pid, nullptr};
+	EnumWindows(find_window_for_pid, reinterpret_cast<LPARAM>(&ctx));
+	return ctx.hwnd;
+}
+
+bool click_window_center(DWORD pid) {
+	HWND hwnd = find_main_window(pid);
+	if (hwnd == nullptr) {
+		return false;
+	}
+
+	ShowWindow(hwnd, SW_RESTORE);
+	BringWindowToTop(hwnd);
+	SetForegroundWindow(hwnd);
+	SetActiveWindow(hwnd);
+	SetFocus(hwnd);
+
+	RECT rect{};
+	if (!GetClientRect(hwnd, &rect)) {
+		return false;
+	}
+
+	const int x = (rect.right - rect.left) / 2;
+	const int y = (rect.bottom - rect.top) / 2;
+	const LPARAM lparam = MAKELPARAM(x, y);
+
+	PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam);
+	PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam);
+	PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam);
+	return true;
+}
+
+bool send_enter_to_window(DWORD pid) {
+	HWND hwnd = find_main_window(pid);
+	if (hwnd == nullptr) {
+		return false;
+	}
+
+	ShowWindow(hwnd, SW_RESTORE);
+	BringWindowToTop(hwnd);
+	SetForegroundWindow(hwnd);
+	SetActiveWindow(hwnd);
+	SetFocus(hwnd);
+
+	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0);
+	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0);
+	return true;
+}
+
 bool request_process_close(DWORD pid) {
 	CloseWindowContext ctx{pid, false};
 	EnumWindows(close_windows_for_pid, reinterpret_cast<LPARAM>(&ctx));
@@ -234,6 +301,21 @@ fs::path war3_log_path(const Args& args) {
 	fail("USERPROFILE is not set; pass --log <path-to-War3Log.txt>");
 }
 
+fs::path war3_custom_map_data_dir() {
+	if (const char* userprofile = std::getenv("USERPROFILE")) {
+		return fs::path(userprofile) / "Documents" / "Warcraft III" / "CustomMapData";
+	}
+	fail("USERPROFILE is not set; pass an absolute --file path");
+}
+
+fs::path custom_map_data_file_path(const std::string& file_option) {
+	const fs::path path = fs::path(file_option);
+	if (path.is_absolute()) {
+		return path;
+	}
+	return war3_custom_map_data_dir() / path;
+}
+
 std::string read_text_file(const fs::path& path) {
 	std::ifstream in(path, std::ios::binary);
 	if (!in) {
@@ -262,6 +344,35 @@ std::vector<std::string> split_lines(const std::string& text) {
 	return lines;
 }
 
+std::vector<std::string> extract_preload_messages(const std::string& text) {
+	const std::vector<std::string> lines = split_lines(text);
+	std::vector<std::string> messages;
+	const std::string prefix = "call Preload( \"";
+	for (const std::string& line : lines) {
+		const std::size_t start = line.find(prefix);
+		if (start == std::string::npos) {
+			continue;
+		}
+
+		std::size_t end = line.size();
+		while (end > 0 && std::isspace(static_cast<unsigned char>(line[end - 1])) != 0) {
+			--end;
+		}
+		if (end == 0) {
+			continue;
+		}
+
+		const std::size_t quote_end = line.rfind('"', end - 1);
+		const std::size_t content_start = start + prefix.size();
+		if (quote_end == std::string::npos || quote_end < content_start) {
+			continue;
+		}
+
+		messages.push_back(line.substr(content_start, quote_end - content_start));
+	}
+	return messages;
+}
+
 std::string join_lines(const std::vector<std::string>& lines, std::size_t start_index) {
 	std::string joined;
 	for (std::size_t i = start_index; i < lines.size(); ++i) {
@@ -271,6 +382,15 @@ std::string join_lines(const std::vector<std::string>& lines, std::size_t start_
 		joined += lines[i];
 	}
 	return joined;
+}
+
+std::string read_preload_log_excerpt(const fs::path& path, std::size_t tail_lines) {
+	if (!fs::is_regular_file(path)) {
+		return {};
+	}
+	const std::vector<std::string> messages = extract_preload_messages(read_text_file(path));
+	const std::size_t start = messages.size() > tail_lines ? messages.size() - tail_lines : 0;
+	return join_lines(messages, start);
 }
 
 std::string normalized_log_path(const fs::path& path) {
@@ -443,6 +563,7 @@ void cmd_probe_map(const Args& args) {
 	const fs::path map_path = fs::path(args.require("map"));
 	const fs::path warcraft = fs::path(args.require("warcraft"));
 	const fs::path log_path = war3_log_path(args);
+	const auto probe_log_file = args.get("probe-log");
 	if (!fs::exists(map_path)) {
 		fail("map path not found: " + map_path.string());
 	}
@@ -460,6 +581,14 @@ void cmd_probe_map(const Args& args) {
 		command_line += L" " + fs::path(*extra).wstring();
 	}
 
+	std::optional<fs::path> probe_log_path;
+	if (probe_log_file) {
+		probe_log_path = custom_map_data_file_path(*probe_log_file);
+		std::error_code ec;
+		fs::create_directories(probe_log_path->parent_path(), ec);
+		fs::remove(*probe_log_path, ec);
+	}
+
 	auto proc = launch_process(command_line, exe.parent_path());
 	if (!proc) {
 		fail("failed to launch Warcraft III (error " + std::to_string(GetLastError()) + ")");
@@ -467,15 +596,42 @@ void cmd_probe_map(const Args& args) {
 
 	const std::size_t wait_seconds = parse_seconds_option(args, "wait", 12);
 	const std::size_t tail_lines = parse_seconds_option(args, "tail", 120);
+	const auto click_after_opt = args.get("click-after");
 	const bool terminate_after_wait = !args.has_flag("keep-open");
+	bool click_sent = false;
+	bool click_window_found = false;
+	bool enter_after_click_sent = false;
+	bool close_confirm_enter_sent = false;
+	DWORD wait_result = WAIT_TIMEOUT;
 
-	const DWORD wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(wait_seconds * 1000));
+	if (click_after_opt) {
+		const std::size_t click_after_seconds = parse_seconds_option(args, "click-after", 0);
+		if (click_after_seconds >= wait_seconds) {
+			fail("--click-after must be smaller than --wait");
+		}
+
+		wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(click_after_seconds * 1000));
+		if (wait_result != WAIT_OBJECT_0) {
+			click_sent = click_window_center(proc->pid);
+			click_window_found = find_main_window(proc->pid) != nullptr;
+			if (click_sent) {
+				Sleep(150);
+				enter_after_click_sent = send_enter_to_window(proc->pid);
+			}
+			const std::size_t remaining_seconds = wait_seconds - click_after_seconds;
+			wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(remaining_seconds * 1000));
+		}
+	} else {
+		wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(wait_seconds * 1000));
+	}
 	const bool exited_within_wait = (wait_result == WAIT_OBJECT_0);
 	bool close_requested = false;
 	bool terminated = false;
 	if (!exited_within_wait && terminate_after_wait) {
 		close_requested = request_process_close(proc->pid);
 		if (close_requested) {
+			Sleep(150);
+			close_confirm_enter_sent = send_enter_to_window(proc->pid);
 			const DWORD close_wait = WaitForSingleObject(proc->process, 5000);
 			terminated = (close_wait != WAIT_OBJECT_0) && (TerminateProcess(proc->process, 0) != FALSE);
 		} else {
@@ -494,20 +650,31 @@ void cmd_probe_map(const Args& args) {
 	const std::string excerpt = extract_log_excerpt(log_path, map_path, tail_lines, found_map_marker);
 	const bool has_error = excerpt.find("Map contains invalid Jass scripts that couldn't be compiled by war3") != std::string::npos;
 
-	emit({{"ok", true},
+	json result = {{"ok", true},
 		  {"command", "probe-map"},
 		  {"map", map_path.string()},
 		  {"warcraft_exe", exe.string()},
 		  {"log_path", log_path.string()},
 		  {"pid", proc->pid},
 		  {"wait_seconds", wait_seconds},
+		  {"click_after_seconds", click_after_opt ? json(parse_seconds_option(args, "click-after", 0)) : json(nullptr)},
+		  {"click_sent", click_sent},
+		  {"click_window_found", click_window_found},
+		  {"enter_after_click_sent", enter_after_click_sent},
+		  {"close_confirm_enter_sent", close_confirm_enter_sent},
 		  {"exited_within_wait", exited_within_wait},
 		  {"close_requested", close_requested},
 		  {"terminated", terminated},
 		  {"exit_code", static_cast<std::uint64_t>(exit_code)},
 		  {"found_map_marker", found_map_marker},
 		  {"has_root_error", has_error},
-		  {"log_excerpt", excerpt}});
+		  {"log_excerpt", excerpt}};
+	if (probe_log_path) {
+		result["probe_log_path"] = probe_log_path->string();
+		result["probe_log_found"] = fs::is_regular_file(*probe_log_path);
+		result["probe_log_excerpt"] = read_preload_log_excerpt(*probe_log_path, tail_lines);
+	}
+	emit(result);
 }
 
 void cmd_read_war3_log(const Args& args) {
@@ -531,6 +698,20 @@ void cmd_read_war3_log(const Args& args) {
 		  {"command", "read-war3-log"},
 		  {"log_path", log_path.string()},
 		  {"found_map_marker", found_map_marker},
+		  {"log_excerpt", excerpt}});
+}
+
+void cmd_read_custom_map_data_log(const Args& args) {
+	const fs::path log_path = custom_map_data_file_path(args.require("file"));
+	if (!fs::is_regular_file(log_path)) {
+		fail("custom map data log not found: " + log_path.string());
+	}
+
+	const std::size_t tail_lines = parse_seconds_option(args, "tail", 120);
+	const std::string excerpt = read_preload_log_excerpt(log_path, tail_lines);
+	emit({{"ok", true},
+		  {"command", "read-custom-map-data-log"},
+		  {"log_path", log_path.string()},
 		  {"log_excerpt", excerpt}});
 }
 
@@ -598,13 +779,14 @@ int main(int argc, char* argv[]) {
 	if (args.command.empty() || args.command == "help" || args.has_flag("help")) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
-			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "validate-script",
+			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
 									   "list-object-types", "search-objects", "get-object", "set-field"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
-				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--tail 120] [--keep-open] [--log <War3Log.txt>]"},
+				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>]"},
 				   {"read-war3-log", "[--map <dir|.w3x>] [--tail 120] [--log <War3Log.txt>]"},
+				   {"read-custom-map-data-log", "--file <relative-or-absolute-file> [--tail 120]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},
 				   {"list-object-types", "(no args)"},
 				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
@@ -621,6 +803,8 @@ int main(int argc, char* argv[]) {
 		cmd_probe_map(args);
 	} else if (args.command == "read-war3-log") {
 		cmd_read_war3_log(args);
+	} else if (args.command == "read-custom-map-data-log") {
+		cmd_read_custom_map_data_log(args);
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
