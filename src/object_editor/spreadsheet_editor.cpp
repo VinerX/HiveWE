@@ -967,6 +967,11 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 	if (!rect.isValid()) return;
 	painter->save();
 
+	// Custom (computed/formula) columns get a tinted header + italic accent text so
+	// they are immediately distinguishable from real map fields.
+	const auto* proxy = qobject_cast<const SpreadsheetProxy*>(model());
+	const bool computed = proxy && proxy->isComputedColumn(logicalIndex);
+
 	QStyleOptionHeader opt;
 	initStyleOption(&opt);
 	opt.rect = rect;
@@ -975,6 +980,10 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 
 	// Draw background + sort arrow (CE_HeaderSection + CE_HeaderLabel without text)
 	style()->drawControl(QStyle::CE_HeaderSection, &opt, painter, this);
+
+	if (computed) {
+		painter->fillRect(rect, QColor(140, 100, 220, 60));
+	}
 
 	// Draw sort indicator via CE_HeaderLabel with empty text
 	if (opt.sortIndicator != QStyleOptionHeader::None) {
@@ -992,6 +1001,7 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 
 	// Try word wrap at current font; shrink font until it fits
 	QFont f = font();
+	if (computed) f.setItalic(true);
 	for (;;) {
 		QFontMetrics fm(f);
 		QRect br = fm.boundingRect(textRect, Qt::AlignCenter | Qt::TextWordWrap, text);
@@ -999,7 +1009,7 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 		f.setPointSize(f.pointSize() - 1);
 	}
 	painter->setFont(f);
-	painter->setPen(palette().buttonText().color());
+	painter->setPen(computed ? QColor(196, 170, 255) : palette().buttonText().color());
 	painter->drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, text);
 
 	painter->restore();
@@ -1023,8 +1033,10 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 
 	QColor text_color;
 	QString field;
+	bool computed = false;
 
 	if (const auto* proxy = qobject_cast<const SpreadsheetProxy*>(index.model())) {
+		computed = proxy->isComputedColumn(index.column());
 		QModelIndex src = proxy->mapToSource(index);
 		if (src.isValid() && proxy->slk &&
 			static_cast<size_t>(src.column()) < proxy->slk->index_to_column.size()) {
@@ -1069,6 +1081,15 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 		painter->fillRect(opts.rect, opts.palette.highlight());
 	} else if (opts.features & QStyleOptionViewItem::Alternate) {
 		painter->fillRect(opts.rect, opts.palette.alternateBase());
+	}
+
+	// Faint violet wash + italics on custom (computed/formula) cells so they read as
+	// "not a real map field" at a glance, matching the tinted column header.
+	if (computed) {
+		if (!(opts.state & QStyle::State_Selected)) {
+			painter->fillRect(opts.rect, QColor(140, 100, 220, 28));
+		}
+		opts.font.setItalic(true);
 	}
 
 	opts.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
@@ -1147,7 +1168,12 @@ void SpreadsheetView::wheelEvent(QWheelEvent* event) {
 		return;
 	}
 	if (event->modifiers() & Qt::ShiftModifier) {
-		horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta);
+		// Shift+wheel = horizontal scroll. Scrolling by the raw delta (120px per notch)
+		// felt too fast, so scale it down to a calmer step while still keeping a minimal
+		// move for high-resolution / trackpad devices that send small deltas.
+		int step = delta / 3;
+		if (step == 0 && delta != 0) step = (delta > 0) ? 1 : -1;
+		horizontalScrollBar()->setValue(horizontalScrollBar()->value() - step);
 		event->accept();
 		return;
 	}
