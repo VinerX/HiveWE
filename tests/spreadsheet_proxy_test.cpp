@@ -1,12 +1,11 @@
 #include <doctest/doctest.h>
 #include <QApplication>
 #include <QAbstractTableModel>
+#include <QIcon>
 
 import std;
 import SLK;
 
-// Minimal table model wrapping an SLK, for unit-testing SpreadsheetProxy
-// without the heavy TriggerStrings / resource_manager dependencies.
 class TestTableModel : public QAbstractTableModel {
   public:
 	slk::SLK* slk = nullptr;
@@ -24,12 +23,28 @@ class TestTableModel : public QAbstractTableModel {
 			return QString::fromStdString(
 				slk->data<std::string>(static_cast<size_t>(index.column()), static_cast<size_t>(index.row())));
 		}
+		if (role == Qt::CheckStateRole) {
+			const std::string& field = slk->index_to_column.at(index.column());
+			if (field != "isbldg") return {};
+			const std::string val = slk->data<std::string>(static_cast<size_t>(index.column()), static_cast<size_t>(index.row()));
+			return val == "1" ? Qt::Checked : Qt::Unchecked;
+		}
+		if (role == Qt::DecorationRole) {
+			const std::string& field = slk->index_to_column.at(index.column());
+			if (field == "file") return QIcon();
+			return {};
+		}
 		return {};
+	}
+
+	Qt::ItemFlags flags(const QModelIndex& index) const override {
+		if (!index.isValid()) return Qt::NoItemFlags;
+		return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 	}
 };
 
 // -----------------------------------------------------------------------
-// Fixture: mock SLK with 5 objects × 3 columns (name, hp, race)
+// Fixture: mock SLK with 5 objects x 5 columns (name, hp, race, isbldg, file)
 // -----------------------------------------------------------------------
 
 struct TestData {
@@ -52,23 +67,38 @@ struct TestData {
 		meta_slk.set_shadow_data("displayname", "m_race", "Race");
 		meta_slk.set_shadow_data("type", "m_race", "string");
 
+		meta_slk.add_row("m_isbldg");
+		meta_slk.set_shadow_data("field", "m_isbldg", "isbldg");
+		meta_slk.set_shadow_data("displayname", "m_isbldg", "Is Building");
+		meta_slk.set_shadow_data("type", "m_isbldg", "bool");
+
+		meta_slk.add_row("m_file");
+		meta_slk.set_shadow_data("field", "m_file", "file");
+		meta_slk.set_shadow_data("displayname", "m_file", "Icon");
+		meta_slk.set_shadow_data("type", "m_file", "icon");
+
 		meta_slk.build_meta_map();
 
 		data_slk.add_column("name");
 		data_slk.add_column("hp");
 		data_slk.add_column("race");
+		data_slk.add_column("isbldg");
+		data_slk.add_column("file");
 
-		auto add = [&](const std::string& id, const std::string& n, const std::string& h, const std::string& r) {
+		auto add = [&](const std::string& id, const std::string& n, const std::string& h,
+		                const std::string& r, const std::string& b, const std::string& f) {
 			data_slk.add_row(id);
 			data_slk.set_shadow_data("name", id, n);
 			data_slk.set_shadow_data("hp", id, h);
 			data_slk.set_shadow_data("race", id, r);
+			data_slk.set_shadow_data("isbldg", id, b);
+			data_slk.set_shadow_data("file", id, f);
 		};
-		add("hpea", "Peasant",    "220", "human");
-		add("hfoo", "Footman",    "420", "human");
-		add("ogru", "Grunt",      "700", "orc");
-		add("ohun", "Headhunter", "350", "orc");
-		add("ewsp", "Wisp",       "120", "nightelf");
+		add("hpea", "Peasant",    "220", "human",    "0", "Human/Peasant/Peasant.blp");
+		add("hfoo", "Footman",    "420", "human",    "0", "Human/Footman/Footman.blp");
+		add("ogru", "Grunt",      "700", "orc",      "0", "Orc/Grunt/Grunt.blp");
+		add("ohun", "Headhunter", "350", "orc",      "0", "Orc/HeadHunter/HeadHunter.blp");
+		add("ewsp", "Wisp",       "120", "nightelf", "0", "NightElf/Wisp/Wisp.blp");
 	}
 };
 
@@ -78,15 +108,13 @@ static QApplication* ensure_qapp() {
 	return &app;
 }
 
-// We need TableModel module imported because the header does `import TableModel;`
-// even though our test proxy only uses QAbstractItemModel.
 import TableModel;
 #define private public
 #include "object_editor/spreadsheet_editor.h"
 #undef private
 
 // -----------------------------------------------------------------------
-// Tests
+// Row count, mapping, headers
 // -----------------------------------------------------------------------
 
 TEST_CASE("proxy – rowCount equals source") {
@@ -95,7 +123,7 @@ TEST_CASE("proxy – rowCount equals source") {
 	TestTableModel tm(&d.data_slk, &d.meta_slk);
 	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
 	CHECK(proxy.rowCount() == 5);
-	CHECK(proxy.columnCount() == 3);
+	CHECK(proxy.columnCount() == 5);
 }
 
 TEST_CASE("proxy – mapToSource identity unfiltered") {
@@ -183,7 +211,7 @@ TEST_CASE("proxy – fieldDisplayName fallback") {
 	TestTableModel tm(&d.data_slk, &d.meta_slk);
 	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
 
-	CHECK(proxy.headerData(3, Qt::Horizontal, Qt::DisplayRole).toString() == "customfield");
+	CHECK(proxy.headerData(5, Qt::Horizontal, Qt::DisplayRole).toString() == "customfield");
 }
 
 TEST_CASE("proxy – vertical headers") {
@@ -255,4 +283,149 @@ TEST_CASE("proxy – filter clear restores all") {
 
 	proxy.setTextFilter("");
 	CHECK(proxy.visible_rows_.size() == 5);
+}
+
+// -----------------------------------------------------------------------
+// New feature tests
+// -----------------------------------------------------------------------
+
+TEST_CASE("proxy – building filter") {
+	ensure_qapp();
+	TestData d;
+	d.data_slk.set_shadow_data("isbldg", "hpea", "1");
+	d.data_slk.set_shadow_data("isbldg", "ogru", "1");
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	CHECK(proxy.rowCount() == 5);
+
+	proxy.setBuildingFilter(true);
+	CHECK(proxy.rowCount() == 2);
+
+	proxy.setBuildingFilter(false);
+	CHECK(proxy.rowCount() == 5);
+}
+
+TEST_CASE("proxy – editor suffix filter") {
+	ensure_qapp();
+	TestData d;
+	d.data_slk.set_shadow_data("editorSuffix", "hpea", "Campaign");
+	d.data_slk.set_shadow_data("editorSuffix", "hfoo", "Campaign");
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.setEditorSuffixFilter("Campaign");
+	CHECK(proxy.rowCount() == 2);
+
+	proxy.setEditorSuffixFilter("Custom");
+	CHECK(proxy.rowCount() == 0);
+
+	proxy.setEditorSuffixFilter("");
+	CHECK(proxy.rowCount() == 5);
+}
+
+TEST_CASE("proxy – icon column") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name", "file");
+
+	CHECK(proxy.iconColumn() == 4);
+	CHECK(proxy.nameColumn() == 0);
+}
+
+TEST_CASE("proxy – icon column not found") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name", "nonexistent");
+
+	CHECK(proxy.iconColumn() == -1);
+}
+
+TEST_CASE("proxy – DecorationRole returns icon from icon column") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name", "file");
+
+	QVariant deco = proxy.data(proxy.index(0, 0), Qt::DecorationRole);
+	// TestTableModel returns QIcon() for "file" columns, valid but empty
+	CHECK(deco.isValid());
+}
+
+TEST_CASE("proxy – manual sort ascending") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.sort(0, Qt::AscendingOrder);
+	// Sorted by name: Footman < Grunt < Headhunter < Peasant < Wisp
+	CHECK(proxy.data(proxy.index(0, 0)).toString() == "Footman");
+	CHECK(proxy.data(proxy.index(4, 0)).toString() == "Wisp");
+}
+
+TEST_CASE("proxy – manual sort descending") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.sort(0, Qt::DescendingOrder);
+	CHECK(proxy.data(proxy.index(0, 0)).toString() == "Wisp");
+	CHECK(proxy.data(proxy.index(4, 0)).toString() == "Footman");
+}
+
+TEST_CASE("proxy – manual sort numeric") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.sort(1, Qt::AscendingOrder); // hp column
+	// By numeric hp: 120, 220, 350, 420, 700
+	CHECK(proxy.data(proxy.index(0, 1)).toString() == "120");
+	CHECK(proxy.data(proxy.index(4, 1)).toString() == "700");
+	CHECK(proxy.data(proxy.index(0, 0)).toString() == "Wisp");
+	CHECK(proxy.data(proxy.index(4, 0)).toString() == "Grunt");
+}
+
+TEST_CASE("proxy – sort preserves filters") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.setRaceFilter("orc");
+	// Only ogru (hp=700) and ohun (hp=350)
+	proxy.sort(1, Qt::AscendingOrder); // hp
+	CHECK(proxy.rowCount() == 2);
+	CHECK(proxy.data(proxy.index(0, 0)).toString() == "Headhunter"); // hp=350
+	CHECK(proxy.data(proxy.index(1, 0)).toString() == "Grunt");      // hp=700
+
+	proxy.setRaceFilter("");
+	CHECK(proxy.rowCount() == 5);
+}
+
+TEST_CASE("proxy – triple filter: race + building + text") {
+	ensure_qapp();
+	TestData d;
+	d.data_slk.set_shadow_data("isbldg", "hpea", "1");
+	d.data_slk.set_shadow_data("isbldg", "hfoo", "1");
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	proxy.setRaceFilter("human");
+	proxy.setBuildingFilter(true);
+	proxy.setTextFilter("Foot");
+	CHECK(proxy.rowCount() == 1);
+}
+
+TEST_CASE("delegate – sizeHint meets minimum") {
+	ensure_qapp();
+	SpreadsheetDelegate delegate;
+	QStyleOptionViewItem opt;
+	QSize sz = delegate.sizeHint(opt, QModelIndex());
+	CHECK(sz.height() >= 20);
 }

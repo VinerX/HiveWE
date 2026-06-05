@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include <QIdentityProxyModel>
+#include <QStyledItemDelegate>
 #include <QTabWidget>
 #include <QTableView>
 
@@ -12,27 +13,20 @@
 import TableModel;
 import SLK;
 
-// Transparent proxy over a TableModel (rows = objects, columns = SLK fields).
-// Provides localized column headers (field display names) and object-id
-// vertical headers.  Manual filtering replaces QSortFilterProxyModel to avoid
-// SIGSEGV crashes caused by Qt's internal proxy-mapping engine.
 class SpreadsheetProxy : public QIdentityProxyModel {
 	Q_OBJECT
 
   public:
-	// `source_model` is the underlying QAbstractItemModel (normally a TableModel).
-	// `data_slk` / `meta_slk` provide the SLK handles needed for header lookups
-	// and filter checks. `name_field` is the SLK column used for text search.
 	SpreadsheetProxy(QAbstractItemModel* source_model,
 	                 slk::SLK* data_slk, slk::SLK* meta_slk,
 	                 std::string name_field,
+	                 std::string icon_field = {},
 	                 QObject* parent = nullptr);
 
 	QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
 	QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 	Qt::ItemFlags flags(const QModelIndex& index) const override;
 
-	// Flat list – no hierarchy.
 	QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
 	QModelIndex parent(const QModelIndex&) const override { return {}; }
 	int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -43,26 +37,62 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 
 	void setTextFilter(const QString& text);
 	void setCustomOnly(bool custom_only);
-	void setRaceFilter(const QString& race_key); // empty = all races
+	void setRaceFilter(const QString& race_key);
+	void setBuildingFilter(bool buildings_only);
+	void setEditorSuffixFilter(const QString& suffix);
+	void setFieldFilter(const QString& field_name, const QString& text);
 
-	// Returns the *source* model index for the given visible proxy row.
 	QModelIndex mapToSource(QModelIndex proxyIndex) const;
 
-	// Re-fills visible_rows_ from the source model, applying all active filters.
 	void reapplyFilters();
+	void sort(int column, Qt::SortOrder order);
 
-  private:
+	int iconColumn() const { return icon_column; }
+	int nameColumn() const { return name_column; }
+
+	std::vector<int> visibleRowsForTest() const { return visible_rows_; }
+
+  public:
 	QString fieldDisplayName(int source_column) const;
 
 	std::string name_field;
+	std::string icon_field;
 	int name_column = -1;
+	int icon_column = -1;
 	QString text_filter;
 	bool custom_only = false;
 	std::string race_filter;
+	bool building_only = false;
+	QString editor_suffix;
+	std::string field_filter_name;
+	QString field_filter_text;
+	int sort_column = -1;
+	Qt::SortOrder sort_order = Qt::AscendingOrder;
 
-	// Ordered list of source rows that currently pass all filters.
 	std::vector<int> visible_rows_;
 	void rebuildVisibleRows();
+	void rebuildSortOrder();
+
+	QVariant displayData(int source_row, int source_column) const;
+};
+
+class SpreadsheetDelegate : public QStyledItemDelegate {
+	Q_OBJECT
+  public:
+	using QStyledItemDelegate::QStyledItemDelegate;
+
+	void paint(QPainter* painter, const QStyleOptionViewItem& option,
+	           const QModelIndex& index) const override;
+	QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+};
+
+class SpreadsheetView : public QTableView {
+	Q_OBJECT
+  public:
+	using QTableView::QTableView;
+
+  protected:
+	void wheelEvent(QWheelEvent* event) override;
 };
 
 class SpreadsheetEditor : public QMainWindow {
@@ -78,9 +108,12 @@ class SpreadsheetEditor : public QMainWindow {
 		const QString& name,
 		TableModel* table,
 		const std::string& name_field,
+		const std::string& icon_field,
 		const std::vector<std::string>& curated,
 		bool race_filter = false
 	);
 
-	void openBatchDialog(QTableView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column);
+	void openBatchDialog(SpreadsheetView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column);
+	void openColumnDialog(SpreadsheetView* view, SpreadsheetProxy* proxy, TableModel* table,
+	                      const std::vector<std::string>& curated);
 };
