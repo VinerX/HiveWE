@@ -127,11 +127,62 @@ target_include_directories(HiveWE_lib PUBLIC
 
 target_link_libraries(HiveWE PRIVATE HiveWE_lib)
 
+# Headless data core: the Qt-free subset of modules needed to load and edit
+# object data (SLK + modification tables) without any Qt/OpenGL. Built as a
+# separate static lib (its own module BMIs) so the CLI can link it and stay
+# Qt-free. These same .ixx files are also compiled into HiveWE_lib; that
+# duplicate compilation is intentional and harmless (distinct targets, distinct
+# BMIs).
+add_library(HiveWE_core STATIC)
+target_sources(HiveWE_core PUBLIC FILE_SET core_modules TYPE CXX_MODULES FILES
+	"src/types.ixx"
+	"src/globals.ixx"
+	"src/utilities/no_init_allocator.ixx"
+	"src/utilities/unordered_map.ixx"
+	"src/utilities/utilities.ixx"
+	"src/base/binary_reader.ixx"
+	"src/base/binary_writer.ixx"
+	"src/file_formats/casc.ixx"
+	"src/file_formats/json.ixx"
+	"src/base/hierarchy.ixx"
+	"src/file_formats/ini.ixx"
+	"src/file_formats/slk.ixx"
+	"src/utilities/modification_tables.ixx"
+	"src/base/object_data.ixx"
+)
+target_include_directories(HiveWE_core PUBLIC
+	"src"
+	"src/base"
+	"src/file_formats"
+	"src/utilities"
+)
+target_link_libraries(HiveWE_core PUBLIC
+	glm::glm
+	absl::base
+	BZip2::BZip2
+	StormLib::storm
+	nlohmann_json::nlohmann_json
+	unordered_dense::unordered_dense
+)
+if(WIN32)
+	target_link_libraries(HiveWE_core PUBLIC CascLib::casc)
+else()
+	target_link_libraries(HiveWE_core PUBLIC CascLib::casc_static)
+endif()
+target_compile_features(HiveWE_core PUBLIC cxx_std_23)
+target_compile_definitions(HiveWE_core PUBLIC
+	$<$<CXX_COMPILER_ID:MSVC>:UNICODE _UNICODE>
+)
+target_compile_options(HiveWE_core PUBLIC
+	$<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus /permissive->
+)
+
 # Command-line companion for AI-agent driven map work. Phase 1 (build/run/validate)
-# is intentionally self-contained: only StormLib + nlohmann/json, no Qt, no
-# HiveWE_lib, so it builds fast and independently. Later phases add HiveWE_lib.
+# is self-contained (StormLib + nlohmann/json). Object-data commands link the
+# headless HiveWE_core so the CLI can load/edit SLK data without Qt.
 add_executable(HiveWE_cli "src/cli/main_cli.cpp")
 target_link_libraries(HiveWE_cli PRIVATE
+	HiveWE_core
 	StormLib::storm
 	BZip2::BZip2
 	nlohmann_json::nlohmann_json
