@@ -244,8 +244,11 @@ namespace slk {
 			// Abilities can also alias another existing ability, so we have to check both the base ID and alias
 			// Sometimes only the base ID is used in `useSpecific` and sometimes only the alias.
 
-			// Safety: Only abilities should enter this block and they all have an alias
-			const auto alias = data_single_asset_type("code", id).value();
+			const auto alias_opt = data_single_asset_type("code", id);
+			if (!alias_opt) {
+				return {};
+			}
+			const auto alias = alias_opt.value();
 			const auto found_alias = meta_slk.meta_map.find(std::string(stripped_field_name).append(alias));
 			if (found_alias != meta_slk.meta_map.end()) {
 				return found_alias->second;

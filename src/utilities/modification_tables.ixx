@@ -149,8 +149,7 @@ export void save_modification_table(BinaryWriter& writer, const slk::SLK& slk, c
 
 			const auto meta_id2 = slk.field_to_meta_id(meta_slk, property_id, id);
 			if (!meta_id2) {
-				std::println("Meta data key not found for id {} property {}", id, property_id);
-				exit(0);
+				continue;
 			}
 			const std::string meta_data_key = std::string(meta_id2.value());
 
