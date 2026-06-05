@@ -158,8 +158,8 @@ POD-контейнер без QObject/рендера:
 ---
 
 ## Порядок исполнения
-1. **0.1** (снять QSettings) ✅ — сделано, сборка проверена.
-2. **1.0 build/validate/run** — самостоятельный срез: `build-map` (StormLib→.w3x), `run-map` (-loadfile), `validate-script`. **Не зависит от 0.2** и закрывает конкретный сценарий пользователя (агент переписал карту в Lua → собрать/запустить). Рекомендуется делать ПЕРВЫМ после скелета CLI-таргета.
+1. **0.1** (снять QSettings) ✅ — сделано, сборка проверена (коммит `cc63f65`).
+2. **1.0 build/validate/run** ✅ — СДЕЛАНО (коммит `59904b1`). Таргет `HiveWE_cli` (StormLib + nlohmann/json, без Qt/HiveWE_lib). `build-map` (StormLib→.w3x), `run-map` (-loadfile), `validate-script` (pjass/luac). Вывод — один JSON-объект, exit-код = ok. Проверено на `C:\Games\23 Race\LUA\map_lua`: упаковано 5038 файлов в валидный 128 МБ `.w3x` (MPQ-magic подтверждён). Осталось: положить `luac.exe` в `data/tools` для статической Lua-проверки.
 3. **0.2 + 0.3** — headless load/save object-data + резолв имён (тяжёлая экстракция из `Map::load`).
 4. **1.1** — остальные инструменты CLI (edit/search/triggers) + pjass-валидация + бэкап.
 5. **1.2** — reload-хоткей.

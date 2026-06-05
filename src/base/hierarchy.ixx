@@ -208,3 +208,7 @@ export class Hierarchy {
 };
 
 export inline Hierarchy hierarchy;
+
+export inline void hierarchy_set_map_directory(const fs::path& directory) {
+	hierarchy.map_directory = fs::absolute(directory);
+}

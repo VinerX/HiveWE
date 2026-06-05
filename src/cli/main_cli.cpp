@@ -1,9 +1,7 @@
 // HiveWE_cli — command-line companion to HiveWE for AI-agent driven map work.
 //
-// Phase 1 (build / run / validate). This slice is deliberately self-contained:
-// it needs only StormLib (MPQ packaging) and nlohmann/json, NOT HiveWE_lib, so
-// it builds fast and without dragging in Qt. The object-data editing commands
-// (which will link HiveWE_lib) are added in a later phase.
+// Current scope: build / run / validate for unpacked map folders.
+// The next slices (object-data / triggers / map-info) are planned separately.
 //
 // Output contract: every invocation prints exactly one JSON object to stdout so
 // an agent can parse it. Success -> {"ok": true, ...}; failure -> {"ok": false,
@@ -172,10 +170,7 @@ std::wstring quote(const std::wstring& s) {
 	return L"\"" + s + L"\"";
 }
 
-// ---- commands -------------------------------------------------------------
-
-// Package a map folder into a .w3x MPQ archive. Mirrors HiveWE::export_mpq.
-void cmd_build_map(const Args& args) {
+fs::path require_map_dir(const Args& args) {
 	const fs::path map_dir = fs::path(args.require("map"));
 	if (!fs::is_directory(map_dir)) {
 		fail("map folder not found: " + map_dir.string());
@@ -183,6 +178,14 @@ void cmd_build_map(const Args& args) {
 	if (!fs::is_regular_file(map_dir / "war3map.w3i")) {
 		fail("not a valid map folder (missing war3map.w3i): " + map_dir.string());
 	}
+	return map_dir;
+}
+
+// ---- commands -------------------------------------------------------------
+
+// Package a map folder into a .w3x MPQ archive. Mirrors HiveWE::export_mpq.
+void cmd_build_map(const Args& args) {
+	const fs::path map_dir = require_map_dir(args);
 
 	const auto out_opt = args.get("out");
 	if (!out_opt) {
@@ -285,10 +288,7 @@ void cmd_run_map(const Args& args) {
 
 // Static-validate the map script. JASS -> pjass; Lua -> luac -p (if available).
 void cmd_validate_script(const Args& args) {
-	const fs::path map_dir = fs::path(args.require("map"));
-	if (!fs::is_directory(map_dir)) {
-		fail("map folder not found: " + map_dir.string());
-	}
+	const fs::path map_dir = require_map_dir(args);
 	const fs::path tools = args.get("tools") ? fs::path(*args.get("tools"))
 											 : executable_dir() / "data" / "tools";
 

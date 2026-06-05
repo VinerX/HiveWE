@@ -98,6 +98,7 @@ export class MapInfo {
 
 	int playable_width;
 	int playable_height;
+	char tileset = 'L';
 
 	int all_flags;
 	bool hide_minimap_preview;
@@ -230,8 +231,7 @@ export class MapInfo {
 		force_max_zoom = flags & 0x200000;
 		force_min_zoom = flags & 0x400000;
 
-		// Tileset
-		reader.advance(1);
+		tileset = static_cast<char>(reader.read<uint8_t>());
 
 		if (version >= 25) { // TFT
 			loading_screen_number = reader.read<uint32_t>();
@@ -384,8 +384,9 @@ export class MapInfo {
 		}
 	}
 
-	void save(char tileset) const {
+	void save(char tileset_override = '\0') const {
 		BinaryWriter writer;
+		const char tileset_to_write = tileset_override == '\0' ? tileset : tileset_override;
 
 		writer.write(write_version);
 		writer.write(map_version);
@@ -418,7 +419,7 @@ export class MapInfo {
 
 		writer.write(flags);
 
-		writer.write(tileset);
+		writer.write(tileset_to_write);
 
 		writer.write(loading_screen_number);
 		writer.write_c_string(loading_screen_model);
