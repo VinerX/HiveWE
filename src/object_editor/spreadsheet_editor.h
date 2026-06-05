@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QSortFilterProxyModel>
 #include <QTabWidget>
+#include <QTableView>
 
 #include <string>
 #include <vector>
@@ -65,4 +66,9 @@ class SpreadsheetEditor : public QMainWindow {
 		const std::vector<std::string>& curated,
 		bool race_filter = false
 	);
+
+	// Batch edit: set / add / multiply / percent a chosen field across all
+	// currently selected rows. `preferred_column` is the source column under
+	// the cursor (or -1) used to preselect the target field.
+	void openBatchDialog(QTableView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column);
 };

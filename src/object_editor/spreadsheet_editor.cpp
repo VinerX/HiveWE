@@ -11,6 +11,10 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QLabel>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QMessageBox>
 
 import std;
 import Globals;
@@ -208,6 +212,19 @@ void SpreadsheetEditor::addCategoryTab(
 
 	view->resizeColumnsToContents();
 
+	// Right-click → Batch edit the selected rows.
+	connect(view, &QTableView::customContextMenuRequested, this, [this, view, proxy, table](const QPoint& pos) {
+		QMenu menu;
+		QAction* batch = menu.addAction("Batch edit…");
+		batch->setEnabled(!view->selectionModel()->selectedRows().isEmpty());
+		const QModelIndex at = view->indexAt(pos);
+		const int preferred_column = at.isValid() ? at.column() : -1;
+		connect(batch, &QAction::triggered, this, [this, view, proxy, table, preferred_column]() {
+			openBatchDialog(view, proxy, table, preferred_column);
+		});
+		menu.exec(view->viewport()->mapToGlobal(pos));
+	});
+
 	// Toolbar: search, filters and the "Columns…" visibility toggle.
 	QToolBar* bar = new QToolBar;
 	bar->setMovable(false);
@@ -286,4 +303,160 @@ void SpreadsheetEditor::addCategoryTab(
 	layout->addWidget(view);
 
 	tabs->addTab(container, name);
+}
+
+void SpreadsheetEditor::openBatchDialog(QTableView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column) {
+	slk::SLK* slk = table->slk;
+	slk::SLK* meta_slk = table->meta_slk;
+
+	// Collect selected rows as source rows.
+	std::vector<int> source_rows;
+	for (const QModelIndex& idx : view->selectionModel()->selectedRows()) {
+		const QModelIndex src = proxy->mapToSource(idx);
+		if (src.isValid()) {
+			source_rows.push_back(src.row());
+		}
+	}
+	if (source_rows.empty()) {
+		return;
+	}
+
+	const std::string& rep_id = slk->index_to_row.at(0);
+	auto field_type = [&](const std::string& field) -> std::string_view {
+		if (const auto meta_id = slk->field_to_meta_id(*meta_slk, field, rep_id)) {
+			return meta_slk->data<std::string_view>("type", *meta_id);
+		}
+		return {};
+	};
+	auto is_numeric = [&](std::string_view type) { return type == "int" || type == "real" || type == "unreal"; };
+
+	QDialog dialog(this);
+	dialog.setWindowTitle("Batch edit");
+	dialog.setModal(true);
+
+	QFormLayout* form = new QFormLayout(&dialog);
+
+	// Target field: the currently visible columns.
+	QComboBox* field_combo = new QComboBox;
+	for (int c = 0; c < slk->columns(); c++) {
+		if (view->isColumnHidden(c)) {
+			continue;
+		}
+		QString label = proxy->headerData(c, Qt::Horizontal, Qt::DisplayRole).toString();
+		if (label.isEmpty()) {
+			label = QString::fromStdString(slk->index_to_column.at(c));
+		}
+		field_combo->addItem(label, c);
+	}
+	if (field_combo->count() == 0) {
+		return;
+	}
+	if (preferred_column >= 0) {
+		const int i = field_combo->findData(preferred_column);
+		if (i >= 0) {
+			field_combo->setCurrentIndex(i);
+		}
+	}
+
+	QComboBox* op_combo = new QComboBox;
+	op_combo->addItem("Set", "set");
+	op_combo->addItem("Add (+)", "add");
+	op_combo->addItem("Multiply (×)", "mul");
+	op_combo->addItem("Percent (+%)", "pct");
+
+	QLineEdit* value_edit = new QLineEdit;
+	QLabel* count_label = new QLabel(QString("Applies to %1 object(s)").arg(source_rows.size()));
+
+	form->addRow("Field", field_combo);
+	form->addRow("Operation", op_combo);
+	form->addRow("Value", value_edit);
+	form->addRow(count_label);
+
+	QDialogButtonBox* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+	form->addRow(buttons);
+	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+	// Arithmetic operations only make sense for numeric fields.
+	auto refresh_ops = [&]() {
+		const std::string field = slk->index_to_column.at(field_combo->currentData().toInt());
+		const bool numeric = is_numeric(field_type(field));
+		op_combo->setEnabled(numeric);
+		if (!numeric) {
+			op_combo->setCurrentIndex(0); // Set
+		}
+	};
+	connect(field_combo, &QComboBox::currentIndexChanged, &dialog, [&](int) { refresh_ops(); });
+	refresh_ops();
+
+	if (dialog.exec() != QDialog::Accepted) {
+		return;
+	}
+
+	const int col = field_combo->currentData().toInt();
+	const std::string field = slk->index_to_column.at(col);
+	const QString op = op_combo->currentData().toString();
+	const std::string_view type = field_type(field);
+	const bool numeric = is_numeric(type);
+	const bool is_int = type == "int";
+
+	auto format_number = [is_int](double v) -> std::string {
+		if (is_int) {
+			return std::to_string(static_cast<long long>(std::llround(v)));
+		}
+		return std::format("{}", v);
+	};
+
+	// Non-numeric Set: write the raw string to every selected row.
+	if (!numeric || op == "set") {
+		if (numeric && op == "set") {
+			// Validate the number once, then store the canonical form.
+			bool ok = false;
+			const double v = value_edit->text().toDouble(&ok);
+			if (!ok) {
+				QMessageBox::warning(this, "Batch edit", "Please enter a valid number.");
+				return;
+			}
+			const QString out = QString::fromStdString(format_number(v));
+			for (const int r : source_rows) {
+				table->setData(table->index(r, col), out, Qt::EditRole);
+			}
+		} else {
+			const QString out = value_edit->text();
+			for (const int r : source_rows) {
+				table->setData(table->index(r, col), out, Qt::EditRole);
+			}
+		}
+		return;
+	}
+
+	// Arithmetic operations.
+	bool ok = false;
+	const double operand = value_edit->text().toDouble(&ok);
+	if (!ok) {
+		QMessageBox::warning(this, "Batch edit", "Please enter a valid number.");
+		return;
+	}
+
+	for (const int r : source_rows) {
+		const std::string& id = slk->index_to_row.at(r);
+		double current = 0.0;
+		const std::string cur_str{ slk->data<std::string_view>(field, id) };
+		try {
+			current = std::stod(cur_str);
+		} catch (...) {
+			current = 0.0;
+		}
+
+		double result = current;
+		if (op == "add") {
+			result = current + operand;
+		} else if (op == "mul") {
+			result = current * operand;
+		} else if (op == "pct") {
+			result = current * (1.0 + operand / 100.0);
+		}
+
+		table->setData(table->index(r, col), QString::fromStdString(format_number(result)), Qt::EditRole);
+	}
 }
