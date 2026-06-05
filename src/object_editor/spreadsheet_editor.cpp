@@ -22,6 +22,8 @@
 #include <QStyleOptionHeader>
 #include <QFontMetrics>
 #include <QApplication>
+#include <QInputDialog>
+#include <functional>
 #include <QGroupBox>
 #include <QTreeWidget>
 #include <QSplitter>
@@ -95,17 +97,15 @@ void SpreadsheetProxy::rebuildVisibleRows() {
 		}
 
 		if (!editor_suffix.isEmpty()) {
-			// "editorsuffix" is the canonical lowercase field name across all SLKs
-			const bool has_editorsuffix = slk->column_headers.contains("editorsuffix");
-			const bool has_version      = !has_editorsuffix && slk->column_headers.contains("version");
-			if (has_editorsuffix || has_version) {
-				const std::string_view sv = has_editorsuffix
-					? slk->data<std::string_view>("editorsuffix", id)
-					: slk->data<std::string_view>("version",      id);
-				const QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
-				if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
+			// SLK::data() looks the field up directly in the data maps, independent of
+			// column_headers, so we must NOT guard on column_headers.contains() (it can be
+			// false even when the value exists). Read directly; missing → empty string.
+			std::string_view sv = slk->data<std::string_view>("editorsuffix", id);
+			if (sv.empty()) {
+				sv = slk->data<std::string_view>("version", id);
 			}
-			// If neither column exists in this table, suffix filter is ignored
+			const QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
+			if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
 		}
 
 		if (!field_filter_name.empty() && !field_filter_text.isEmpty() && slk->column_headers.contains(field_filter_name)) {
@@ -357,7 +357,6 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
                                 const QModelIndex& index) const
 {
 	auto opts = option;
-	opts.decorationSize = {16, 16};
 	painter->save();
 
 	QColor text_color;
@@ -412,7 +411,8 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 
 	opts.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
 	opts.decorationPosition = QStyleOptionViewItem::Left;
-	opts.decorationSize = {16, 16};
+	// decorationSize is left at option.decorationSize (= view->iconSize()), so icons
+	// scale together with the Ctrl+wheel zoom.
 
 	QStyledItemDelegate::paint(painter, opts, index);
 	painter->restore();
@@ -650,6 +650,9 @@ void SpreadsheetEditor::addCategoryTab(
 	for (int c = 0; c < columns; c++) {
 		frozen_view->setColumnHidden(c, !frozen_cols->contains(c));
 	}
+	if (proxy->nameColumn() >= 0) {
+		frozen_view->setColumnWidth(proxy->nameColumn(), 180);
+	}
 
 	// --- main view ---
 	SpreadsheetView* view = new SpreadsheetView;
@@ -712,6 +715,23 @@ void SpreadsheetEditor::addCategoryTab(
 	frozen_view->peer = view;
 	view->peer = frozen_view;
 
+	// Auto-fit the frozen panel to exactly its visible content (rawcode header + frozen
+	// columns) so there is no empty gap between it and the main view.
+	auto update_frozen_width = [frozen_view, columns]() {
+		int w = frozen_view->frameWidth() * 2;
+		if (frozen_view->verticalHeader()->isVisible()) {
+			w += frozen_view->verticalHeader()->width();
+		}
+		for (int c = 0; c < columns; c++) {
+			if (!frozen_view->isColumnHidden(c)) {
+				w += frozen_view->columnWidth(c);
+			}
+		}
+		frozen_view->setFixedWidth(w);
+	};
+	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionResized,
+	        frozen_view, [update_frozen_width](int, int, int) { update_frozen_width(); });
+
 	// Sync vertical scrolling
 	connect(view->verticalScrollBar(), &QScrollBar::valueChanged,
 	        frozen_view->verticalScrollBar(), &QScrollBar::setValue);
@@ -736,18 +756,22 @@ void SpreadsheetEditor::addCategoryTab(
 		frozen_view->selectionModel()->select(selection, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
 	});
 
-	// Sort via header clicks
-	auto sort_fn = [proxy](int logicalIndex) {
-		static int last_col = -1;
-		static Qt::SortOrder last_order = Qt::AscendingOrder;
-		if (logicalIndex == last_col) {
-			last_order = (last_order == Qt::AscendingOrder)
-			                 ? Qt::DescendingOrder : Qt::AscendingOrder;
-		} else {
-			last_col = logicalIndex;
-			last_order = Qt::AscendingOrder;
+	// Sort via header clicks (LMB on a column header toggles asc/desc)
+	view->horizontalHeader()->setSortIndicatorShown(true);
+	frozen_view->horizontalHeader()->setSortIndicatorShown(true);
+	auto sort_fn = [proxy, view, frozen_view](int logicalIndex) {
+		Qt::SortOrder order = Qt::AscendingOrder;
+		if (proxy->sort_column == logicalIndex) {
+			order = (proxy->sort_order == Qt::AscendingOrder)
+			            ? Qt::DescendingOrder : Qt::AscendingOrder;
 		}
-		proxy->sort(logicalIndex, last_order);
+		proxy->sort(logicalIndex, order);
+		// Reflect the indicator in whichever header owns the column; clear the other.
+		const bool frozen_owns = frozen_view->isColumnHidden(logicalIndex) == false;
+		view->horizontalHeader()->setSortIndicator(
+			frozen_owns ? -1 : logicalIndex, order);
+		frozen_view->horizontalHeader()->setSortIndicator(
+			frozen_owns ? logicalIndex : -1, order);
 	};
 	connect(view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, sort_fn);
 	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, sort_fn);
@@ -764,6 +788,7 @@ void SpreadsheetEditor::addCategoryTab(
 			frozen_cols->insert(logical);
 			view->setColumnHidden(logical, true);
 			frozen_view->setColumnHidden(logical, false);
+			update_frozen_width();
 		}
 	});
 
@@ -773,16 +798,19 @@ void SpreadsheetEditor::addCategoryTab(
 	        this, [=](const QPoint& pos) {
 		int logical = frozen_view->horizontalHeader()->logicalIndexAt(pos);
 		if (logical < 0) return;
+		// Don't allow unfreezing the name column — it must stay frozen (like the rawcode)
+		if (logical == proxy->nameColumn()) return;
 		QMenu menu;
 		QAction* unfreeze_act = menu.addAction("Unfreeze column");
 		if (menu.exec(frozen_view->horizontalHeader()->mapToGlobal(pos)) == unfreeze_act) {
 			frozen_cols->remove(logical);
 			frozen_view->setColumnHidden(logical, true);
 			view->setColumnHidden(logical, false);
+			update_frozen_width();
 		}
 	});
 
-	// ---- Right-click on cells → Batch edit ----
+	// ---- Right-click on cells → Batch edit + column filter ----
 	auto batch_menu = [this](SpreadsheetView* v, SpreadsheetProxy* px, TableModel* tbl, const QPoint& pos) {
 		QMenu menu;
 		QAction* batch = menu.addAction("Batch edit...");
@@ -793,6 +821,34 @@ void SpreadsheetEditor::addCategoryTab(
 		        [this, v, px, tbl, preferred_column]() {
 			openBatchDialog(v, px, tbl, preferred_column);
 		});
+
+		// --- column filter actions ---
+		if (at.isValid() && static_cast<size_t>(at.column()) < tbl->slk->index_to_column.size()) {
+			const std::string field = tbl->slk->index_to_column.at(static_cast<size_t>(at.column()));
+			const QString value = at.data(Qt::DisplayRole).toString();
+			const QString col_label = px->fieldDisplayName(at.column());
+
+			menu.addSeparator();
+			if (!value.isEmpty()) {
+				QAction* eq = menu.addAction(QString("Filter %1 = \"%2\"").arg(col_label, value));
+				connect(eq, &QAction::triggered, px, [px, field, value]() {
+					px->setFieldFilter(QString::fromStdString(field), value);
+				});
+			}
+			QAction* custom = menu.addAction(QString("Filter %1 by…").arg(col_label));
+			connect(custom, &QAction::triggered, this, [this, px, field, col_label, value]() {
+				bool ok = false;
+				const QString text = QInputDialog::getText(this, "Column filter",
+					QString("Show rows where %1 contains:").arg(col_label),
+					QLineEdit::Normal, value, &ok);
+				if (ok) px->setFieldFilter(QString::fromStdString(field), text);
+			});
+		}
+		if (!px->field_filter_name.empty() && !px->field_filter_text.isEmpty()) {
+			QAction* clear = menu.addAction("Clear column filter");
+			connect(clear, &QAction::triggered, px, [px]() { px->setFieldFilter("", ""); });
+		}
+
 		menu.exec(v->viewport()->mapToGlobal(pos));
 	};
 
@@ -873,30 +929,88 @@ void SpreadsheetEditor::addCategoryTab(
 	spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 	bar->addWidget(spacer);
 
+	// Full layout reset: zoom, visibility, order, widths, freeze state, sort, filters.
+	auto full_reset = [view, frozen_view, proxy, frozen_cols, table, columns, curated,
+	                   update_frozen_width, settings_key]() {
+		QSettings settings;
+		settings.remove(settings_key);
+
+		// 1) zoom → defaults
+		const QFont f = QApplication::font();
+		for (SpreadsheetView* sv : { view, frozen_view }) {
+			sv->verticalHeader()->setDefaultSectionSize(22);
+			sv->setIconSize({16, 16});
+			sv->setFont(f);
+			sv->horizontalHeader()->setFont(f);
+			sv->verticalHeader()->setFont(f);
+		}
+
+		// 2) unfreeze everything except the name column
+		for (int c = 0; c < columns; ++c) {
+			if (c == proxy->nameColumn()) continue;
+			if (frozen_cols->contains(c)) {
+				frozen_cols->remove(c);
+				frozen_view->setColumnHidden(c, true);
+			}
+		}
+
+		// 3) visibility → curated defaults
+		const std::set<std::string> visible(curated.begin(), curated.end());
+		for (int c = 0; c < columns; ++c) {
+			if (c == proxy->nameColumn()) { view->setColumnHidden(c, true); continue; }
+			const std::string& field = table->slk->index_to_column.at(static_cast<size_t>(c));
+			view->setColumnHidden(c, !visible.contains(field));
+		}
+
+		// 4) column order → logical order
+		QHeaderView* hh = view->horizontalHeader();
+		for (int logical = 0; logical < columns; ++logical) {
+			const int vis = hh->visualIndex(logical);
+			if (vis != logical) hh->moveSection(vis, logical);
+		}
+
+		// 5) widths → fit contents; frozen name back to 180
+		view->resizeColumnsToContents();
+		if (proxy->nameColumn() >= 0) {
+			frozen_view->setColumnWidth(proxy->nameColumn(), 180);
+		}
+
+		// 6) sort + column filter cleared
+		proxy->sort(-1, Qt::AscendingOrder);
+		proxy->setFieldFilter("", "");
+		view->horizontalHeader()->setSortIndicator(-1, Qt::AscendingOrder);
+		frozen_view->horizontalHeader()->setSortIndicator(-1, Qt::AscendingOrder);
+
+		update_frozen_width();
+	};
+
 	QToolButton* columns_button = new QToolButton;
 	columns_button->setText("Columns...");
 	connect(columns_button, &QToolButton::clicked, this,
-	        [this, view, proxy, table, curated]() {
-		openColumnDialog(view, proxy, table, curated);
+	        [this, view, proxy, table, curated, full_reset]() {
+		openColumnDialog(view, proxy, table, curated, full_reset);
 	});
 	bar->addWidget(columns_button);
 
-	// Build container: toolbar + splitter with frozen + main
-	QSplitter* splitter = new QSplitter(Qt::Horizontal);
-	splitter->setChildrenCollapsible(false);
-	splitter->setHandleWidth(1);
-	splitter->addWidget(frozen_view);
-	splitter->addWidget(view);
-	splitter->setSizes({220, 900});
+	// Build container: toolbar + [frozen | main] side by side (no gap)
+	QWidget* table_row = new QWidget;
+	QHBoxLayout* hl = new QHBoxLayout(table_row);
+	hl->setContentsMargins(0, 0, 0, 0);
+	hl->setSpacing(0);
+	hl->addWidget(frozen_view);
+	hl->addWidget(view, 1);
 
 	QWidget* container = new QWidget;
 	QVBoxLayout* layout = new QVBoxLayout(container);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 	layout->addWidget(bar);
-	layout->addWidget(splitter);
+	layout->addWidget(table_row);
 
 	tabs->addTab(container, name);
+
+	// Initial frozen panel width (after the view has its column widths)
+	update_frozen_width();
 }
 
 // ============================================================================
@@ -904,7 +1018,8 @@ void SpreadsheetEditor::addCategoryTab(
 // ============================================================================
 
 void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy* proxy,
-                                          TableModel* table, const std::vector<std::string>& curated) {
+                                          TableModel* table, const std::vector<std::string>& curated,
+                                          const std::function<void()>& full_reset) {
 	QString tab_name = tabs->tabText(tabs->currentIndex());
 	QString settings_key = "Spreadsheet/columns/" + tab_name;
 	QSettings settings;
@@ -935,7 +1050,6 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 	main_layout->addWidget(tree);
 
 	const int columns = table->slk->columns();
-	const std::set<std::string> default_set(curated.begin(), curated.end());
 
 	// Build groups (exclude name column — managed by frozen view)
 	std::map<QString, std::vector<std::pair<int, QString>>> groups;
@@ -996,17 +1110,13 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetProxy
 
 	QHBoxLayout* btn_row = new QHBoxLayout;
 	QPushButton* defaults_btn = new QPushButton("Restore defaults");
-	connect(defaults_btn, &QPushButton::clicked, tree, [tree, proxy, columns, default_set, &item_to_col]() {
-		for (int i = 0; i < tree->topLevelItemCount(); ++i) {
-			QTreeWidgetItem* gitem = tree->topLevelItem(i);
-			for (int j = 0; j < gitem->childCount(); ++j) {
-				QTreeWidgetItem* child = gitem->child(j);
-				int col = item_to_col[child];
-				const std::string& field = proxy->slk->index_to_column.at(static_cast<size_t>(col));
-				bool visible = default_set.contains(field);
-				child->setCheckState(0, visible ? Qt::Checked : Qt::Unchecked);
-			}
-		}
+	defaults_btn->setToolTip("Full reset: column visibility, order, widths, freeze state, "
+	                         "zoom, sort and filters");
+	// Full reset applies live to the views, then closes the dialog (reject so the
+	// checkbox state isn't re-applied over the freshly reset layout).
+	connect(defaults_btn, &QPushButton::clicked, &dlg, [&dlg, &full_reset]() {
+		full_reset();
+		dlg.reject();
 	});
 
 	QPushButton* show_all_btn = new QPushButton("Show all");

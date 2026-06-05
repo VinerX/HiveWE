@@ -315,8 +315,8 @@ TEST_CASE("proxy – building filter") {
 TEST_CASE("proxy – editor suffix filter") {
 	ensure_qapp();
 	TestData d;
-	d.data_slk.set_shadow_data("editorSuffix", "hpea", "Campaign");
-	d.data_slk.set_shadow_data("editorSuffix", "hfoo", "Campaign");
+	d.data_slk.set_shadow_data("editorsuffix", "hpea", "Campaign");
+	d.data_slk.set_shadow_data("editorsuffix", "hfoo", "Campaign");
 	TestTableModel tm(&d.data_slk, &d.meta_slk);
 	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
 

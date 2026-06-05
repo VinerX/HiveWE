@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <functional>
 
 import TableModel;
 import SLK;
@@ -131,5 +132,6 @@ class SpreadsheetEditor : public QMainWindow {
 
 	void openBatchDialog(SpreadsheetView* view, SpreadsheetProxy* proxy, TableModel* table, int preferred_column);
 	void openColumnDialog(SpreadsheetView* view, SpreadsheetProxy* proxy, TableModel* table,
-	                      const std::vector<std::string>& curated);
+	                      const std::vector<std::string>& curated,
+	                      const std::function<void()>& full_reset);
 };
