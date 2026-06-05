@@ -15,6 +15,7 @@ import SkinnedMeshGlobals;
 import ResourceManager;
 import "pathing_palette.h";
 import "object_editor/object_editor.h";
+import "object_editor/spreadsheet_editor.h";
 import "model_editor/model_editor.h";
 import "tile_setter.h";
 import "map_info_editor.h";
@@ -188,6 +189,11 @@ HiveWE::HiveWE(QWidget* parent)
 	connect(ui.ribbon->object_editor, &QRibbonButton::clicked, [this]() {
 		bool created = false;
 		window_handler.create_or_raise<ObjectEditor>(nullptr, created);
+	});
+
+	connect(ui.ribbon->spreadsheet_editor, &QRibbonButton::clicked, [this]() {
+		bool created = false;
+		window_handler.create_or_raise<SpreadsheetEditor>(nullptr, created);
 	});
 
 	connect(ui.ribbon->model_editor, &QRibbonButton::clicked, [this]() {

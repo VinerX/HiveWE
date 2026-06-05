@@ -27,6 +27,10 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	object_editor->setText("Object\nEditor");
 	editor_section->addWidget(object_editor);
 
+	spreadsheet_editor->setIcon(QIcon("data/icons/ribbon/objecteditor.png"));
+	spreadsheet_editor->setText("Spread\nsheet");
+	editor_section->addWidget(spreadsheet_editor);
+
 	model_editor->setIcon(QIcon("data/icons/ribbon/model_editor.png"));
 	model_editor->setText("Model\nEditor");
 	editor_section->addWidget(model_editor);
