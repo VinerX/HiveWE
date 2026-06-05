@@ -127,6 +127,30 @@ target_include_directories(HiveWE_lib PUBLIC
 
 target_link_libraries(HiveWE PRIVATE HiveWE_lib)
 
+# Command-line companion for AI-agent driven map work. Phase 1 (build/run/validate)
+# is intentionally self-contained: only StormLib + nlohmann/json, no Qt, no
+# HiveWE_lib, so it builds fast and independently. Later phases add HiveWE_lib.
+add_executable(HiveWE_cli "src/cli/main_cli.cpp")
+target_link_libraries(HiveWE_cli PRIVATE
+	StormLib::storm
+	BZip2::BZip2
+	nlohmann_json::nlohmann_json
+)
+target_compile_features(HiveWE_cli PRIVATE cxx_std_23)
+# StormLib's TCHAR APIs follow UNICODE; define it so they take wchar_t paths
+# (matching std::filesystem::path::c_str() on Windows). __STORMLIB_NO_STATIC_LINK__
+# disables StormLib.h's #pragma comment(lib) auto-linking (which would request a
+# variant-named .lib like StormLibRUD that vcpkg doesn't ship); the StormLib::storm
+# imported target supplies the correct library instead.
+target_compile_definitions(HiveWE_cli PRIVATE UNICODE _UNICODE __STORMLIB_NO_STATIC_LINK__)
+# Expose data/ (pjass.exe, luac.exe, common.j, ...) next to the CLI exe so
+# validate-script can find its tools via the executable directory.
+add_custom_command(TARGET HiveWE_cli POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E create_symlink
+	"${PROJECT_SOURCE_DIR}/data"
+	"$<TARGET_FILE_DIR:HiveWE_cli>/data"
+)
+
 if(HIVEWE_BUILD_TESTS)
 	enable_testing()
 	add_subdirectory(tests)
