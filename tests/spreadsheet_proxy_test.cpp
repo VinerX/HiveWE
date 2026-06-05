@@ -2,9 +2,12 @@
 #include <QApplication>
 #include <QAbstractTableModel>
 #include <QIcon>
+#include <QDateTime>
+#include <QSettings>
 
 import std;
 import SLK;
+import Hierarchy;
 
 class TestTableModel : public QAbstractTableModel {
   public:
@@ -576,6 +579,46 @@ TEST_CASE("proxy – editor number column normalizes and rejects non-numeric") {
 
 	// Editor columns are not real map fields, so they never map to a source cell.
 	CHECK(!proxy.mapToSource(proxy.index(0, weight)).isValid());
+}
+
+TEST_CASE("proxy – in-map editor column round-trips through the map file") {
+	ensure_qapp();
+	// Point the map directory at a fresh temp folder so the quiet in-map file is isolated.
+	const std::filesystem::path tmp = std::filesystem::temp_directory_path()
+		/ ("hivewe_inmap_" + std::to_string(QDateTime::currentMSecsSinceEpoch()));
+	std::filesystem::create_directories(tmp);
+	const std::filesystem::path saved_dir = hierarchy.map_directory;
+	hierarchy.map_directory = tmp;
+
+	// First proxy: create an in-map editor column and store a value, then let it go away.
+	{
+		TestData d;
+		TestTableModel tm(&d.data_slk, &d.meta_slk);
+		SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name", {}, "InMapCat");
+		const int col = proxy.addEditorColumn(QString::fromUtf8(u8"Группа"), "Editor",
+			SpreadsheetComputedColumn::Kind::EditorText,
+			SpreadsheetComputedColumn::Storage::InMap, nullptr);
+		CHECK(col >= 0);
+		CHECK(proxy.setData(proxy.index(0, col), QString::fromUtf8(u8"ЭК"), Qt::EditRole));
+	}
+
+	CHECK(std::filesystem::exists(tmp / "war3map.hivewe_fields.json"));
+
+	// Second proxy on the same category must reload the column definition and value.
+	{
+		TestData d;
+		TestTableModel tm(&d.data_slk, &d.meta_slk);
+		SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name", {}, "InMapCat");
+		REQUIRE(proxy.columnCount() == static_cast<int>(d.data_slk.columns()) + 1);
+		const int col = static_cast<int>(d.data_slk.columns());  // first virtual column
+		CHECK(proxy.isEditorColumn(col));
+		CHECK(proxy.data(proxy.index(0, col), Qt::DisplayRole).toString() == QString::fromUtf8(u8"ЭК"));
+		CHECK(proxy.data(proxy.index(1, col), Qt::DisplayRole).toString().isEmpty());
+	}
+
+	hierarchy.map_directory = saved_dir;
+	std::filesystem::remove_all(tmp);
+	QSettings().remove("Spreadsheet/formulas/InMapCat");
 }
 
 TEST_CASE("proxy вЂ“ custom formula columns evaluate arithmetic expressions") {

@@ -125,8 +125,10 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	void rebuildVisibleRows();
 	void rebuildSortOrder();
 	void populateBuiltInComputedColumns();
-	void loadCustomComputedColumns();
+	void loadCustomComputedColumns();   // local (QSettings) formula + editor columns
 	void saveCustomComputedColumns() const;
+	void loadInMapColumns();            // in-map editor columns (war3map.hivewe_fields.json)
+	void saveInMapColumns() const;
 	void persistEditorColumn(const SpreadsheetComputedColumn& column) const;
 	QVariant computedData(int source_row, const SpreadsheetComputedColumn& column, int role) const;
 	bool evaluateFormula(const QString& formula, int source_row, double& value,

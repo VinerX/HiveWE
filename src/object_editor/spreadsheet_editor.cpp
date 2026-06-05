@@ -31,13 +31,21 @@
 #include <QSplitter>
 #include <QScrollBar>
 #include <QPushButton>
-#include <QStandardItemModel>
 #include <QSharedPointer>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <map>
 #include <algorithm>
 
 import std;
 import Globals;
+import Hierarchy;
+
+// Quiet per-map file holding "in-map" editor-column definitions and their per-row values.
+// It is an ordinary file in the map folder (not object data), so it travels with the map,
+// is ignored by the game/World Editor, and never touches the modification tables.
+static constexpr char kInMapFieldsFile[] = "war3map.hivewe_fields.json";
 
 static QString decode_cp1251_text(std::string_view sv) {
 	static constexpr char32_t cp1251_table[128] = {
@@ -165,6 +173,7 @@ SpreadsheetProxy::SpreadsheetProxy(QAbstractItemModel* source_model,
 
 	populateBuiltInComputedColumns();
 	loadCustomComputedColumns();
+	loadInMapColumns();
 
 	beginResetModel();
 	rebuildVisibleRows();
@@ -427,6 +436,10 @@ void SpreadsheetProxy::loadCustomComputedColumns() {
 				? SpreadsheetComputedColumn::Kind::EditorNumber
 				: SpreadsheetComputedColumn::Kind::EditorText;
 			const bool in_map = map.value("storage").toString().trimmed().toLower() == "inmap";
+			// In-map columns live in the per-map file, not QSettings; skip any that leaked here.
+			if (in_map) {
+				continue;
+			}
 
 			SpreadsheetComputedColumn column;
 			column.key = key;
@@ -478,6 +491,10 @@ void SpreadsheetProxy::saveCustomComputedColumns() const {
 	QVariantList stored;
 	for (const auto& column : computed_columns_) {
 		if (column.builtin) continue;
+		// In-map editor columns are persisted to the per-map file, not QSettings.
+		if (column.isEditor() && column.storage == SpreadsheetComputedColumn::Storage::InMap) {
+			continue;
+		}
 		QVariantMap entry;
 		entry.insert("key", column.key);
 		entry.insert("title", column.title);
@@ -485,17 +502,12 @@ void SpreadsheetProxy::saveCustomComputedColumns() const {
 		if (column.isEditor()) {
 			entry.insert("kind", column.kind == SpreadsheetComputedColumn::Kind::EditorNumber
 			                         ? "editornumber" : "editortext");
-			entry.insert("storage", column.storage == SpreadsheetComputedColumn::Storage::InMap
-			                            ? "inmap" : "local");
-			// Local storage persists the per-row values here; InMap values live with the
-			// map (handled separately) so they are not duplicated into QSettings.
-			if (column.storage == SpreadsheetComputedColumn::Storage::Local) {
-				QVariantMap values;
-				for (const auto& [row_id, value] : column.values) {
-					values.insert(QString::fromStdString(row_id), value);
-				}
-				entry.insert("values", values);
+			entry.insert("storage", "local");
+			QVariantMap values;
+			for (const auto& [row_id, value] : column.values) {
+				values.insert(QString::fromStdString(row_id), value);
 			}
+			entry.insert("values", values);
 		} else {
 			entry.insert("formula", column.formula);
 		}
@@ -504,12 +516,122 @@ void SpreadsheetProxy::saveCustomComputedColumns() const {
 
 	QSettings settings;
 	settings.setValue("Spreadsheet/formulas/" + category_name, stored);
+
+	// Keep the in-map file in sync in the same pass so a single persist call covers both
+	// storage backends.
+	saveInMapColumns();
+}
+
+void SpreadsheetProxy::loadInMapColumns() {
+	if (category_name.isEmpty() || hierarchy.map_directory.empty()) {
+		return;
+	}
+	auto res = hierarchy.map_file_read(kInMapFieldsFile);
+	if (!res) {
+		return;
+	}
+	const auto& buffer = res->buffer;
+	const QByteArray bytes(reinterpret_cast<const char*>(buffer.data()), static_cast<qsizetype>(buffer.size()));
+	QJsonParseError parse_error;
+	const QJsonDocument doc = QJsonDocument::fromJson(bytes, &parse_error);
+	if (parse_error.error != QJsonParseError::NoError || !doc.isObject()) {
+		return;
+	}
+
+	const QJsonArray columns = doc.object().value(category_name).toArray();
+	for (const QJsonValue& value : columns) {
+		const QJsonObject obj = value.toObject();
+		const QString title = obj.value("title").toString().trimmed();
+		if (title.isEmpty()) {
+			continue;
+		}
+		const QString kind_str = obj.value("kind").toString().trimmed().toLower();
+		if (kind_str != "editortext" && kind_str != "editornumber") {
+			continue;  // only editor columns are stored in the map file
+		}
+
+		QString key = normalize_column_key(obj.value("key").toString());
+		if (key.isEmpty()) {
+			key = stable_editor_key(title);
+		}
+
+		SpreadsheetComputedColumn column;
+		column.key = key;
+		column.title = title;
+		column.group = obj.value("group").toString().trimmed().isEmpty()
+			? "Editor" : obj.value("group").toString().trimmed();
+		column.kind = (kind_str == "editornumber")
+			? SpreadsheetComputedColumn::Kind::EditorNumber
+			: SpreadsheetComputedColumn::Kind::EditorText;
+		column.builtin = false;
+		column.storage = SpreadsheetComputedColumn::Storage::InMap;
+
+		const QJsonObject values = obj.value("values").toObject();
+		for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+			column.values[it.key().toStdString()] = it.value().toString();
+		}
+		computed_columns_.push_back(std::move(column));
+	}
+}
+
+void SpreadsheetProxy::saveInMapColumns() const {
+	if (category_name.isEmpty() || hierarchy.map_directory.empty()) {
+		return;
+	}
+
+	// Re-read the existing file so other categories' sections are preserved.
+	QJsonObject root;
+	if (auto res = hierarchy.map_file_read(kInMapFieldsFile)) {
+		const auto& buffer = res->buffer;
+		const QByteArray bytes(reinterpret_cast<const char*>(buffer.data()), static_cast<qsizetype>(buffer.size()));
+		const QJsonDocument doc = QJsonDocument::fromJson(bytes);
+		if (doc.isObject()) {
+			root = doc.object();
+		}
+	}
+
+	QJsonArray columns;
+	for (const auto& column : computed_columns_) {
+		if (column.builtin || !column.isEditor()
+			|| column.storage != SpreadsheetComputedColumn::Storage::InMap) {
+			continue;
+		}
+		QJsonObject obj;
+		obj.insert("key", column.key);
+		obj.insert("title", column.title);
+		obj.insert("group", column.group);
+		obj.insert("kind", column.kind == SpreadsheetComputedColumn::Kind::EditorNumber
+		                       ? "editornumber" : "editortext");
+		QJsonObject values;
+		for (const auto& [row_id, value] : column.values) {
+			values.insert(QString::fromStdString(row_id), value);
+		}
+		obj.insert("values", values);
+		columns.append(obj);
+	}
+
+	if (columns.isEmpty()) {
+		root.remove(category_name);
+	} else {
+		root.insert(category_name, columns);
+	}
+
+	if (root.isEmpty()) {
+		if (hierarchy.map_file_exists(kInMapFieldsFile)) {
+			hierarchy.map_file_remove(kInMapFieldsFile);
+		}
+		return;
+	}
+
+	const QByteArray out = QJsonDocument(root).toJson(QJsonDocument::Indented);
+	hierarchy.map_file_write(kInMapFieldsFile,
+		std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t*>(out.constData()),
+		                              static_cast<size_t>(out.size())));
 }
 
 void SpreadsheetProxy::persistEditorColumn(const SpreadsheetComputedColumn& column) const {
-	// Currently all editor-column definitions and (for Local storage) their values live in
-	// the same QSettings blob, so a full rewrite is the simplest correct persistence.
-	// InMap storage will hook its own write path here in a later step.
+	// A full rewrite of both backends is the simplest correct persistence; the QSettings
+	// pass and the in-map file pass each only touch the columns they own.
 	Q_UNUSED(column);
 	saveCustomComputedColumns();
 }
@@ -2138,14 +2260,13 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetView*
 		QComboBox* storage_combo = new QComboBox;
 		storage_combo->addItem(QString::fromUtf8(u8"Локально (этот ПК)"),
 			static_cast<int>(SpreadsheetComputedColumn::Storage::Local));
-		storage_combo->addItem(QString::fromUtf8(u8"В карте — скоро"),
+		storage_combo->addItem(QString::fromUtf8(u8"В карте (ездит с картой)"),
 			static_cast<int>(SpreadsheetComputedColumn::Storage::InMap));
-		// InMap storage needs the "Export for game" strip path; disabled until that lands.
-		if (auto* model = qobject_cast<QStandardItemModel*>(storage_combo->model())) {
-			if (QStandardItem* item = model->item(1)) {
-				item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
-			}
-		}
+		storage_combo->setItemData(0,
+			QString::fromUtf8(u8"Значения хранятся в настройках HiveWE на этом ПК"), Qt::ToolTipRole);
+		storage_combo->setItemData(1,
+			QString::fromUtf8(u8"Тихий файл war3map.hivewe_fields.json в карте; игрой игнорируется"),
+			Qt::ToolTipRole);
 
 		form->addRow(QString::fromUtf8(u8"Заголовок"), title_edit);
 		form->addRow(QString::fromUtf8(u8"Группа"), group_edit);
