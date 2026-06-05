@@ -17,6 +17,7 @@ import Globals;
 import Hierarchy;
 import SLK;
 import INI;
+import TriggerStrings;
 
 namespace {
 
@@ -145,11 +146,29 @@ std::string display_name(const slk::SLK& slk, const std::string& id) {
 	return {};
 }
 
+std::string editor_suffix(const slk::SLK& slk, const std::string& id, const TriggerStrings& ts) {
+	for (const char* col : {"editorsuffix", "version"}) {
+		if (slk.column_headers.contains(col)) {
+			std::string raw = slk.data<std::string>(col, id);
+			if (!raw.empty()) {
+				if (raw.starts_with("TRIGSTR")) {
+					std::string_view resolved = ts.string(raw);
+					if (!resolved.empty()) {
+						return std::string(resolved);
+					}
+				}
+				return raw;
+			}
+		}
+	}
+	return {};
+}
+
 // ---- bootstrap ------------------------------------------------------------
 
 // Opens CASC, loads the WorldEdit strings, points the hierarchy at the map and
 // loads base + map object data. Returns an error message on failure.
-std::optional<std::string> bootstrap(const std::string& warcraft, const std::string& map_dir, bool hd) {
+std::optional<std::string> bootstrap(const std::string& warcraft, const std::string& map_dir, bool hd, TriggerStrings& ts) {
 	hierarchy.ptr = false;
 	hierarchy.hd = hd;
 	hierarchy.teen = false;
@@ -169,6 +188,7 @@ std::optional<std::string> bootstrap(const std::string& warcraft, const std::str
 
 	load_base_object_data([](std::string_view) {});
 	load_map_object_data();
+	ts.load();
 	return std::nullopt;
 }
 
@@ -221,8 +241,9 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		return error("could not determine Warcraft III directory; pass --warcraft <dir>");
 	}
 
+	TriggerStrings ts;
 	try {
-		if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"))) {
+		if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts)) {
 			return error(*err);
 		}
 	} catch (const std::exception& e) {
@@ -252,16 +273,22 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		}
 
 		std::vector<std::string> matches;
+		auto check = [&](const std::string& s) -> bool {
+			return !s.empty() && to_lower(s).find(query) != std::string::npos;
+		};
 		for (const auto& [id, index] : slk.row_headers) {
+			if (!check(id) && !check(display_name(slk, id))
+				&& !check(editor_suffix(slk, id, ts))
+				&& !check(slk.data<std::string>("comment(s)", id))) {
+				continue;
+			}
 			const std::string name = display_name(slk, id);
-			if (to_lower(id).find(query) != std::string::npos || to_lower(name).find(query) != std::string::npos) {
-				JsonObject m;
-				m.str("id", id);
-				m.str("name", name);
-				matches.push_back(m.dump());
-				if (matches.size() >= limit) {
-					break;
-				}
+			JsonObject m;
+			m.str("id", id);
+			m.str("name", name);
+			matches.push_back(m.dump());
+			if (matches.size() >= limit) {
+				break;
 			}
 		}
 		std::string arr = "[";
