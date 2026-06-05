@@ -8,6 +8,9 @@
 #include <QAction>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QLineEdit>
+#include <QComboBox>
+#include <QLabel>
 
 import std;
 import Globals;
@@ -16,13 +19,67 @@ import Globals;
 // SpreadsheetProxy
 // ---------------------------------------------------------------------------
 
-SpreadsheetProxy::SpreadsheetProxy(TableModel* table, QObject* parent)
-	: QSortFilterProxyModel(parent), slk(table->slk), meta_slk(table->meta_slk) {
+SpreadsheetProxy::SpreadsheetProxy(TableModel* table, std::string name_field, QObject* parent)
+	: QSortFilterProxyModel(parent), slk(table->slk), meta_slk(table->meta_slk), name_field(std::move(name_field)) {
 	setSourceModel(table);
 	// Sort on the raw stored value so numeric columns sort numerically-ish and
 	// strings alphabetically, matching what the user typed/sees.
 	setSortRole(Qt::EditRole);
 	setFilterCaseSensitivity(Qt::CaseInsensitive);
+
+	if (const auto found = slk->column_headers.find(this->name_field); found != slk->column_headers.end()) {
+		name_column = static_cast<int>(found->second);
+	}
+}
+
+void SpreadsheetProxy::setTextFilter(const QString& text) {
+	beginFilterChange();
+	text_filter = text;
+	endFilterChange(Direction::Rows);
+}
+
+void SpreadsheetProxy::setCustomOnly(bool only) {
+	beginFilterChange();
+	custom_only = only;
+	endFilterChange(Direction::Rows);
+}
+
+void SpreadsheetProxy::setRaceFilter(const QString& race_key) {
+	beginFilterChange();
+	race_filter = race_key.toStdString();
+	endFilterChange(Direction::Rows);
+}
+
+bool SpreadsheetProxy::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const {
+	if (source_row < 0 || static_cast<size_t>(source_row) >= slk->index_to_row.size()) {
+		return false;
+	}
+	const std::string& id = slk->index_to_row.at(source_row);
+
+	// Custom-only: keep just objects with a custom shadow override (oldid).
+	if (custom_only) {
+		const auto it = slk->shadow_data.find(id);
+		if (it == slk->shadow_data.end() || !it->second.contains("oldid")) {
+			return false;
+		}
+	}
+
+	// Race filter (units): compare the raw race key.
+	if (!race_filter.empty() && slk->column_headers.contains("race")) {
+		if (slk->data<std::string_view>("race", id) != race_filter) {
+			return false;
+		}
+	}
+
+	// Name text search on the display value of the name column.
+	if (!text_filter.isEmpty() && name_column >= 0) {
+		const QString name = sourceModel()->data(sourceModel()->index(source_row, name_column), Qt::DisplayRole).toString();
+		if (!name.contains(text_filter, Qt::CaseInsensitive)) {
+			return false;
+		}
+	}
+
+	return true;
 }
 
 QString SpreadsheetProxy::fieldDisplayName(int source_column) const {
@@ -86,27 +143,33 @@ SpreadsheetEditor::SpreadsheetEditor(QWidget* parent) : QMainWindow(parent) {
 
 	// Curated default columns per category (lowercased SLK field keys; missing
 	// keys are silently skipped). Everything else is reachable via "Columns…".
-	addCategoryTab("Units", units_table,
+	addCategoryTab("Units", units_table, "name",
 		S{ "name", "race", "hp", "manan", "regenhp", "regenmana", "def", "dmgplus1", "dice1", "sides1",
-		   "spd", "goldcost", "lumbercost", "fmade", "fused", "level", "primary", "sight" });
-	addCategoryTab("Items", items_table,
+		   "spd", "goldcost", "lumbercost", "fmade", "fused", "level", "primary", "sight" }, true);
+	addCategoryTab("Items", items_table, "name",
 		S{ "name", "goldcost", "lumbercost", "level", "class", "prio", "perishable", "pickrandom", "hp" });
-	addCategoryTab("Abilities", abilities_table,
+	addCategoryTab("Abilities", abilities_table, "name",
 		S{ "name", "code", "race", "levels", "targs1" });
-	addCategoryTab("Doodads", doodads_table,
+	addCategoryTab("Doodads", doodads_table, "name",
 		S{ "name", "category", "file" });
-	addCategoryTab("Destructibles", destructibles_table,
+	addCategoryTab("Destructibles", destructibles_table, "name",
 		S{ "name", "category", "file" });
-	addCategoryTab("Upgrades", upgrade_table,
+	addCategoryTab("Upgrades", upgrade_table, "name1",
 		S{ "name1", "race", "class", "maxlevel", "goldbase", "lumberbase" });
-	addCategoryTab("Buffs", buff_table,
+	addCategoryTab("Buffs", buff_table, "editorname",
 		S{ "editorname", "bufftip", "race" });
 
 	show();
 }
 
-void SpreadsheetEditor::addCategoryTab(const QString& name, TableModel* table, const std::vector<std::string>& curated) {
-	SpreadsheetProxy* proxy = new SpreadsheetProxy(table, this);
+void SpreadsheetEditor::addCategoryTab(
+	const QString& name,
+	TableModel* table,
+	const std::string& name_field,
+	const std::vector<std::string>& curated,
+	bool race_filter
+) {
+	SpreadsheetProxy* proxy = new SpreadsheetProxy(table, name_field, this);
 
 	QTableView* view = new QTableView;
 	view->setModel(proxy);
@@ -145,9 +208,48 @@ void SpreadsheetEditor::addCategoryTab(const QString& name, TableModel* table, c
 
 	view->resizeColumnsToContents();
 
-	// Toolbar: "Columns…" toggles visibility of any field.
+	// Toolbar: search, filters and the "Columns…" visibility toggle.
 	QToolBar* bar = new QToolBar;
 	bar->setMovable(false);
+
+	QLineEdit* search = new QLineEdit;
+	search->setPlaceholderText("Search " + name);
+	search->setClearButtonEnabled(true);
+	search->setMaximumWidth(260);
+	connect(search, &QLineEdit::textChanged, proxy, &SpreadsheetProxy::setTextFilter);
+	bar->addWidget(search);
+
+	// Race filter (units only), sourced from the same unitRace section the tree uses.
+	if (race_filter && unit_editor_data.section_exists("unitRace")) {
+		QComboBox* race_combo = new QComboBox;
+		race_combo->addItem("All races", QString());
+		for (const auto& [key, value] : unit_editor_data.section("unitRace")) {
+			if (key == "NumValues" || key == "Sort" || key.ends_with("_Alt")) {
+				continue;
+			}
+			QString label = QString::fromStdString(value[1]);
+			label.replace('&', "");
+			race_combo->addItem(label, QString::fromStdString(value[0]));
+		}
+		connect(race_combo, &QComboBox::currentIndexChanged, proxy, [proxy, race_combo](int) {
+			proxy->setRaceFilter(race_combo->currentData().toString());
+		});
+		bar->addSeparator();
+		bar->addWidget(new QLabel(" Race: "));
+		bar->addWidget(race_combo);
+	}
+
+	QToolButton* custom_only = new QToolButton;
+	custom_only->setText("Custom only");
+	custom_only->setCheckable(true);
+	custom_only->setToolTip("Show only custom (modified) objects");
+	connect(custom_only, &QToolButton::toggled, proxy, &SpreadsheetProxy::setCustomOnly);
+	bar->addSeparator();
+	bar->addWidget(custom_only);
+
+	QWidget* spacer = new QWidget;
+	spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	bar->addWidget(spacer);
 
 	QToolButton* columns_button = new QToolButton;
 	columns_button->setText("Columns…");
