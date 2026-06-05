@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -155,8 +156,18 @@ int run_capture(const std::wstring& command_line, const fs::path& working_dir, s
 	return static_cast<int>(exit_code);
 }
 
-// Launch a program detached (do not wait). Returns the new PID, or 0 on failure.
-DWORD launch_detached(const std::wstring& command_line, const fs::path& working_dir) {
+struct LaunchedProcess {
+	HANDLE process = nullptr;
+	HANDLE thread = nullptr;
+	DWORD pid = 0;
+};
+
+struct CloseWindowContext {
+	DWORD pid = 0;
+	bool posted = false;
+};
+
+std::optional<LaunchedProcess> launch_process(const std::wstring& command_line, const fs::path& working_dir) {
 	STARTUPINFOW si{};
 	si.cb = sizeof(si);
 	PROCESS_INFORMATION pi{};
@@ -164,16 +175,136 @@ DWORD launch_detached(const std::wstring& command_line, const fs::path& working_
 	const wchar_t* cwd = working_dir.empty() ? nullptr : working_dir.c_str();
 	const BOOL started = CreateProcessW(nullptr, mutable_cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, cwd, &si, &pi);
 	if (!started) {
+		return std::nullopt;
+	}
+	return LaunchedProcess{pi.hProcess, pi.hThread, pi.dwProcessId};
+}
+
+void close_process_handles(LaunchedProcess& proc) {
+	if (proc.process) {
+		CloseHandle(proc.process);
+		proc.process = nullptr;
+	}
+	if (proc.thread) {
+		CloseHandle(proc.thread);
+		proc.thread = nullptr;
+	}
+}
+
+BOOL CALLBACK close_windows_for_pid(HWND hwnd, LPARAM lparam) {
+	auto* ctx = reinterpret_cast<CloseWindowContext*>(lparam);
+	DWORD hwnd_pid = 0;
+	GetWindowThreadProcessId(hwnd, &hwnd_pid);
+	if (hwnd_pid != ctx->pid || !IsWindowVisible(hwnd)) {
+		return TRUE;
+	}
+	PostMessageW(hwnd, WM_CLOSE, 0, 0);
+	ctx->posted = true;
+	return TRUE;
+}
+
+bool request_process_close(DWORD pid) {
+	CloseWindowContext ctx{pid, false};
+	EnumWindows(close_windows_for_pid, reinterpret_cast<LPARAM>(&ctx));
+	return ctx.posted;
+}
+
+// Launch a program detached (do not wait). Returns the new PID, or 0 on failure.
+DWORD launch_detached(const std::wstring& command_line, const fs::path& working_dir) {
+	auto proc = launch_process(command_line, working_dir);
+	if (!proc) {
 		return 0;
 	}
-	const DWORD pid = pi.dwProcessId;
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
+	const DWORD pid = proc->pid;
+	close_process_handles(*proc);
 	return pid;
 }
 
 std::wstring quote(const std::wstring& s) {
 	return L"\"" + s + L"\"";
+}
+
+fs::path war3_log_path(const Args& args) {
+	if (const auto log = args.get("log")) {
+		return fs::path(*log);
+	}
+	if (const char* userprofile = std::getenv("USERPROFILE")) {
+		return fs::path(userprofile) / "Documents" / "Warcraft III" / "Logs" / "War3Log.txt";
+	}
+	fail("USERPROFILE is not set; pass --log <path-to-War3Log.txt>");
+}
+
+std::string read_text_file(const fs::path& path) {
+	std::ifstream in(path, std::ios::binary);
+	if (!in) {
+		return {};
+	}
+	return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+std::vector<std::string> split_lines(const std::string& text) {
+	std::vector<std::string> lines;
+	std::string current;
+	for (char c : text) {
+		if (c == '\r') {
+			continue;
+		}
+		if (c == '\n') {
+			lines.push_back(current);
+			current.clear();
+		} else {
+			current.push_back(c);
+		}
+	}
+	if (!current.empty()) {
+		lines.push_back(current);
+	}
+	return lines;
+}
+
+std::string join_lines(const std::vector<std::string>& lines, std::size_t start_index) {
+	std::string joined;
+	for (std::size_t i = start_index; i < lines.size(); ++i) {
+		if (!joined.empty()) {
+			joined += '\n';
+		}
+		joined += lines[i];
+	}
+	return joined;
+}
+
+std::string normalized_log_path(const fs::path& path) {
+	return fs::absolute(path).generic_string();
+}
+
+std::string extract_log_excerpt(const fs::path& log_path, const fs::path& map_path, std::size_t fallback_tail_lines, bool& found_map_marker) {
+	found_map_marker = false;
+	const std::vector<std::string> lines = split_lines(read_text_file(log_path));
+	if (lines.empty()) {
+		return {};
+	}
+
+	const std::string marker = "Opening map - " + normalized_log_path(map_path);
+	for (std::size_t i = lines.size(); i-- > 0;) {
+		if (lines[i].find(marker) != std::string::npos) {
+			found_map_marker = true;
+			return join_lines(lines, i);
+		}
+	}
+
+	const std::size_t start = lines.size() > fallback_tail_lines ? lines.size() - fallback_tail_lines : 0;
+	return join_lines(lines, start);
+}
+
+std::size_t parse_seconds_option(const Args& args, const std::string& key, std::size_t default_value) {
+	if (const auto raw = args.get(key)) {
+		try {
+			return static_cast<std::size_t>(std::stoul(*raw));
+		} catch (...) {
+			fail("invalid integer for --" + key + ": " + *raw);
+		}
+	}
+	return default_value;
 }
 
 // Read the user-configured Warcraft directory that HiveWE stores via QSettings at
@@ -305,6 +436,104 @@ void cmd_run_map(const Args& args) {
 		  {"pid", pid}});
 }
 
+// Launch Warcraft III, wait a bit, optionally terminate it, then return the
+// relevant War3Log excerpt for this map. This closes the loop for automated
+// "run -> inspect log -> patch" iterations.
+void cmd_probe_map(const Args& args) {
+	const fs::path map_path = fs::path(args.require("map"));
+	const fs::path warcraft = fs::path(args.require("warcraft"));
+	const fs::path log_path = war3_log_path(args);
+	if (!fs::exists(map_path)) {
+		fail("map path not found: " + map_path.string());
+	}
+
+	const bool ptr = args.has_flag("ptr");
+	const fs::path root = warcraft / (ptr ? "_ptr_" : "_retail_");
+	const fs::path exe = root / "x86_64" / "Warcraft III.exe";
+	if (!fs::is_regular_file(exe)) {
+		fail("Warcraft III.exe not found: " + exe.string());
+	}
+
+	std::wstring command_line = quote(exe.wstring());
+	command_line += L" -launch -loadfile " + quote(fs::absolute(map_path).wstring());
+	if (const auto extra = args.get("args")) {
+		command_line += L" " + fs::path(*extra).wstring();
+	}
+
+	auto proc = launch_process(command_line, exe.parent_path());
+	if (!proc) {
+		fail("failed to launch Warcraft III (error " + std::to_string(GetLastError()) + ")");
+	}
+
+	const std::size_t wait_seconds = parse_seconds_option(args, "wait", 12);
+	const std::size_t tail_lines = parse_seconds_option(args, "tail", 120);
+	const bool terminate_after_wait = !args.has_flag("keep-open");
+
+	const DWORD wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(wait_seconds * 1000));
+	const bool exited_within_wait = (wait_result == WAIT_OBJECT_0);
+	bool close_requested = false;
+	bool terminated = false;
+	if (!exited_within_wait && terminate_after_wait) {
+		close_requested = request_process_close(proc->pid);
+		if (close_requested) {
+			const DWORD close_wait = WaitForSingleObject(proc->process, 5000);
+			terminated = (close_wait != WAIT_OBJECT_0) && (TerminateProcess(proc->process, 0) != FALSE);
+		} else {
+			terminated = TerminateProcess(proc->process, 0) != FALSE;
+		}
+		if (terminated) {
+			WaitForSingleObject(proc->process, 5000);
+		}
+	}
+
+	DWORD exit_code = STILL_ACTIVE;
+	GetExitCodeProcess(proc->process, &exit_code);
+	close_process_handles(*proc);
+
+	bool found_map_marker = false;
+	const std::string excerpt = extract_log_excerpt(log_path, map_path, tail_lines, found_map_marker);
+	const bool has_error = excerpt.find("Map contains invalid Jass scripts that couldn't be compiled by war3") != std::string::npos;
+
+	emit({{"ok", true},
+		  {"command", "probe-map"},
+		  {"map", map_path.string()},
+		  {"warcraft_exe", exe.string()},
+		  {"log_path", log_path.string()},
+		  {"pid", proc->pid},
+		  {"wait_seconds", wait_seconds},
+		  {"exited_within_wait", exited_within_wait},
+		  {"close_requested", close_requested},
+		  {"terminated", terminated},
+		  {"exit_code", static_cast<std::uint64_t>(exit_code)},
+		  {"found_map_marker", found_map_marker},
+		  {"has_root_error", has_error},
+		  {"log_excerpt", excerpt}});
+}
+
+void cmd_read_war3_log(const Args& args) {
+	const fs::path log_path = war3_log_path(args);
+	if (!fs::is_regular_file(log_path)) {
+		fail("War3Log.txt not found: " + log_path.string());
+	}
+
+	const std::size_t tail_lines = parse_seconds_option(args, "tail", 120);
+	bool found_map_marker = false;
+	std::string excerpt;
+	if (const auto map = args.get("map")) {
+		excerpt = extract_log_excerpt(log_path, fs::path(*map), tail_lines, found_map_marker);
+	} else {
+		const std::vector<std::string> lines = split_lines(read_text_file(log_path));
+		const std::size_t start = lines.size() > tail_lines ? lines.size() - tail_lines : 0;
+		excerpt = join_lines(lines, start);
+	}
+
+	emit({{"ok", true},
+		  {"command", "read-war3-log"},
+		  {"log_path", log_path.string()},
+		  {"found_map_marker", found_map_marker},
+		  {"log_excerpt", excerpt}});
+}
+
 // Static-validate the map script. JASS -> pjass; Lua -> luac -p (if available).
 void cmd_validate_script(const Args& args) {
 	const fs::path map_dir = require_map_dir(args);
@@ -369,11 +598,13 @@ int main(int argc, char* argv[]) {
 	if (args.command.empty() || args.command == "help" || args.has_flag("help")) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
-			  {"commands", json::array({"build-map", "run-map", "validate-script",
+			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "validate-script",
 									   "list-object-types", "search-objects", "get-object", "set-field"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
+				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--tail 120] [--keep-open] [--log <War3Log.txt>]"},
+				   {"read-war3-log", "[--map <dir|.w3x>] [--tail 120] [--log <War3Log.txt>]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},
 				   {"list-object-types", "(no args)"},
 				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
@@ -386,6 +617,10 @@ int main(int argc, char* argv[]) {
 		cmd_build_map(args);
 	} else if (args.command == "run-map") {
 		cmd_run_map(args);
+	} else if (args.command == "probe-map") {
+		cmd_probe_map(args);
+	} else if (args.command == "read-war3-log") {
+		cmd_read_war3_log(args);
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
