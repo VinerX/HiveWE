@@ -49,6 +49,35 @@ export class Hierarchy {
 
 		if (open) {
 			aliases.load(open_file("filealiases.json").value());
+
+			// Auto-detect the installed locale. WC3's CASC manifest lists every
+			// locale, but only the language(s) the user actually installed have local
+			// data; reading a non-downloaded locale fails (error 4350). HiveWE used to
+			// hardcode "enus", so on a non-English install all strings fell back to raw
+			// keys. Probe a preference list (English first) and pick the first locale
+			// whose string files actually read. Falls back to the previous default.
+			static constexpr std::array locale_preference = {
+				"enus", "engb", "ruru", "dede", "frfr", "eses", "esmx",
+				"itit", "ptbr", "ptpt", "plpl", "zhcn", "zhtw", "kokr"
+			};
+			bool locale_found = false;
+			for (const auto* loc : locale_preference) {
+				const auto probe = game_data.open_file(std::format("war3.w3mod:_locales/{}.w3mod:ui/worldeditstrings.txt", loc));
+				if (probe.has_value()) {
+					locale = loc;
+					locale_found = true;
+					break;
+				}
+			}
+			{
+				std::ofstream log("hivewe.log", std::ios::app);
+				if (locale_found) {
+					log << "[INFO] Detected game locale: " << locale << "\n";
+				} else {
+					log << "[WARN] No readable locale found, falling back to: " << locale << "\n";
+				}
+				log.flush();
+			}
 		}
 		return open;
 	}
