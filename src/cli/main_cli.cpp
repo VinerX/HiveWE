@@ -21,6 +21,12 @@
 #include <StormLib.h>
 #include <nlohmann/json.hpp>
 
+// Object-data commands live in the ObjectDataCli module (which imports the
+// Qt-free HiveWE_core modules). hivewe_object_command() returns a JSON string and
+// sets `ok` for the exit code; `warcraft_fallback` is used when --warcraft is not
+// passed.
+import ObjectDataCli;
+
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
@@ -168,6 +174,19 @@ DWORD launch_detached(const std::wstring& command_line, const fs::path& working_
 
 std::wstring quote(const std::wstring& s) {
 	return L"\"" + s + L"\"";
+}
+
+// Read the user-configured Warcraft directory that HiveWE stores via QSettings at
+// HKCU\Software\HiveWE\HiveWE\warcraftDirectory (REG_SZ). Empty if unset.
+std::string warcraft_dir_from_registry() {
+	wchar_t buffer[1024];
+	DWORD size = sizeof(buffer);
+	const LSTATUS status = RegGetValueW(HKEY_CURRENT_USER, L"Software\\HiveWE\\HiveWE",
+										L"warcraftDirectory", RRF_RT_REG_SZ, nullptr, buffer, &size);
+	if (status != ERROR_SUCCESS) {
+		return {};
+	}
+	return fs::path(std::wstring(buffer)).string();
 }
 
 fs::path require_map_dir(const Args& args) {
@@ -350,11 +369,16 @@ int main(int argc, char* argv[]) {
 	if (args.command.empty() || args.command == "help" || args.has_flag("help")) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
-			  {"commands", json::array({"build-map", "run-map", "validate-script"})},
+			  {"commands", json::array({"build-map", "run-map", "validate-script",
+									   "list-object-types", "search-objects", "get-object", "set-field"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},
+				   {"list-object-types", "(no args)"},
+				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
+				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
+				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
 			   })}});
 	}
 
@@ -364,6 +388,13 @@ int main(int argc, char* argv[]) {
 		cmd_run_map(args);
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
+	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
+			   args.command == "get-object" || args.command == "set-field") {
+		bool ok = false;
+		const std::string result = hivewe_object_command(argc, argv, warcraft_dir_from_registry(), ok);
+		std::fputs(result.c_str(), stdout);
+		std::fputc('\n', stdout);
+		std::exit(ok ? 0 : 1);
 	}
 
 	fail("unknown command: " + args.command);

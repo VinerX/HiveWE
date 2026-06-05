@@ -181,6 +181,11 @@ target_compile_options(HiveWE_core PUBLIC
 # is self-contained (StormLib + nlohmann/json). Object-data commands link the
 # headless HiveWE_core so the CLI can load/edit SLK data without Qt.
 add_executable(HiveWE_cli "src/cli/main_cli.cpp")
+# object_data_cli is a module unit (it imports HiveWE_core's modules); it must
+# live in a CXX_MODULES file set so its BMI is built before main_cli imports it.
+target_sources(HiveWE_cli PRIVATE FILE_SET cli_modules TYPE CXX_MODULES FILES
+	"src/cli/object_data_cli.cpp"
+)
 target_link_libraries(HiveWE_cli PRIVATE
 	HiveWE_core
 	StormLib::storm
