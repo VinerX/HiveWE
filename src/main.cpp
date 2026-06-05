@@ -171,9 +171,19 @@ int main(int argc, char* argv[]) {
 		hierarchy.local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
 	}
 
+	// Prefer the user-configured Warcraft directory (QSettings), falling back to
+	// the Qt-free filesystem probe in Utilities. Kept here so Utilities stays
+	// headless.
+	const auto warcraft_directory = [&]() -> fs::path {
+		if (settings.contains("warcraftDirectory")) {
+			return settings.value("warcraftDirectory").toString().toStdString();
+		}
+		return find_warcraft_directory();
+	};
+
 	bool is_casc_open = false;
 	const auto casc_future = std::async(std::launch::async, [&]() {
-		const fs::path directory = find_warcraft_directory();
+		const fs::path directory = warcraft_directory();
 
 		is_casc_open = hierarchy.open_casc(directory);
 		if (is_casc_open) {
@@ -186,7 +196,7 @@ int main(int argc, char* argv[]) {
 	casc_future.wait();
 
 	if (!is_casc_open) {
-		fs::path directory = find_warcraft_directory();
+		fs::path directory = warcraft_directory();
 
 		while (!hierarchy.open_casc(directory)) {
 			directory = QFileDialog::getExistingDirectory(nullptr, "Select Warcraft Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();

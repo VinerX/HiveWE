@@ -10,6 +10,7 @@ import Camera;
 import OpenGLUtilities;
 import RenderManager;
 import Globals;
+import GLGlobals;
 import PathingMap;
 import <glm/glm.hpp>;
 import <glm/gtc/matrix_transform.hpp>;

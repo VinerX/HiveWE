@@ -2,6 +2,7 @@ target_sources(HiveWE_lib PUBLIC FILE_SET yeet TYPE CXX_MODULES FILES
 	"types.ixx"
 	"map_global.ixx"
 	"globals.ixx"
+	"gl_globals.ixx"
 
 	"base/map/map.ixx"
 	"base/map/resize.cpp"

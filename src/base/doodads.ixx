@@ -19,6 +19,7 @@ import SkeletalModelInstance;
 import PathingTexture;
 import Utilities;
 import Globals;
+import GLGlobals;
 import MapInfo;
 import UnorderedMap;
 import SLK;

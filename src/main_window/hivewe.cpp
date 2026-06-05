@@ -7,6 +7,7 @@ import Hierarchy;
 import MPQ;
 import Camera;
 import Globals;
+import GLGlobals;
 import Map;
 import <soil2/SOIL2.h>;
 import MapGlobal;
