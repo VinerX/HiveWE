@@ -528,6 +528,56 @@ TEST_CASE("proxy вЂ“ units tab exposes built-in computed columns") {
 	CHECK(proxy.data(proxy.index(0, spellcount_col), Qt::DisplayRole).toString() == "3");
 }
 
+TEST_CASE("proxy – editor (user-stored) columns are editable and persist values") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	QString error;
+	const int notes = proxy.addEditorColumn("Notes", "Editor",
+		SpreadsheetComputedColumn::Kind::EditorText,
+		SpreadsheetComputedColumn::Storage::Local, &error);
+	CHECK(error.isEmpty());
+	CHECK(notes >= 0);
+	CHECK(proxy.isComputedColumn(notes));
+	CHECK(proxy.isEditorColumn(notes));
+	CHECK(proxy.isEditableColumn(notes));
+
+	// Editable flag is exposed so the view allows inline editing.
+	CHECK((proxy.flags(proxy.index(0, notes)) & Qt::ItemIsEditable) != Qt::NoItemFlags);
+
+	// Empty by default, then round-trips a stored value.
+	CHECK(proxy.data(proxy.index(0, notes), Qt::DisplayRole).toString().isEmpty());
+	CHECK(proxy.setData(proxy.index(0, notes), QString::fromUtf8(u8"ЭК-группа"), Qt::EditRole));
+	CHECK(proxy.data(proxy.index(0, notes), Qt::DisplayRole).toString() == QString::fromUtf8(u8"ЭК-группа"));
+	// Other rows stay independent.
+	CHECK(proxy.data(proxy.index(1, notes), Qt::DisplayRole).toString().isEmpty());
+}
+
+TEST_CASE("proxy – editor number column normalizes and rejects non-numeric") {
+	ensure_qapp();
+	TestData d;
+	TestTableModel tm(&d.data_slk, &d.meta_slk);
+	SpreadsheetProxy proxy(&tm, &d.data_slk, &d.meta_slk, "name");
+
+	const int weight = proxy.addEditorColumn("Weight", "Editor",
+		SpreadsheetComputedColumn::Kind::EditorNumber,
+		SpreadsheetComputedColumn::Storage::Local, nullptr);
+	CHECK(weight >= 0);
+
+	// Comma decimal is accepted and normalized.
+	CHECK(proxy.setData(proxy.index(0, weight), "12,5", Qt::EditRole));
+	CHECK(proxy.data(proxy.index(0, weight), Qt::DisplayRole).toString() == "12.5");
+
+	// Non-numeric input is rejected and leaves the value untouched.
+	CHECK(!proxy.setData(proxy.index(0, weight), "abc", Qt::EditRole));
+	CHECK(proxy.data(proxy.index(0, weight), Qt::DisplayRole).toString() == "12.5");
+
+	// Editor columns are not real map fields, so they never map to a source cell.
+	CHECK(!proxy.mapToSource(proxy.index(0, weight)).isValid());
+}
+
 TEST_CASE("proxy вЂ“ custom formula columns evaluate arithmetic expressions") {
 	ensure_qapp();
 	TestData d;

@@ -31,6 +31,7 @@
 #include <QSplitter>
 #include <QScrollBar>
 #include <QPushButton>
+#include <QStandardItemModel>
 #include <QSharedPointer>
 #include <map>
 #include <algorithm>
@@ -126,6 +127,12 @@ static QString stable_formula_key(const QString& title) {
 		.arg(slug, QString::number(QDateTime::currentMSecsSinceEpoch()));
 }
 
+static QString stable_editor_key(const QString& title) {
+	QString key = stable_formula_key(title);
+	key.replace("__formula_", "__editor_");
+	return key;
+}
+
 // ============================================================================
 // SpreadsheetProxy
 // ============================================================================
@@ -173,8 +180,15 @@ bool SpreadsheetProxy::isComputedColumn(int column) const {
 		&& column < sourceColumnCount() + static_cast<int>(computed_columns_.size());
 }
 
+bool SpreadsheetProxy::isEditorColumn(int column) const {
+	return isComputedColumn(column)
+		&& computed_columns_.at(static_cast<size_t>(column - sourceColumnCount())).isEditor();
+}
+
 bool SpreadsheetProxy::isEditableColumn(int column) const {
-	return !isComputedColumn(column);
+	// Real map fields and editor (user-stored) virtual columns are editable;
+	// formula/combined virtual columns are read-only.
+	return !isComputedColumn(column) || isEditorColumn(column);
 }
 
 QString SpreadsheetProxy::columnKey(int column) const {
@@ -393,11 +407,48 @@ void SpreadsheetProxy::loadCustomComputedColumns() {
 	for (const QVariant& entry : stored) {
 		const QVariantMap map = entry.toMap();
 		const QString title = map.value("title").toString().trimmed();
-		const QString formula = map.value("formula").toString().trimmed();
-		if (title.isEmpty() || formula.isEmpty()) {
+		if (title.isEmpty()) {
 			continue;
 		}
 
+		const QString group = map.value("group", "Computed").toString().trimmed().isEmpty()
+			? "Computed"
+			: map.value("group").toString().trimmed();
+
+		// Editor (user-stored) columns carry a "kind" of editortext/editornumber and a
+		// per-row "values" map; everything else is a read-only formula column.
+		const QString kind_str = map.value("kind").toString().trimmed().toLower();
+		if (kind_str == "editortext" || kind_str == "editornumber") {
+			QString key = normalize_column_key(map.value("key").toString());
+			if (key.isEmpty()) {
+				key = stable_editor_key(title);
+			}
+			const auto kind = (kind_str == "editornumber")
+				? SpreadsheetComputedColumn::Kind::EditorNumber
+				: SpreadsheetComputedColumn::Kind::EditorText;
+			const bool in_map = map.value("storage").toString().trimmed().toLower() == "inmap";
+
+			SpreadsheetComputedColumn column;
+			column.key = key;
+			column.title = title;
+			column.group = group;
+			column.kind = kind;
+			column.builtin = false;
+			column.storage = in_map ? SpreadsheetComputedColumn::Storage::InMap
+			                        : SpreadsheetComputedColumn::Storage::Local;
+
+			const QVariantMap values = map.value("values").toMap();
+			for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+				column.values[it.key().toStdString()] = it.value().toString();
+			}
+			computed_columns_.push_back(std::move(column));
+			continue;
+		}
+
+		const QString formula = map.value("formula").toString().trimmed();
+		if (formula.isEmpty()) {
+			continue;
+		}
 		QString error;
 		if (!validateFormula(formula, &error)) {
 			continue;
@@ -407,9 +458,6 @@ void SpreadsheetProxy::loadCustomComputedColumns() {
 		if (key.isEmpty()) {
 			key = stable_formula_key(title);
 		}
-		const QString group = map.value("group", "Computed").toString().trimmed().isEmpty()
-			? "Computed"
-			: map.value("group").toString().trimmed();
 
 		computed_columns_.push_back({
 			key,
@@ -434,12 +482,36 @@ void SpreadsheetProxy::saveCustomComputedColumns() const {
 		entry.insert("key", column.key);
 		entry.insert("title", column.title);
 		entry.insert("group", column.group);
-		entry.insert("formula", column.formula);
+		if (column.isEditor()) {
+			entry.insert("kind", column.kind == SpreadsheetComputedColumn::Kind::EditorNumber
+			                         ? "editornumber" : "editortext");
+			entry.insert("storage", column.storage == SpreadsheetComputedColumn::Storage::InMap
+			                            ? "inmap" : "local");
+			// Local storage persists the per-row values here; InMap values live with the
+			// map (handled separately) so they are not duplicated into QSettings.
+			if (column.storage == SpreadsheetComputedColumn::Storage::Local) {
+				QVariantMap values;
+				for (const auto& [row_id, value] : column.values) {
+					values.insert(QString::fromStdString(row_id), value);
+				}
+				entry.insert("values", values);
+			}
+		} else {
+			entry.insert("formula", column.formula);
+		}
 		stored.push_back(entry);
 	}
 
 	QSettings settings;
 	settings.setValue("Spreadsheet/formulas/" + category_name, stored);
+}
+
+void SpreadsheetProxy::persistEditorColumn(const SpreadsheetComputedColumn& column) const {
+	// Currently all editor-column definitions and (for Local storage) their values live in
+	// the same QSettings blob, so a full rewrite is the simplest correct persistence.
+	// InMap storage will hook its own write path here in a later step.
+	Q_UNUSED(column);
+	saveCustomComputedColumns();
 }
 
 std::string SpreadsheetProxy::rowIdForSourceRow(int source_row) const {
@@ -764,6 +836,24 @@ QString SpreadsheetProxy::computedTextValue(const SpreadsheetComputedColumn& col
 }
 
 QVariant SpreadsheetProxy::computedData(int source_row, const SpreadsheetComputedColumn& column, int role) const {
+	if (column.isEditor()) {
+		if (role == Qt::DisplayRole || role == Qt::EditRole) {
+			const std::string row_id = rowIdForSourceRow(source_row);
+			const auto it = column.values.find(row_id);
+			return it != column.values.end() ? it->second : QString{};
+		}
+		if (role == Qt::TextAlignmentRole && column.kind == SpreadsheetComputedColumn::Kind::EditorNumber) {
+			return QVariant::fromValue(static_cast<int>(Qt::AlignRight | Qt::AlignVCenter));
+		}
+		if (role == Qt::ToolTipRole) {
+			const bool in_map = column.storage == SpreadsheetComputedColumn::Storage::InMap;
+			return QString("%1\n%2").arg(column.title,
+				in_map ? QObject::tr("Editor field (stored in map, stripped on game export)")
+				       : QObject::tr("Editor field (stored locally, never exported)"));
+		}
+		return {};
+	}
+
 	if (role == Qt::DisplayRole || role == Qt::EditRole) {
 		if (column.kind == SpreadsheetComputedColumn::Kind::CombinedText) {
 			return computedTextValue(column, source_row);
@@ -817,6 +907,66 @@ int SpreadsheetProxy::addCustomFormulaColumn(const QString& title, const QString
 	endInsertColumns();
 	saveCustomComputedColumns();
 	return insert_at;
+}
+
+int SpreadsheetProxy::addEditorColumn(const QString& title, const QString& group,
+                                      SpreadsheetComputedColumn::Kind kind,
+                                      SpreadsheetComputedColumn::Storage storage,
+                                      QString* error_message) {
+	const QString trimmed_title = title.trimmed();
+	if (trimmed_title.isEmpty()) {
+		if (error_message) *error_message = "Title cannot be empty.";
+		return -1;
+	}
+	if (kind != SpreadsheetComputedColumn::Kind::EditorText
+		&& kind != SpreadsheetComputedColumn::Kind::EditorNumber) {
+		if (error_message) *error_message = "Not an editor column kind.";
+		return -1;
+	}
+
+	const int insert_at = columnCount();
+	beginInsertColumns(QModelIndex(), insert_at, insert_at);
+	SpreadsheetComputedColumn column;
+	column.key = stable_editor_key(trimmed_title);
+	column.title = trimmed_title;
+	column.group = group.trimmed().isEmpty() ? "Editor" : group.trimmed();
+	column.kind = kind;
+	column.builtin = false;
+	column.storage = storage;
+	computed_columns_.push_back(std::move(column));
+	endInsertColumns();
+	saveCustomComputedColumns();
+	return insert_at;
+}
+
+bool SpreadsheetProxy::setData(const QModelIndex& index, const QVariant& value, int role) {
+	if (index.isValid() && (role == Qt::EditRole || role == Qt::DisplayRole)
+		&& isEditorColumn(index.column())) {
+		auto& column = computed_columns_.at(static_cast<size_t>(index.column() - sourceColumnCount()));
+		const int src_row = visible_rows_.at(static_cast<size_t>(index.row()));
+		const std::string row_id = rowIdForSourceRow(src_row);
+		if (row_id.empty()) return false;
+
+		QString text = value.toString();
+		if (column.kind == SpreadsheetComputedColumn::Kind::EditorNumber && !text.trimmed().isEmpty()) {
+			QString normalized = text.trimmed();
+			normalized.replace(',', '.');
+			bool ok = false;
+			const double number = normalized.toDouble(&ok);
+			if (!ok) return false;  // reject non-numeric input for number columns
+			text = format_numeric_value(number);
+		}
+
+		if (text.isEmpty()) {
+			column.values.erase(row_id);
+		} else {
+			column.values[row_id] = text;
+		}
+		persistEditorColumn(column);
+		emit dataChanged(index, index, { Qt::DisplayRole, Qt::EditRole });
+		return true;
+	}
+	return QIdentityProxyModel::setData(index, value, role);
 }
 
 bool SpreadsheetProxy::removeCustomFormulaColumn(const QString& key) {
@@ -907,7 +1057,11 @@ QVariant SpreadsheetProxy::data(const QModelIndex& index, int role) const {
 Qt::ItemFlags SpreadsheetProxy::flags(const QModelIndex& index) const {
 	if (!index.isValid() || !sourceModel()) return Qt::NoItemFlags;
 	if (isComputedColumn(index.column())) {
-		return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+		Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+		if (isEditorColumn(index.column())) {
+			f |= Qt::ItemIsEditable;  // editor columns hold user-entered values
+		}
+		return f;
 	}
 	try {
 		const QModelIndex src = mapToSource(index);
@@ -967,10 +1121,13 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 	if (!rect.isValid()) return;
 	painter->save();
 
-	// Custom (computed/formula) columns get a tinted header + italic accent text so
-	// they are immediately distinguishable from real map fields.
+	// Custom columns get a tinted header + italic accent text so they stand out from real
+	// map fields: violet = read-only formula, teal = editable editor (user-stored) field.
 	const auto* proxy = qobject_cast<const SpreadsheetProxy*>(model());
 	const bool computed = proxy && proxy->isComputedColumn(logicalIndex);
+	const bool editor = proxy && proxy->isEditorColumn(logicalIndex);
+	const QColor accent_fill = editor ? QColor(60, 170, 160, 70) : QColor(140, 100, 220, 60);
+	const QColor accent_text = editor ? QColor(150, 225, 210) : QColor(196, 170, 255);
 
 	QStyleOptionHeader opt;
 	initStyleOption(&opt);
@@ -982,7 +1139,7 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 	style()->drawControl(QStyle::CE_HeaderSection, &opt, painter, this);
 
 	if (computed) {
-		painter->fillRect(rect, QColor(140, 100, 220, 60));
+		painter->fillRect(rect, accent_fill);
 	}
 
 	// Draw sort indicator via CE_HeaderLabel with empty text
@@ -1009,7 +1166,7 @@ void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logi
 		f.setPointSize(f.pointSize() - 1);
 	}
 	painter->setFont(f);
-	painter->setPen(computed ? QColor(196, 170, 255) : palette().buttonText().color());
+	painter->setPen(computed ? accent_text : palette().buttonText().color());
 	painter->drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, text);
 
 	painter->restore();
@@ -1034,9 +1191,11 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	QColor text_color;
 	QString field;
 	bool computed = false;
+	bool editor = false;
 
 	if (const auto* proxy = qobject_cast<const SpreadsheetProxy*>(index.model())) {
 		computed = proxy->isComputedColumn(index.column());
+		editor = proxy->isEditorColumn(index.column());
 		QModelIndex src = proxy->mapToSource(index);
 		if (src.isValid() && proxy->slk &&
 			static_cast<size_t>(src.column()) < proxy->slk->index_to_column.size()) {
@@ -1083,11 +1242,11 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 		painter->fillRect(opts.rect, opts.palette.alternateBase());
 	}
 
-	// Faint violet wash + italics on custom (computed/formula) cells so they read as
-	// "not a real map field" at a glance, matching the tinted column header.
+	// Faint wash + italics on custom cells so they read as "not a real map field" at a
+	// glance, matching the tinted header (teal = editor field, violet = formula).
 	if (computed) {
 		if (!(opts.state & QStyle::State_Selected)) {
-			painter->fillRect(opts.rect, QColor(140, 100, 220, 28));
+			painter->fillRect(opts.rect, editor ? QColor(60, 170, 160, 28) : QColor(140, 100, 220, 28));
 		}
 		opts.font.setItalic(true);
 	}
@@ -1837,11 +1996,18 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetView*
 		groups[gname].push_back({c, label});
 	}
 
-	const std::vector<QString> ordered_groups = {
+	std::vector<QString> ordered_groups = {
 		"General", "Race / Class", "Combat", "HP / Mana / Regen",
 		"Cost / Resources", "Art / Model", "Sound",
-		"Pathing / Movement", "Techtree", "Text / Tooltips", "Computed", "Other",
+		"Pathing / Movement", "Techtree", "Text / Tooltips", "Editor", "Computed", "Other",
 	};
+	// Append any user-defined groups (e.g. custom formula/editor groups) not in the
+	// predefined order so they are still manageable in the dialog.
+	for (const auto& [gname, cols] : groups) {
+		if (std::find(ordered_groups.begin(), ordered_groups.end(), gname) == ordered_groups.end()) {
+			ordered_groups.push_back(gname);
+		}
+	}
 
 	QMap<QString, QTreeWidgetItem*> group_items;
 	std::map<QTreeWidgetItem*, int> item_to_col;
@@ -1948,10 +2114,73 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetView*
 		dlg.accept();
 	});
 
+	// Editor-only fields: editable, user-stored columns (notes / group / status / custom
+	// numbers) that never become real map object data.
+	QPushButton* field_btn = new QPushButton(QString::fromUtf8(u8"Своё поле..."));
+	field_btn->setToolTip(QString::fromUtf8(
+		u8"Добавить редактируемое поле (текст/число), которое сохраняется, "
+		u8"но не попадает в финальные данные карты"));
+	connect(field_btn, &QPushButton::clicked, &dlg, [&, proxy, view, frozen_view]() {
+		QDialog field_dialog(&dlg);
+		field_dialog.setWindowTitle(QString::fromUtf8(u8"Добавить своё поле"));
+		QFormLayout* form = new QFormLayout(&field_dialog);
+
+		QLineEdit* title_edit = new QLineEdit;
+		title_edit->setPlaceholderText(QString::fromUtf8(u8"Заголовок (напр. Группа, Заметка)"));
+		QLineEdit* group_edit = new QLineEdit("Editor");
+
+		QComboBox* type_combo = new QComboBox;
+		type_combo->addItem(QString::fromUtf8(u8"Текст"),
+			static_cast<int>(SpreadsheetComputedColumn::Kind::EditorText));
+		type_combo->addItem(QString::fromUtf8(u8"Число"),
+			static_cast<int>(SpreadsheetComputedColumn::Kind::EditorNumber));
+
+		QComboBox* storage_combo = new QComboBox;
+		storage_combo->addItem(QString::fromUtf8(u8"Локально (этот ПК)"),
+			static_cast<int>(SpreadsheetComputedColumn::Storage::Local));
+		storage_combo->addItem(QString::fromUtf8(u8"В карте — скоро"),
+			static_cast<int>(SpreadsheetComputedColumn::Storage::InMap));
+		// InMap storage needs the "Export for game" strip path; disabled until that lands.
+		if (auto* model = qobject_cast<QStandardItemModel*>(storage_combo->model())) {
+			if (QStandardItem* item = model->item(1)) {
+				item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+			}
+		}
+
+		form->addRow(QString::fromUtf8(u8"Заголовок"), title_edit);
+		form->addRow(QString::fromUtf8(u8"Группа"), group_edit);
+		form->addRow(QString::fromUtf8(u8"Тип"), type_combo);
+		form->addRow(QString::fromUtf8(u8"Хранение"), storage_combo);
+
+		QDialogButtonBox* field_box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+		form->addRow(field_box);
+		connect(field_box, &QDialogButtonBox::accepted, &field_dialog, &QDialog::accept);
+		connect(field_box, &QDialogButtonBox::rejected, &field_dialog, &QDialog::reject);
+
+		if (field_dialog.exec() != QDialog::Accepted) return;
+
+		const auto kind = static_cast<SpreadsheetComputedColumn::Kind>(type_combo->currentData().toInt());
+		const auto storage = static_cast<SpreadsheetComputedColumn::Storage>(storage_combo->currentData().toInt());
+
+		QString error;
+		const int new_column = proxy->addEditorColumn(title_edit->text(), group_edit->text(),
+		                                              kind, storage, &error);
+		if (new_column < 0) {
+			QMessageBox::warning(&dlg, QString::fromUtf8(u8"Своё поле"),
+				error.isEmpty() ? QString::fromUtf8(u8"Не удалось добавить поле.") : error);
+			return;
+		}
+
+		view->setColumnHidden(new_column, false);
+		frozen_view->setColumnHidden(new_column, true);
+		dlg.accept();
+	});
+
 	btn_row->addWidget(defaults_btn);
 	btn_row->addWidget(show_all_btn);
 	btn_row->addWidget(balance_btn);
 	btn_row->addWidget(formula_btn);
+	btn_row->addWidget(field_btn);
 	btn_row->addStretch();
 	main_layout->addLayout(btn_row);
 

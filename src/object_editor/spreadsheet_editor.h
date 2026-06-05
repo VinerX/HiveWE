@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
 #include <functional>
 
 import TableModel;
@@ -20,6 +21,14 @@ struct SpreadsheetComputedColumn {
 	enum class Kind {
 		FormulaNumber,
 		CombinedText,
+		EditorText,    // editable, user-stored free text — never written to the map's object data
+		EditorNumber,  // editable, user-stored number — never written to the map's object data
+	};
+
+	// Where the per-row values of an editor column live.
+	enum class Storage {
+		Local,  // QSettings on this machine (does not travel with the map)
+		InMap,  // war3mapSkin.w3u; stripped on "Export for game" (travels with the map)
 	};
 
 	QString key;
@@ -28,6 +37,10 @@ struct SpreadsheetComputedColumn {
 	QString formula;
 	Kind kind = Kind::FormulaNumber;
 	bool builtin = false;
+	Storage storage = Storage::Local;
+	std::map<std::string, QString> values;  // row id -> value (editor columns only)
+
+	bool isEditor() const { return kind == Kind::EditorText || kind == Kind::EditorNumber; }
 };
 
 class SpreadsheetProxy : public QIdentityProxyModel {
@@ -43,6 +56,7 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 
 	QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
 	QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+	bool setData(const QModelIndex& index, const QVariant& value, int role = Qt::EditRole) override;
 	Qt::ItemFlags flags(const QModelIndex& index) const override;
 
 	QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
@@ -68,7 +82,8 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	int iconColumn() const { return icon_column; }
 	int nameColumn() const { return name_column; }
 	int sourceColumnCount() const;
-	bool isComputedColumn(int column) const;
+	bool isComputedColumn(int column) const;   // any virtual column (formula or editor)
+	bool isEditorColumn(int column) const;     // editable, user-stored virtual column
 	bool isEditableColumn(int column) const;
 	QString columnKey(int column) const;
 	QString groupName(int column) const;
@@ -77,6 +92,10 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	int addCustomFormulaColumn(const QString& title, const QString& formula,
 	                           const QString& group = "Computed",
 	                           QString* error_message = nullptr);
+	int addEditorColumn(const QString& title, const QString& group,
+	                    SpreadsheetComputedColumn::Kind kind,
+	                    SpreadsheetComputedColumn::Storage storage,
+	                    QString* error_message = nullptr);
 	bool removeCustomFormulaColumn(const QString& key);
 
 	std::vector<int> visibleRowsForTest() const { return visible_rows_; }
@@ -108,6 +127,7 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	void populateBuiltInComputedColumns();
 	void loadCustomComputedColumns();
 	void saveCustomComputedColumns() const;
+	void persistEditorColumn(const SpreadsheetComputedColumn& column) const;
 	QVariant computedData(int source_row, const SpreadsheetComputedColumn& column, int role) const;
 	bool evaluateFormula(const QString& formula, int source_row, double& value,
 	                     QString* error_message = nullptr) const;
