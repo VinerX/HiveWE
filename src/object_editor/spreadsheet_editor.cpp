@@ -19,6 +19,9 @@
 #include <QPainter>
 #include <QWheelEvent>
 #include <QCheckBox>
+#include <QStyleOptionHeader>
+#include <QFontMetrics>
+#include <QApplication>
 #include <QGroupBox>
 #include <QTreeWidget>
 #include <QSplitter>
@@ -92,17 +95,17 @@ void SpreadsheetProxy::rebuildVisibleRows() {
 		}
 
 		if (!editor_suffix.isEmpty()) {
-			if (slk->column_headers.contains("editorSuffix")) {
-				auto sv = slk->data<std::string_view>("editorSuffix", id);
-				QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
+			// "editorsuffix" is the canonical lowercase field name across all SLKs
+			const bool has_editorsuffix = slk->column_headers.contains("editorsuffix");
+			const bool has_version      = !has_editorsuffix && slk->column_headers.contains("version");
+			if (has_editorsuffix || has_version) {
+				const std::string_view sv = has_editorsuffix
+					? slk->data<std::string_view>("editorsuffix", id)
+					: slk->data<std::string_view>("version",      id);
+				const QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
 				if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
-			} else if (slk->column_headers.contains("version")) {
-				auto sv = slk->data<std::string_view>("version", id);
-				QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
-				if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
-			} else {
-				continue;
 			}
+			// If neither column exists in this table, suffix filter is ignored
 		}
 
 		if (!field_filter_name.empty() && !field_filter_text.isEmpty() && slk->column_headers.contains(field_filter_name)) {
@@ -295,6 +298,58 @@ QString SpreadsheetProxy::fieldDisplayName(int source_column) const {
 }
 
 // ============================================================================
+// WordWrapHeader — word wrap + font shrink for column headers
+// ============================================================================
+
+void WordWrapHeader::paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const {
+	if (!rect.isValid()) return;
+	painter->save();
+
+	QStyleOptionHeader opt;
+	initStyleOption(&opt);
+	opt.rect = rect;
+	opt.section = logicalIndex;
+	opt.text = ""; // suppress default text; we draw manually
+
+	// Draw background + sort arrow (CE_HeaderSection + CE_HeaderLabel without text)
+	style()->drawControl(QStyle::CE_HeaderSection, &opt, painter, this);
+
+	// Draw sort indicator via CE_HeaderLabel with empty text
+	if (opt.sortIndicator != QStyleOptionHeader::None) {
+		style()->drawControl(QStyle::CE_HeaderLabel, &opt, painter, this);
+	}
+
+	// Compute text rect (leave room for sort arrow on the right)
+	QRect textRect = rect.adjusted(4, 2, -4, -2);
+	if (opt.sortIndicator != QStyleOptionHeader::None) {
+		textRect.adjust(0, 0, -18, 0);
+	}
+
+	const QString text = model() ? model()->headerData(logicalIndex, orientation(), Qt::DisplayRole).toString() : QString{};
+	if (text.isEmpty()) { painter->restore(); return; }
+
+	// Try word wrap at current font; shrink font until it fits
+	QFont f = font();
+	for (;;) {
+		QFontMetrics fm(f);
+		QRect br = fm.boundingRect(textRect, Qt::AlignCenter | Qt::TextWordWrap, text);
+		if (br.height() <= textRect.height() || f.pointSize() <= 6) break;
+		f.setPointSize(f.pointSize() - 1);
+	}
+	painter->setFont(f);
+	painter->setPen(palette().buttonText().color());
+	painter->drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, text);
+
+	painter->restore();
+}
+
+QSize WordWrapHeader::sectionSizeFromContents(int logicalIndex) const {
+	QSize s = QHeaderView::sectionSizeFromContents(logicalIndex);
+	s.setHeight(std::max(s.height(), 40));
+	return s;
+}
+
+// ============================================================================
 // SpreadsheetDelegate
 // ============================================================================
 
@@ -317,10 +372,27 @@ void SpreadsheetDelegate::paint(QPainter* painter, const QStyleOptionViewItem& o
 	}
 
 	static const std::map<std::string, QColor> text_colours = {
+		// Economy
 		{"goldcost",   QColor(255, 200, 60)},
-		{"lumbercost", QColor(100, 220, 100)},
+		{"lumbercost", QColor(120, 210, 100)},
 		{"goldbase",   QColor(255, 200, 60)},
-		{"lumberbase", QColor(100, 220, 100)},
+		{"lumberbase", QColor(120, 210, 100)},
+		{"fmade",      QColor(255, 200, 60)},
+		{"fused",      QColor(255, 200, 60)},
+		// HP / mana
+		{"hp",         QColor(80,  210, 140)},
+		{"hpmax",      QColor(80,  210, 140)},
+		{"starthp",    QColor(80,  210, 140)},
+		{"manan",      QColor(100, 160, 255)},
+		{"startmana",  QColor(100, 160, 255)},
+		{"regenhp",    QColor(60,  190, 120)},
+		{"regenmana",  QColor(80,  140, 230)},
+		// Level / stats
+		{"level",      QColor(230, 180, 80)},
+		{"primary",    QColor(200, 150, 255)},
+		// Combat
+		{"dmgplus1",   QColor(230, 100, 100)},
+		{"def",        QColor(100, 180, 230)},
 	};
 	auto it = text_colours.find(field.toStdString());
 	if (it != text_colours.end()) {
@@ -368,9 +440,24 @@ void SpreadsheetView::wheelEvent(QWheelEvent* event) {
 			verticalHeader()->setDefaultSectionSize(h);
 			int icon_sz = std::clamp(h - 6, 8, 64);
 			setIconSize({icon_sz, icon_sz});
+
+			// Scale cell font proportionally (base: h=22 → app default)
+			const int base_pt = QApplication::font().pointSize();
+			const int font_pt = std::clamp(base_pt + (h - 22) / 4, 6, base_pt + 10);
+			QFont f = font();
+			f.setPointSize(font_pt);
+			setFont(f);
+			horizontalHeader()->setFont(f);
+			verticalHeader()->setFont(f);
+
 			if (peer) {
 				peer->verticalHeader()->setDefaultSectionSize(h);
 				peer->setIconSize({icon_sz, icon_sz});
+				QFont pf = peer->font();
+				pf.setPointSize(font_pt);
+				peer->setFont(pf);
+				peer->horizontalHeader()->setFont(pf);
+				peer->verticalHeader()->setFont(pf);
 			}
 		}
 		event->accept();
@@ -533,15 +620,13 @@ void SpreadsheetEditor::addCategoryTab(
 
 	const int columns = table->slk->columns();
 
-	// Determine initially frozen columns: name column always frozen, icon column too if present
+	// Only the name column is frozen by default (icon shows as decoration next to name text)
 	auto frozen_cols = QSharedPointer<QSet<int>>::create();
 	frozen_cols->insert(proxy->nameColumn());
-	if (proxy->iconColumn() >= 0 && proxy->iconColumn() != proxy->nameColumn()) {
-		frozen_cols->insert(proxy->iconColumn());
-	}
 
 	// --- frozen view: rawcode in vertical header + frozen columns ---
 	SpreadsheetView* frozen_view = new SpreadsheetView;
+	frozen_view->setHorizontalHeader(new WordWrapHeader(Qt::Horizontal, frozen_view));
 	frozen_view->setModel(proxy);
 	frozen_view->setSortingEnabled(false);
 	frozen_view->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -551,6 +636,7 @@ void SpreadsheetEditor::addCategoryTab(
 	frozen_view->setAlternatingRowColors(true);
 	frozen_view->setIconSize({16, 16});
 	frozen_view->setItemDelegate(new SpreadsheetDelegate(frozen_view));
+	frozen_view->setFrameShape(QFrame::NoFrame);
 	frozen_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	frozen_view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	frozen_view->verticalHeader()->setDefaultSectionSize(22);
@@ -559,23 +645,16 @@ void SpreadsheetEditor::addCategoryTab(
 	frozen_view->horizontalHeader()->setMinimumSectionSize(24);
 	frozen_view->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
 	frozen_view->horizontalHeader()->setStretchLastSection(false);
-	frozen_view->horizontalHeader()->setMinimumHeight(40);
-	frozen_view->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
-	QFont frozen_font = frozen_view->horizontalHeader()->font();
-	frozen_font.setPointSize(std::max(7, frozen_font.pointSize() - 1));
-	frozen_view->horizontalHeader()->setFont(frozen_font);
 
 	// Show only frozen columns in frozen view
 	for (int c = 0; c < columns; c++) {
 		frozen_view->setColumnHidden(c, !frozen_cols->contains(c));
 	}
-	// Set icon column width
-	if (proxy->iconColumn() >= 0 && frozen_cols->contains(proxy->iconColumn())) {
-		frozen_view->setColumnWidth(proxy->iconColumn(), 32);
-	}
 
 	// --- main view ---
 	SpreadsheetView* view = new SpreadsheetView;
+	view->setHorizontalHeader(new WordWrapHeader(Qt::Horizontal, view));
+	view->setFrameShape(QFrame::NoFrame);
 	view->setModel(proxy);
 	view->setSortingEnabled(false);
 	view->setAlternatingRowColors(true);
@@ -585,17 +664,11 @@ void SpreadsheetEditor::addCategoryTab(
 	view->horizontalHeader()->setSectionsMovable(true);
 	view->horizontalHeader()->setStretchLastSection(false);
 	view->horizontalHeader()->setMinimumSectionSize(40);
-	view->horizontalHeader()->setMinimumHeight(40);
-	view->horizontalHeader()->setDefaultAlignment(Qt::AlignCenter);
 	view->verticalHeader()->setDefaultSectionSize(22);
 	view->verticalHeader()->setVisible(false);  // rawcode shown in frozen view
 	view->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
 	view->setIconSize({16, 16});
 	view->setItemDelegate(new SpreadsheetDelegate(view));
-
-	QFont hdr_font = view->horizontalHeader()->font();
-	hdr_font.setPointSize(std::max(7, hdr_font.pointSize() - 1));
-	view->horizontalHeader()->setFont(hdr_font);
 
 	// Hide frozen columns from main view
 	for (int c = 0; c < columns; c++) {
@@ -811,6 +884,7 @@ void SpreadsheetEditor::addCategoryTab(
 	// Build container: toolbar + splitter with frozen + main
 	QSplitter* splitter = new QSplitter(Qt::Horizontal);
 	splitter->setChildrenCollapsible(false);
+	splitter->setHandleWidth(1);
 	splitter->addWidget(frozen_view);
 	splitter->addWidget(view);
 	splitter->setSizes({220, 900});

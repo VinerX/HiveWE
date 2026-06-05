@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QIdentityProxyModel>
 #include <QStyledItemDelegate>
+#include <QHeaderView>
 #include <QTabWidget>
 #include <QTableView>
 
@@ -85,6 +86,18 @@ class SpreadsheetDelegate : public QStyledItemDelegate {
 	void paint(QPainter* painter, const QStyleOptionViewItem& option,
 	           const QModelIndex& index) const override;
 	QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
+};
+
+// Header that word-wraps long column labels, shrinking font if needed
+class WordWrapHeader : public QHeaderView {
+	Q_OBJECT
+  public:
+	explicit WordWrapHeader(Qt::Orientation orientation, QWidget* parent = nullptr)
+		: QHeaderView(orientation, parent) {}
+
+  protected:
+	void paintSection(QPainter* painter, const QRect& rect, int logicalIndex) const override;
+	QSize sectionSizeFromContents(int logicalIndex) const override;
 };
 
 class SpreadsheetView : public QTableView {

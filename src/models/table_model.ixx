@@ -189,8 +189,13 @@ export class TableModel : public QAbstractTableModel {
 
 				return QString::fromUtf8(field_data);
 			}
-			case Qt::EditRole:
-				return QString::fromUtf8(slk->data<std::string_view>(field, id));
+			case Qt::EditRole: {
+				const std::string_view raw = slk->data<std::string_view>(field, id);
+				if (raw.starts_with("TRIGSTR")) {
+					return QString::fromUtf8(trigger_strings->string(raw));
+				}
+				return QString::fromUtf8(raw);
+			}
 			case Qt::CheckStateRole: {
 				const std::string_view meta_id = slk->field_to_meta_id(*meta_slk, field, id).value();
 				const std::string_view type = meta_slk->data<std::string_view>("type", meta_id);
@@ -237,10 +242,19 @@ export class TableModel : public QAbstractTableModel {
 		}
 
 		switch (role) {
-			case Qt::EditRole:
-				slk->set_shadow_data(index.column(), index.row(), value.toString().toStdString());
+			case Qt::EditRole: {
+				const std::string& row_id = slk->index_to_row.at(index.row());
+				const std::string& col_field = slk->index_to_column.at(index.column());
+				const std::string raw = std::string(slk->data<std::string_view>(col_field, row_id));
+				if (raw.starts_with("TRIGSTR")) {
+					std::string key = raw;
+					trigger_strings->set_string(key, value.toString().toStdString());
+				} else {
+					slk->set_shadow_data(index.column(), index.row(), value.toString().toStdString());
+				}
 				emit dataChanged(index, index, { Qt::DisplayRole, Qt::EditRole, Qt::DecorationRole });
 				return true;
+			}
 			case Qt::CheckStateRole: {
 				const std::string& id = slk->index_to_row.at(index.row());
 				const std::string& field = slk->index_to_column.at(index.column());
