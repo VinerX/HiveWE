@@ -41,6 +41,9 @@ public:
 	void export_mpq();
 	void play_test();
 
+	void add_to_recent_maps(const QString& path);
+	void update_recent_menu();
+
 private:
 	Ui::HiveWEClass ui;
 	QRibbonTab* current_custom_tab = nullptr;

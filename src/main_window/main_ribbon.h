@@ -43,6 +43,7 @@ public:
 
 	QRibbonButton* trigger_editor = new QRibbonButton;
 	QRibbonButton* object_editor = new QRibbonButton;
+	QRibbonButton* spreadsheet_editor = new QRibbonButton;
 	QRibbonButton* model_editor = new QRibbonButton;
 	QRibbonButton* asset_manager = new QRibbonButton;
 
@@ -54,6 +55,7 @@ public:
 	QToolButton* new_map = new QToolButton;
 	QToolButton* open_map_mpq = new QToolButton;
 	QToolButton* open_map_folder = new QToolButton;
+	QToolButton* open_recent_map = new QToolButton;
 
 	QToolButton* save_map = new QToolButton;
 	QToolButton* save_map_as = new QToolButton;

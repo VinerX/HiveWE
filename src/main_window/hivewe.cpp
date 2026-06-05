@@ -16,6 +16,7 @@ import SkinnedMeshGlobals;
 import ResourceManager;
 import "pathing_palette.h";
 import "object_editor/object_editor.h";
+import "object_editor/spreadsheet_editor.h";
 import "model_editor/model_editor.h";
 import "tile_setter.h";
 import "map_info_editor.h";
@@ -191,6 +192,11 @@ HiveWE::HiveWE(QWidget* parent)
 		window_handler.create_or_raise<ObjectEditor>(nullptr, created);
 	});
 
+	connect(ui.ribbon->spreadsheet_editor, &QRibbonButton::clicked, [this]() {
+		bool created = false;
+		window_handler.create_or_raise<SpreadsheetEditor>(nullptr, created);
+	});
+
 	connect(ui.ribbon->model_editor, &QRibbonButton::clicked, [this]() {
 		bool created = false;
 		window_handler.create_or_raise<ModelEditor>(nullptr, created);
@@ -207,6 +213,7 @@ HiveWE::HiveWE(QWidget* parent)
 	});
 
 	restore_window_state();
+	update_recent_menu();
 
 	minimap->setParent(ui.widget);
 	minimap->move(10, 10);
@@ -248,6 +255,51 @@ void HiveWE::load_map(const fs::path& directory) {
 
 	map->render_manager.resize_framebuffers(ui.widget->width(), ui.widget->height());
 	setWindowTitle("HiveWE 0.11 - " + QString::fromStdString(map->filesystem_path.string()));
+
+	add_to_recent_maps(QString::fromStdString(directory.string()));
+}
+
+void HiveWE::add_to_recent_maps(const QString& path) {
+	QSettings settings;
+	QStringList recent = settings.value("recentMaps").toStringList();
+	recent.removeAll(path);
+	recent.prepend(path);
+	while (recent.size() > 10) recent.removeLast();
+	settings.setValue("recentMaps", recent);
+	update_recent_menu();
+}
+
+void HiveWE::update_recent_menu() {
+	QMenu* menu = ui.ribbon->open_recent_map->menu();
+	if (!menu) return;
+	menu->clear();
+
+	QSettings settings;
+	const QStringList recent = settings.value("recentMaps").toStringList();
+
+	if (recent.isEmpty()) {
+		QAction* empty_act = menu->addAction("(no recent maps)");
+		empty_act->setEnabled(false);
+		return;
+	}
+
+	for (const QString& path : recent) {
+		QAction* act = menu->addAction(path);
+		connect(act, &QAction::triggered, this, [this, path]() {
+			fs::path dir = path.toStdString();
+			if (!fs::exists(dir / "war3map.w3i")) {
+				QMessageBox::warning(this, "Recent Maps",
+					"Map not found or no longer accessible:\n" + path);
+				return;
+			}
+			QMessageBox* loading_box = new QMessageBox(QMessageBox::Icon::Information,
+				"Loading Map", "Loading " + QString::fromStdString(dir.filename().string()));
+			loading_box->show();
+			load_map(dir);
+			loading_box->close();
+			delete loading_box;
+		});
+	}
 }
 
 void HiveWE::load_folder() {
