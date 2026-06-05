@@ -36,6 +36,17 @@
 import std;
 import Globals;
 
+// Decode raw SLK bytes to a QString, tolerating both UTF-8 (Reforged) and local
+// 8-bit (e.g. Windows-1251 for Russian classic maps). If UTF-8 decoding yields the
+// replacement character the bytes were almost certainly local 8-bit, so fall back.
+static QString decode_slk_text(std::string_view sv) {
+	QString u = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
+	if (u.contains(QChar(0xFFFD))) {
+		return QString::fromLocal8Bit(sv.data(), static_cast<int>(sv.size()));
+	}
+	return u;
+}
+
 // ============================================================================
 // SpreadsheetProxy
 // ============================================================================
@@ -104,7 +115,7 @@ void SpreadsheetProxy::rebuildVisibleRows() {
 			if (sv.empty()) {
 				sv = slk->data<std::string_view>("version", id);
 			}
-			const QString qval = QString::fromUtf8(sv.data(), static_cast<int>(sv.size()));
+			const QString qval = decode_slk_text(sv);
 			if (!qval.contains(editor_suffix, Qt::CaseInsensitive)) continue;
 		}
 
@@ -424,6 +435,17 @@ QSize SpreadsheetDelegate::sizeHint(const QStyleOptionViewItem& option, const QM
 	return s;
 }
 
+QWidget* SpreadsheetDelegate::createEditor(QWidget* parent, const QStyleOptionViewItem& option,
+                                           const QModelIndex& index) const {
+	QWidget* editor = QStyledItemDelegate::createEditor(parent, option, index);
+	// option.font carries the view's (possibly zoomed) font — apply it so the inline
+	// editor doesn't snap back to the default size while editing.
+	if (editor) {
+		editor->setFont(option.font);
+	}
+	return editor;
+}
+
 // ============================================================================
 // SpreadsheetView — Ctrl+wheel zoom (syncs peer), Shift+wheel horizontal scroll
 // ============================================================================
@@ -436,29 +458,39 @@ void SpreadsheetView::wheelEvent(QWheelEvent* event) {
 #endif
 	if (event->modifiers() & Qt::ControlModifier) {
 		if (delta != 0) {
-			int h = std::clamp(verticalHeader()->defaultSectionSize() + (delta > 0 ? 2 : -2), 10, 80);
-			verticalHeader()->setDefaultSectionSize(h);
-			int icon_sz = std::clamp(h - 6, 8, 64);
-			setIconSize({icon_sz, icon_sz});
+			const int old_h = verticalHeader()->defaultSectionSize();
+			const int h = std::clamp(old_h + (delta > 0 ? 2 : -2), 10, 80);
+			if (h == old_h) { event->accept(); return; }
+			const double ratio = static_cast<double>(h) / old_h;
 
-			// Scale cell font proportionally (base: h=22 → app default)
+			const int icon_sz = std::clamp(h - 6, 8, 64);
 			const int base_pt = QApplication::font().pointSize();
 			const int font_pt = std::clamp(base_pt + (h - 22) / 4, 6, base_pt + 10);
-			QFont f = font();
-			f.setPointSize(font_pt);
-			setFont(f);
-			horizontalHeader()->setFont(f);
-			verticalHeader()->setFont(f);
 
-			if (peer) {
-				peer->verticalHeader()->setDefaultSectionSize(h);
-				peer->setIconSize({icon_sz, icon_sz});
-				QFont pf = peer->font();
-				pf.setPointSize(font_pt);
-				peer->setFont(pf);
-				peer->horizontalHeader()->setFont(pf);
-				peer->verticalHeader()->setFont(pf);
-			}
+			// Apply row height, icon size, font and column-width scaling to a view so the
+			// whole grid grows/shrinks together (Excel-like zoom, not just taller rows).
+			auto apply = [&](SpreadsheetView* v) {
+				if (!v) return;
+				v->verticalHeader()->setDefaultSectionSize(h);
+				v->setIconSize({icon_sz, icon_sz});
+				QFont f = v->font();
+				f.setPointSize(font_pt);
+				v->setFont(f);
+				v->horizontalHeader()->setFont(f);
+				v->verticalHeader()->setFont(f);
+
+				QHeaderView* hh = v->horizontalHeader();
+				const int n = v->model() ? v->model()->columnCount() : 0;
+				for (int c = 0; c < n; ++c) {
+					if (v->isColumnHidden(c)) continue;
+					const int w = v->columnWidth(c);
+					const int nw = std::clamp(static_cast<int>(std::lround(w * ratio)),
+					                          hh->minimumSectionSize(), 1000);
+					if (nw != w) v->setColumnWidth(c, nw);
+				}
+			};
+			apply(this);
+			apply(peer);
 		}
 		event->accept();
 		return;
@@ -644,7 +676,8 @@ void SpreadsheetEditor::addCategoryTab(
 	frozen_view->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
 	frozen_view->horizontalHeader()->setMinimumSectionSize(24);
 	frozen_view->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
-	frozen_view->horizontalHeader()->setStretchLastSection(false);
+	// Last frozen column fills the panel width → no empty gap before the splitter handle.
+	frozen_view->horizontalHeader()->setStretchLastSection(true);
 
 	// Show only frozen columns in frozen view
 	for (int c = 0; c < columns; c++) {
@@ -715,23 +748,6 @@ void SpreadsheetEditor::addCategoryTab(
 	frozen_view->peer = view;
 	view->peer = frozen_view;
 
-	// Auto-fit the frozen panel to exactly its visible content (rawcode header + frozen
-	// columns) so there is no empty gap between it and the main view.
-	auto update_frozen_width = [frozen_view, columns]() {
-		int w = frozen_view->frameWidth() * 2;
-		if (frozen_view->verticalHeader()->isVisible()) {
-			w += frozen_view->verticalHeader()->width();
-		}
-		for (int c = 0; c < columns; c++) {
-			if (!frozen_view->isColumnHidden(c)) {
-				w += frozen_view->columnWidth(c);
-			}
-		}
-		frozen_view->setFixedWidth(w);
-	};
-	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionResized,
-	        frozen_view, [update_frozen_width](int, int, int) { update_frozen_width(); });
-
 	// Sync vertical scrolling
 	connect(view->verticalScrollBar(), &QScrollBar::valueChanged,
 	        frozen_view->verticalScrollBar(), &QScrollBar::setValue);
@@ -757,6 +773,10 @@ void SpreadsheetEditor::addCategoryTab(
 	});
 
 	// Sort via header clicks (LMB on a column header toggles asc/desc)
+	// NOTE: when setSortingEnabled(false) the header is NOT clickable by default, so
+	// sectionClicked never fires. We must enable clickability explicitly.
+	view->horizontalHeader()->setSectionsClickable(true);
+	frozen_view->horizontalHeader()->setSectionsClickable(true);
 	view->horizontalHeader()->setSortIndicatorShown(true);
 	frozen_view->horizontalHeader()->setSortIndicatorShown(true);
 	auto sort_fn = [proxy, view, frozen_view](int logicalIndex) {
@@ -788,7 +808,6 @@ void SpreadsheetEditor::addCategoryTab(
 			frozen_cols->insert(logical);
 			view->setColumnHidden(logical, true);
 			frozen_view->setColumnHidden(logical, false);
-			update_frozen_width();
 		}
 	});
 
@@ -806,7 +825,6 @@ void SpreadsheetEditor::addCategoryTab(
 			frozen_cols->remove(logical);
 			frozen_view->setColumnHidden(logical, true);
 			view->setColumnHidden(logical, false);
-			update_frozen_width();
 		}
 	});
 
@@ -931,7 +949,7 @@ void SpreadsheetEditor::addCategoryTab(
 
 	// Full layout reset: zoom, visibility, order, widths, freeze state, sort, filters.
 	auto full_reset = [view, frozen_view, proxy, frozen_cols, table, columns, curated,
-	                   update_frozen_width, settings_key]() {
+	                   settings_key]() {
 		QSettings settings;
 		settings.remove(settings_key);
 
@@ -980,8 +998,6 @@ void SpreadsheetEditor::addCategoryTab(
 		proxy->setFieldFilter("", "");
 		view->horizontalHeader()->setSortIndicator(-1, Qt::AscendingOrder);
 		frozen_view->horizontalHeader()->setSortIndicator(-1, Qt::AscendingOrder);
-
-		update_frozen_width();
 	};
 
 	QToolButton* columns_button = new QToolButton;
@@ -992,25 +1008,27 @@ void SpreadsheetEditor::addCategoryTab(
 	});
 	bar->addWidget(columns_button);
 
-	// Build container: toolbar + [frozen | main] side by side (no gap)
-	QWidget* table_row = new QWidget;
-	QHBoxLayout* hl = new QHBoxLayout(table_row);
-	hl->setContentsMargins(0, 0, 0, 0);
-	hl->setSpacing(0);
-	hl->addWidget(frozen_view);
-	hl->addWidget(view, 1);
+	// Build container: toolbar + splitter [frozen | main]. The splitter handle is the
+	// draggable boundary between the frozen (name) panel and the main grid, letting the
+	// user widen the name column. The frozen view stretches its last column to fill the
+	// panel so there is no empty gap.
+	QSplitter* splitter = new QSplitter(Qt::Horizontal);
+	splitter->setChildrenCollapsible(false);
+	splitter->setHandleWidth(4);
+	splitter->addWidget(frozen_view);
+	splitter->addWidget(view);
+	splitter->setStretchFactor(0, 0);
+	splitter->setStretchFactor(1, 1);
+	splitter->setSizes({220, 900});
 
 	QWidget* container = new QWidget;
 	QVBoxLayout* layout = new QVBoxLayout(container);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 	layout->addWidget(bar);
-	layout->addWidget(table_row);
+	layout->addWidget(splitter);
 
 	tabs->addTab(container, name);
-
-	// Initial frozen panel width (after the view has its column widths)
-	update_frozen_width();
 }
 
 // ============================================================================
