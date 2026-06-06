@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -173,6 +174,11 @@ struct WindowLookupContext {
 	HWND hwnd = nullptr;
 };
 
+struct TimedChatCommand {
+	std::size_t after_seconds = 0;
+	std::string text;
+};
+
 std::optional<LaunchedProcess> launch_process(const std::wstring& command_line, const fs::path& working_dir) {
 	STARTUPINFOW si{};
 	si.cb = sizeof(si);
@@ -265,6 +271,65 @@ bool send_enter_to_window(DWORD pid) {
 	SetActiveWindow(hwnd);
 	SetFocus(hwnd);
 
+	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0);
+	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0);
+	return true;
+}
+
+std::wstring utf8_to_wstring(const std::string& text) {
+	if (text.empty()) {
+		return {};
+	}
+
+	const int wide_size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
+	if (wide_size <= 0) {
+		return {};
+	}
+
+	std::wstring wide(static_cast<std::size_t>(wide_size), L'\0');
+	const int converted = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wide.data(), wide_size);
+	if (converted <= 0) {
+		return {};
+	}
+	wide.resize(static_cast<std::size_t>(converted - 1));
+	return wide;
+}
+
+bool focus_window(HWND hwnd) {
+	if (hwnd == nullptr) {
+		return false;
+	}
+
+	ShowWindow(hwnd, SW_RESTORE);
+	BringWindowToTop(hwnd);
+	SetForegroundWindow(hwnd);
+	SetActiveWindow(hwnd);
+	SetFocus(hwnd);
+	return true;
+}
+
+bool send_chat_to_window(DWORD pid, const std::string& text) {
+	HWND hwnd = find_main_window(pid);
+	if (hwnd == nullptr) {
+		return false;
+	}
+
+	const std::wstring wide = utf8_to_wstring(text);
+	if (!text.empty() && wide.empty()) {
+		return false;
+	}
+
+	if (!focus_window(hwnd)) {
+		return false;
+	}
+
+	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0);
+	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0);
+	Sleep(120);
+	for (const wchar_t ch : wide) {
+		PostMessageW(hwnd, WM_CHAR, ch, 1);
+	}
+	Sleep(80);
 	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0);
 	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0);
 	return true;
@@ -425,6 +490,62 @@ std::size_t parse_seconds_option(const Args& args, const std::string& key, std::
 		}
 	}
 	return default_value;
+}
+
+TimedChatCommand parse_timed_chat_entry(const std::string& raw_entry) {
+	const std::size_t separator = raw_entry.find(':');
+	if (separator == std::string::npos || separator == 0 || separator + 1 >= raw_entry.size()) {
+		fail("invalid chat schedule entry: " + raw_entry + " (expected <seconds>:<text>)");
+	}
+
+	TimedChatCommand command;
+	try {
+		command.after_seconds = static_cast<std::size_t>(std::stoul(raw_entry.substr(0, separator)));
+	} catch (...) {
+		fail("invalid chat schedule time: " + raw_entry);
+	}
+
+	command.text = raw_entry.substr(separator + 1);
+	if (command.text.empty()) {
+		fail("empty chat text in entry: " + raw_entry);
+	}
+	return command;
+}
+
+std::vector<TimedChatCommand> parse_chat_schedule(const Args& args) {
+	std::vector<TimedChatCommand> commands;
+
+	const auto chat_after = args.get("chat-after");
+	const auto chat_text = args.get("chat-text");
+	if (chat_after || chat_text) {
+		if (!chat_after || !chat_text) {
+			fail("--chat-after and --chat-text must be used together");
+		}
+		commands.push_back(parse_timed_chat_entry(*chat_after + ":" + *chat_text));
+	}
+
+	if (const auto chat_script = args.get("chat-script")) {
+		std::size_t start = 0;
+		while (start < chat_script->size()) {
+			const std::size_t separator = chat_script->find('|', start);
+			const std::string entry = chat_script->substr(start, separator == std::string::npos ? std::string::npos : separator - start);
+			if (!entry.empty()) {
+				commands.push_back(parse_timed_chat_entry(entry));
+			}
+			if (separator == std::string::npos) {
+				break;
+			}
+			start = separator + 1;
+		}
+	}
+
+	std::sort(commands.begin(), commands.end(), [](const TimedChatCommand& a, const TimedChatCommand& b) {
+		if (a.after_seconds != b.after_seconds) {
+			return a.after_seconds < b.after_seconds;
+		}
+		return a.text < b.text;
+	});
+	return commands;
 }
 
 // Read the user-configured Warcraft directory that HiveWE stores via QSettings at
@@ -597,11 +718,13 @@ void cmd_probe_map(const Args& args) {
 	const std::size_t wait_seconds = parse_seconds_option(args, "wait", 12);
 	const std::size_t tail_lines = parse_seconds_option(args, "tail", 120);
 	const auto click_after_opt = args.get("click-after");
+	const std::vector<TimedChatCommand> chat_schedule = parse_chat_schedule(args);
 	const bool terminate_after_wait = !args.has_flag("keep-open");
 	bool click_sent = false;
 	bool click_window_found = false;
 	bool enter_after_click_sent = false;
 	bool close_confirm_enter_sent = false;
+	std::vector<bool> chat_sent(chat_schedule.size(), false);
 	DWORD wait_result = WAIT_TIMEOUT;
 
 	if (click_after_opt) {
@@ -609,20 +732,45 @@ void cmd_probe_map(const Args& args) {
 		if (click_after_seconds >= wait_seconds) {
 			fail("--click-after must be smaller than --wait");
 		}
+	}
+	for (const auto& command : chat_schedule) {
+		if (command.after_seconds >= wait_seconds) {
+			fail("chat command scheduled outside probe window: " + std::to_string(command.after_seconds) + ":" + command.text);
+		}
+	}
 
-		wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(click_after_seconds * 1000));
-		if (wait_result != WAIT_OBJECT_0) {
+	const std::size_t click_after_seconds = click_after_opt ? parse_seconds_option(args, "click-after", 0) : 0;
+	const ULONGLONG start_tick = GetTickCount64();
+	std::size_t next_chat_index = 0;
+	bool click_handled = false;
+
+	while (true) {
+		wait_result = WaitForSingleObject(proc->process, 100);
+		if (wait_result == WAIT_OBJECT_0) {
+			break;
+		}
+
+		const ULONGLONG elapsed_ms = GetTickCount64() - start_tick;
+		const std::size_t elapsed_seconds = static_cast<std::size_t>(elapsed_ms / 1000);
+
+		if (click_after_opt && !click_handled && elapsed_seconds >= click_after_seconds) {
 			click_sent = click_window_center(proc->pid);
 			click_window_found = find_main_window(proc->pid) != nullptr;
 			if (click_sent) {
 				Sleep(150);
 				enter_after_click_sent = send_enter_to_window(proc->pid);
 			}
-			const std::size_t remaining_seconds = wait_seconds - click_after_seconds;
-			wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(remaining_seconds * 1000));
+			click_handled = true;
 		}
-	} else {
-		wait_result = WaitForSingleObject(proc->process, static_cast<DWORD>(wait_seconds * 1000));
+
+		while (next_chat_index < chat_schedule.size() && elapsed_seconds >= chat_schedule[next_chat_index].after_seconds) {
+			chat_sent[next_chat_index] = send_chat_to_window(proc->pid, chat_schedule[next_chat_index].text);
+			++next_chat_index;
+		}
+
+		if (elapsed_ms >= static_cast<ULONGLONG>(wait_seconds) * 1000ULL) {
+			break;
+		}
 	}
 	const bool exited_within_wait = (wait_result == WAIT_OBJECT_0);
 	bool close_requested = false;
@@ -674,6 +822,15 @@ void cmd_probe_map(const Args& args) {
 		result["probe_log_found"] = fs::is_regular_file(*probe_log_path);
 		result["probe_log_excerpt"] = read_preload_log_excerpt(*probe_log_path, tail_lines);
 	}
+	json chat_results = json::array();
+	for (std::size_t i = 0; i < chat_schedule.size(); ++i) {
+		chat_results.push_back({
+			{"after_seconds", chat_schedule[i].after_seconds},
+			{"text", chat_schedule[i].text},
+			{"sent", chat_sent[i]},
+		});
+	}
+	result["chat_results"] = chat_results;
 	emit(result);
 }
 
@@ -784,7 +941,7 @@ int main(int argc, char* argv[]) {
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
-				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>]"},
+				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--chat-after 20 --chat-text -ai2] [--chat-script \"20:-ai2|35:-raceselect1\"] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>]"},
 				   {"read-war3-log", "[--map <dir|.w3x>] [--tail 120] [--log <War3Log.txt>]"},
 				   {"read-custom-map-data-log", "--file <relative-or-absolute-file> [--tail 120]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},
