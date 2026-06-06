@@ -20,8 +20,20 @@ import INI;
 import RaceGraph;
 import TriggerStrings;
 import Utilities;
+import BinaryReader;
 
 namespace {
+namespace fs = std::filesystem;
+
+std::string resolve_trigger_string(std::string raw, const TriggerStrings& ts) {
+	if (raw.starts_with("TRIGSTR")) {
+		const std::string_view resolved = ts.string(raw);
+		if (!resolved.empty()) {
+			return to_utf8(resolved);
+		}
+	}
+	return to_utf8(raw);
+}
 
 // ---- tiny JSON writer -----------------------------------------------------
 
@@ -148,6 +160,46 @@ std::string to_lower_utf8(std::string_view sv) {
 	return result;
 }
 
+std::string hex_to_string(std::string_view hex) {
+	std::string out;
+	out.reserve(hex.size() / 2);
+	for (std::size_t i = 0; i + 1 < hex.size(); i += 2) {
+		char c = 0;
+		auto d = [](char ch) -> int {
+			if (ch >= '0' && ch <= '9') return ch - '0';
+			if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
+			if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
+			return -1;
+		};
+		int hi = d(hex[i]);
+		int lo = d(hex[i + 1]);
+		if (hi < 0 || lo < 0) continue;
+		c = static_cast<char>((hi << 4) | lo);
+		out.push_back(c);
+	}
+	return out;
+}
+
+std::optional<std::string> resolve_suffix(const CliArgs& args) {
+	if (const auto h = args.get("suffix-hex")) {
+		return hex_to_string(*h);
+	}
+	if (const auto f = args.get("suffix-file")) {
+		try {
+			std::ifstream file(*f, std::ios::binary);
+			if (!file) return std::nullopt;
+			std::stringstream ss;
+			ss << file.rdbuf();
+			std::string content = ss.str();
+			while (!content.empty() && (content.back() == '\n' || content.back() == '\r')) content.pop_back();
+			return content;
+		} catch (const std::exception&) {
+			return std::nullopt;
+		}
+	}
+	return args.get("suffix");
+}
+
 std::vector<std::string> split_csv(std::string_view sv) {
 	std::vector<std::string> out;
 	std::string current;
@@ -184,6 +236,27 @@ std::string string_array_json(const std::vector<std::string>& values) {
 
 std::string string_array_json(const std::set<std::string>& values) {
 	return string_array_json(std::vector<std::string>(values.begin(), values.end()));
+}
+
+std::vector<std::string> split_rawcode_list(std::string_view value) {
+	std::vector<std::string> result;
+	std::string current;
+	for (char c : value) {
+		if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '\'') {
+			current.push_back(c);
+		} else {
+			if (current.size() == 4) {
+				result.push_back(current);
+			}
+			current.clear();
+		}
+	}
+	if (current.size() == 4) {
+		result.push_back(current);
+	}
+	std::sort(result.begin(), result.end());
+	result.erase(std::unique(result.begin(), result.end()), result.end());
+	return result;
 }
 
 using RaceNodeIndex = std::unordered_map<std::string, const RaceGraphNode*>;
@@ -313,12 +386,18 @@ std::optional<TypeInfo> type_for(const std::string& name) {
 
 const char* const kTypeNames[] = {"unit", "item", "ability", "doodad", "destructible", "upgrade", "buff"};
 
-std::string display_name(const slk::SLK& slk, const std::string& id) {
-	for (const char* col : {"name", "editorname", "bufftip"}) {
+std::string display_name(const slk::SLK& slk, const std::string& id, const TriggerStrings& ts) {
+	for (const char* col : {"name", "editorname", "name1", "bufftip"}) {
 		if (slk.column_headers.contains(col)) {
 			std::string n = slk.data<std::string>(col, id);
 			if (!n.empty()) {
-				return n;
+				if (n.starts_with("TRIGSTR")) {
+					std::string_view resolved = ts.string(n);
+					if (!resolved.empty()) {
+						return to_utf8(resolved);
+					}
+				}
+				return to_utf8(n);
 			}
 		}
 	}
@@ -412,9 +491,9 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 	}
 
 	if (args.command == "describe-race") {
-		const auto suffix_opt = args.get("suffix");
+		const auto suffix_opt = resolve_suffix(args);
 		if (!suffix_opt) {
-			return error("missing required option: --suffix <editor suffix>");
+			return error("missing required option: --suffix <editor suffix> (or --suffix-hex <hex> / --suffix-file <path>)");
 		}
 
 		std::vector<std::string> tokens;
@@ -457,7 +536,9 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 			bootstrap_warnings.push_back("Warcraft III directory was not provided; using map-only race analysis");
 		}
 
-		RaceGraphAnalysis analysis = analyze_race_graph(std::filesystem::absolute(*map_opt), *suffix_opt, tokens, ts, units_for_graph);
+		const slk::SLK* abilities_for_graph = units_for_graph ? &abilities_slk : nullptr;
+		const slk::SLK* upgrades_for_graph = units_for_graph ? &upgrade_slk : nullptr;
+		RaceGraphAnalysis analysis = analyze_race_graph(std::filesystem::absolute(*map_opt), *suffix_opt, tokens, ts, units_for_graph, abilities_for_graph, upgrades_for_graph);
 		analysis.warnings.insert(analysis.warnings.begin(), bootstrap_warnings.begin(), bootstrap_warnings.end());
 
 		std::string nodes = "[";
@@ -564,6 +645,600 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		return o.dump();
 	}
 
+	if (args.command == "show-building") {
+		const auto id_opt = args.get("id");
+		if (!id_opt) {
+			return error("missing required option: --id <building rawcode>");
+		}
+		const std::string building_id = *id_opt;
+
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+		TriggerStrings ts;
+		try { ts.load(); } catch (const std::exception&) {}
+
+		std::string warcraft;
+		if (const auto w = args.get("warcraft")) {
+			warcraft = *w;
+		} else if (!warcraft_fallback.empty()) {
+			warcraft = warcraft_fallback;
+		}
+		if (!warcraft.empty()) {
+			try {
+				if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts)) {
+					// continue with map-only fallback
+				} else {
+					goto show_building_full;
+				}
+			} catch (const std::exception&) {}
+		}
+		// Fall through to map-only path
+		goto show_building_map_only;
+
+	show_building_full:
+		{
+			if (!units_slk.row_headers.contains(building_id)) {
+				return error("building not found in unit data: " + building_id);
+			}
+			const bool is_bldg = units_slk.data<std::string>("isbldg", building_id) == "1";
+			const bool is_hero = !units_slk.data<std::string>("primaryattribute", building_id).empty();
+			std::string category = is_bldg ? "building" : (is_hero ? "hero" : "unit");
+
+			std::string base_id = units_slk.data<std::string>("oldid", building_id);
+			JsonObject fields;
+			for (const auto& [col, col_idx] : units_slk.column_headers) {
+				std::string v = units_slk.data<std::string>(col, building_id);
+				if (!v.empty()) {
+					fields.str(col, v);
+				}
+			}
+
+			std::vector<std::string> trains = split_rawcode_list(units_slk.data<std::string>("trains", building_id));
+			std::vector<std::string> ability_ids = split_rawcode_list(units_slk.data<std::string>("abillist", building_id));
+			std::vector<std::string> hero_ability_ids = split_rawcode_list(units_slk.data<std::string>("heroabillist", building_id));
+			ability_ids.insert(ability_ids.end(), hero_ability_ids.begin(), hero_ability_ids.end());
+			std::sort(ability_ids.begin(), ability_ids.end());
+			ability_ids.erase(std::unique(ability_ids.begin(), ability_ids.end()), ability_ids.end());
+
+			std::vector<std::string> research_ids = split_rawcode_list(units_slk.data<std::string>("researches", building_id));
+			for (auto& rid : split_rawcode_list(units_slk.data<std::string>("heroresearches", building_id))) {
+				research_ids.push_back(rid);
+			}
+			std::sort(research_ids.begin(), research_ids.end());
+			research_ids.erase(std::unique(research_ids.begin(), research_ids.end()), research_ids.end());
+
+			std::vector<std::string> upgrades_to;
+			for (const char* key : {"upgrade", "upgrades", "revive"}) {
+				for (auto& id : split_rawcode_list(units_slk.data<std::string>(key, building_id))) {
+					upgrades_to.push_back(id);
+				}
+			}
+			std::sort(upgrades_to.begin(), upgrades_to.end());
+			upgrades_to.erase(std::unique(upgrades_to.begin(), upgrades_to.end()), upgrades_to.end());
+
+			auto train_names = string_array_json(trains);
+			std::string ability_arr = "[";
+			for (std::size_t i = 0; i < ability_ids.size(); ++i) {
+				if (i) ability_arr += ",";
+				const auto n = display_name(abilities_slk, ability_ids[i], ts);
+				JsonObject ro;
+				ro.str("id", ability_ids[i]);
+				ro.str("name", n);
+				ability_arr += ro.dump();
+			}
+			ability_arr += "]";
+
+			std::string research_arr = "[";
+			for (std::size_t i = 0; i < research_ids.size(); ++i) {
+				if (i) research_arr += ",";
+				const auto n = display_name(upgrade_slk, research_ids[i], ts);
+				JsonObject ro;
+				ro.str("id", research_ids[i]);
+				ro.str("name", n);
+				research_arr += ro.dump();
+			}
+			research_arr += "]";
+
+			std::string upgrade_arr = "[";
+			for (std::size_t i = 0; i < upgrades_to.size(); ++i) {
+				if (i) upgrade_arr += ",";
+				const auto n = display_name(units_slk, upgrades_to[i], ts);
+				JsonObject uo;
+				uo.str("id", upgrades_to[i]);
+				uo.str("name", n);
+				upgrade_arr += uo.dump();
+			}
+			upgrade_arr += "]";
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.str("id", building_id);
+			o.str("name", display_name(units_slk, building_id, ts));
+			o.str("category", category);
+			o.str("base_id", base_id);
+			o.raw("trains", train_names);
+			o.raw("researches", research_arr);
+			o.raw("abilities", ability_arr);
+			o.raw("upgrades_to", upgrade_arr);
+			o.boolean("used_full_data", true);
+			ok = true;
+			return o.dump();
+		}
+
+	show_building_map_only:
+		{
+			const fs::path meta_path = "data/overrides/units/UnitMetaData.slk";
+			if (!fs::is_regular_file(meta_path)) {
+				return error("local UnitMetaData.slk not found; cannot read .w3u without Warcraft III data");
+			}
+			slk::SLK meta_slk(meta_path, true);
+			meta_slk.build_meta_map();
+
+			if (!hierarchy.map_file_exists("war3map.w3u")) {
+				return error("map does not contain war3map.w3u");
+			}
+
+			BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.w3u", "show-building");
+			const uint32_t version = reader.read<uint32_t>();
+
+			std::unordered_map<std::string, std::string> name_map;
+			std::unordered_map<std::string, std::string> oldid_map;
+			std::unordered_map<std::string, std::string> isbldg_map;
+			std::unordered_map<std::string, std::string> trains_map;
+			std::unordered_map<std::string, std::string> abillist_map;
+			std::unordered_map<std::string, std::string> researches_map;
+			std::unordered_map<std::string, std::string> upgrade_map;
+
+			auto parse_table = [&](bool custom) {
+				const uint32_t objects = reader.read<uint32_t>();
+				for (uint32_t i = 0; i < objects; ++i) {
+					const std::string orig = reader.read_string(4);
+					const std::string mod = reader.read_string(4);
+					const std::string obj = custom ? mod : orig;
+					if (version >= 3) { (void)reader.read<uint32_t>(); (void)reader.read<uint32_t>(); }
+					const uint32_t mods = reader.read<uint32_t>();
+					for (uint32_t j = 0; j < mods; ++j) {
+						const std::string mod_id = reader.read_string(4);
+						const uint32_t type = reader.read<uint32_t>();
+						std::string col = to_lower(meta_slk.data<std::string>("field", mod_id));
+						std::string v;
+						switch (type) {
+							case 0: v = std::to_string(reader.read<int>()); break;
+							case 1: case 2: v = std::to_string(reader.read<float>()); break;
+							case 3: v = reader.read_c_string(); break;
+							default: v.clear(); break;
+						}
+						reader.advance(4);
+						if (col == "name") name_map[obj] = resolve_trigger_string(v, ts);
+						else if (col == "oldid") oldid_map[obj] = v;
+						else if (col == "isbldg") isbldg_map[obj] = v;
+						else if (col == "trains") trains_map[obj] = v;
+						else if (col == "abillist" || col == "heroabillist") {
+							if (auto it = abillist_map.find(obj); it != abillist_map.end())
+								it->second += "," + v;
+							else
+								abillist_map[obj] = v;
+						}
+						else if (col == "researches" || col == "heroresearches") {
+							if (auto it = researches_map.find(obj); it != researches_map.end())
+								it->second += "," + v;
+							else
+								researches_map[obj] = v;
+						}
+						else if (col == "upgrade" || col == "upgrades" || col == "revive") upgrade_map[obj] = v;
+					}
+				}
+			};
+
+			parse_table(false);
+			parse_table(true);
+
+			if (!name_map.contains(building_id) && !oldid_map.contains(building_id)) {
+				return error("building not found in war3map.w3u: " + building_id);
+			}
+
+			std::string name = name_map.contains(building_id) ? name_map.at(building_id) : "";
+			std::string base_id = oldid_map.contains(building_id) ? oldid_map.at(building_id) : "";
+			std::string category = isbldg_map.contains(building_id) && isbldg_map.at(building_id) == "1" ? "building" : "unit";
+
+			std::vector<std::string> trains = split_rawcode_list(trains_map.contains(building_id) ? trains_map.at(building_id) : "");
+			std::vector<std::string> ability_ids = split_rawcode_list(abillist_map.contains(building_id) ? abillist_map.at(building_id) : "");
+			std::vector<std::string> research_ids = split_rawcode_list(researches_map.contains(building_id) ? researches_map.at(building_id) : "");
+			std::vector<std::string> upgrades_to = split_rawcode_list(upgrade_map.contains(building_id) ? upgrade_map.at(building_id) : "");
+
+			std::set<std::string> unique_abilities(ability_ids.begin(), ability_ids.end());
+			std::set<std::string> unique_researches(research_ids.begin(), research_ids.end());
+			std::sort(trains.begin(), trains.end());
+			trains.erase(std::unique(trains.begin(), trains.end()), trains.end());
+
+			std::string ability_arr = "[";
+			bool first_a = true;
+			for (const auto& aid : unique_abilities) {
+				if (!first_a) ability_arr += ",";
+				first_a = false;
+				JsonObject ro;
+				ro.str("id", aid);
+				ro.str("name", "");
+				ability_arr += ro.dump();
+			}
+			ability_arr += "]";
+
+			std::string research_arr = "[";
+			bool first_r = true;
+			for (const auto& rid : unique_researches) {
+				if (!first_r) research_arr += ",";
+				first_r = false;
+				JsonObject ro;
+				ro.str("id", rid);
+				ro.str("name", "");
+				research_arr += ro.dump();
+			}
+			research_arr += "]";
+
+			std::string upgrade_arr = "[";
+			bool first_u = true;
+			for (const auto& uid : upgrades_to) {
+				if (!first_u) upgrade_arr += ",";
+				first_u = false;
+				JsonObject uo;
+				uo.str("id", uid);
+				uo.str("name", "");
+				upgrade_arr += uo.dump();
+			}
+			upgrade_arr += "]";
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.str("id", building_id);
+			o.str("name", name);
+			o.str("category", category);
+			o.str("base_id", base_id);
+			o.raw("trains", string_array_json(trains));
+			o.raw("researches", research_arr);
+			o.raw("abilities", ability_arr);
+			o.raw("upgrades_to", upgrade_arr);
+			o.boolean("used_full_data", false);
+			ok = true;
+			return o.dump();
+		}
+	}
+
+	if (args.command == "list-race-objects") {
+		const auto suffix_opt = resolve_suffix(args);
+		if (!suffix_opt) {
+			return error("missing required option: --suffix <editor suffix> (or --suffix-hex <hex> / --suffix-file <path>)");
+		}
+		const auto type_opt = args.get("type");
+		std::string type_filter = type_opt.value_or("all");
+
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+		TriggerStrings ts;
+		try { ts.load(); } catch (const std::exception&) {}
+
+		std::string warcraft;
+		std::vector<std::string> warnings;
+		if (const auto w = args.get("warcraft")) {
+			warcraft = *w;
+		} else if (!warcraft_fallback.empty()) {
+			warcraft = warcraft_fallback;
+		}
+
+		std::unordered_map<std::string, std::string> unit_names;
+		std::unordered_map<std::string, std::string> unit_suffixes;
+		std::unordered_map<std::string, std::string> unit_oldids;
+		std::unordered_map<std::string, std::string> unit_isbldg;
+		std::unordered_map<std::string, std::string> unit_trains;
+		std::unordered_map<std::string, std::string> unit_abillist;
+		std::unordered_map<std::string, std::string> unit_upgrade;
+		std::unordered_map<std::string, std::string> unit_primary;
+
+		if (!warcraft.empty()) {
+			try {
+				if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts)) {
+					warnings.push_back("full object data unavailable: " + *err);
+					goto list_race_map_only;
+				}
+				for (const auto& [id, idx] : units_slk.row_headers) {
+					unit_names[id] = resolve_trigger_string(units_slk.data<std::string>("name", id), ts);
+					unit_suffixes[id] = resolve_trigger_string(units_slk.data<std::string>("editorsuffix", id), ts);
+					unit_oldids[id] = units_slk.data<std::string>("oldid", id);
+					unit_isbldg[id] = units_slk.data<std::string>("isbldg", id);
+					unit_trains[id] = units_slk.data<std::string>("trains", id);
+					unit_abillist[id] = units_slk.data<std::string>("abillist", id);
+					unit_upgrade[id] = units_slk.data<std::string>("upgrade", id);
+					unit_primary[id] = units_slk.data<std::string>("primaryattribute", id);
+				}
+				goto list_race_output;
+			} catch (const std::exception& e) {
+				warnings.push_back(std::string("full object data unavailable: ") + e.what());
+			}
+		}
+
+	list_race_map_only:
+		{
+			const fs::path meta_path = "data/overrides/units/UnitMetaData.slk";
+			if (!fs::is_regular_file(meta_path)) {
+				warnings.push_back("local UnitMetaData.slk not found; map-only fallback unavailable");
+				goto list_race_output;
+			}
+			slk::SLK meta_slk(meta_path, true);
+			meta_slk.build_meta_map();
+			if (!hierarchy.map_file_exists("war3map.w3u")) {
+				warnings.push_back("map does not contain war3map.w3u");
+				goto list_race_output;
+			}
+			BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.w3u", "list-race-objects");
+			const uint32_t version = reader.read<uint32_t>();
+
+			auto parse_table = [&](bool custom) {
+				const uint32_t objects = reader.read<uint32_t>();
+				for (uint32_t i = 0; i < objects; ++i) {
+					const std::string orig = reader.read_string(4);
+					const std::string mod = reader.read_string(4);
+					const std::string obj = custom ? mod : orig;
+					if (version >= 3) { (void)reader.read<uint32_t>(); (void)reader.read<uint32_t>(); }
+					const uint32_t mods = reader.read<uint32_t>();
+					for (uint32_t j = 0; j < mods; ++j) {
+						const std::string mod_id = reader.read_string(4);
+						const uint32_t type = reader.read<uint32_t>();
+						std::string col = to_lower(meta_slk.data<std::string>("field", mod_id));
+						std::string v;
+						switch (type) {
+							case 0: v = std::to_string(reader.read<int>()); break;
+							case 1: case 2: v = std::to_string(reader.read<float>()); break;
+							case 3: v = reader.read_c_string(); break;
+							default: v.clear(); break;
+						}
+						reader.advance(4);
+						if (col == "name") unit_names[obj] = resolve_trigger_string(v, ts);
+						else if (col == "editorsuffix") unit_suffixes[obj] = resolve_trigger_string(v, ts);
+						else if (col == "oldid") unit_oldids[obj] = v;
+						else if (col == "isbldg") unit_isbldg[obj] = v;
+						else if (col == "trains") unit_trains[obj] = v;
+						else if (col == "abillist" || col == "heroabillist") {
+							if (auto it = unit_abillist.find(obj); it != unit_abillist.end())
+								it->second += "," + v;
+							else
+								unit_abillist[obj] = v;
+						}
+						else if (col == "upgrade" || col == "upgrades" || col == "revive") unit_upgrade[obj] = v;
+						else if (col == "primaryattribute") unit_primary[obj] = v;
+					}
+				}
+			};
+			parse_table(false);
+			parse_table(true);
+		}
+
+	list_race_output:
+		{
+			std::vector<std::string> rows;
+			for (const auto& [id, suffix] : unit_suffixes) {
+				if (to_lower_utf8(suffix).find(to_lower_utf8(*suffix_opt)) == std::string::npos) {
+					continue;
+				}
+				const bool is_building = unit_isbldg.contains(id) && unit_isbldg.at(id) == "1";
+				const bool is_hero = !is_building && unit_primary.contains(id) && !unit_primary.at(id).empty() && unit_primary.at(id) != "0";
+				std::string cat = is_building ? "building" : (is_hero ? "hero" : "unit");
+				if (type_filter != "all" && cat != type_filter) continue;
+
+				std::string display = std::format("{}  {:8}  {}", id, cat, unit_names.contains(id) ? unit_names.at(id) : "");
+
+				if (is_building) {
+					if (unit_trains.contains(id) && !unit_trains.at(id).empty()) {
+						display += "  trains: " + unit_trains.at(id);
+					}
+					std::string abils = unit_abillist.contains(id) ? unit_abillist.at(id) : "";
+					if (!abils.empty()) {
+						display += "  researches: " + abils;
+					}
+					if (unit_upgrade.contains(id) && !unit_upgrade.at(id).empty()) {
+						display += "  upgrades_to: " + unit_upgrade.at(id);
+					}
+				}
+
+				JsonObject ro;
+				ro.str("line", display);
+				rows.push_back(ro.dump());
+			}
+
+			std::sort(rows.begin(), rows.end());
+
+			std::string arr = "[";
+			for (std::size_t i = 0; i < rows.size(); ++i) {
+				if (i) arr += ",";
+				arr += rows[i];
+			}
+			arr += "]";
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.str("suffix", *suffix_opt);
+			o.number("count", rows.size());
+			o.raw("objects", arr);
+			if (!warnings.empty()) {
+				o.raw("warnings", string_array_json(warnings));
+			}
+			ok = true;
+			return o.dump();
+		}
+	}
+
+	if (args.command == "list-all-races") {
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+		TriggerStrings ts;
+		try { ts.load(); } catch (const std::exception&) {}
+
+		std::string warcraft;
+		std::vector<std::string> warnings;
+		if (const auto w = args.get("warcraft")) {
+			warcraft = *w;
+		} else if (!warcraft_fallback.empty()) {
+			warcraft = warcraft_fallback;
+		}
+
+		std::unordered_map<std::string, std::string> unit_suffixes;
+		std::unordered_map<std::string, std::string> unit_isbldg;
+		std::unordered_map<std::string, std::string> unit_name;
+		std::unordered_map<std::string, std::string> unit_trains;
+		std::unordered_map<std::string, std::string> unit_primary;
+		std::unordered_map<std::string, std::string> unit_builds;
+
+		if (!warcraft.empty()) {
+			try {
+				if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts)) {
+					warnings.push_back("full object data unavailable: " + *err);
+					goto list_races_map_only;
+				}
+				for (const auto& [id, idx] : units_slk.row_headers) {
+					unit_suffixes[id] = resolve_trigger_string(units_slk.data<std::string>("editorsuffix", id), ts);
+					unit_isbldg[id] = units_slk.data<std::string>("isbldg", id);
+					unit_name[id] = resolve_trigger_string(units_slk.data<std::string>("name", id), ts);
+					unit_trains[id] = units_slk.data<std::string>("trains", id);
+					unit_primary[id] = units_slk.data<std::string>("primaryattribute", id);
+					unit_builds[id] = units_slk.data<std::string>("builds", id);
+				}
+				goto list_races_output;
+			} catch (const std::exception& e) {
+				warnings.push_back(std::string("full object data unavailable: ") + e.what());
+			}
+		}
+
+	list_races_map_only:
+		{
+			const fs::path meta_path = "data/overrides/units/UnitMetaData.slk";
+			if (!fs::is_regular_file(meta_path)) {
+				warnings.push_back("local UnitMetaData.slk not found");
+				goto list_races_output;
+			}
+			slk::SLK meta_slk(meta_path, true);
+			meta_slk.build_meta_map();
+			if (!hierarchy.map_file_exists("war3map.w3u")) {
+				warnings.push_back("map does not contain war3map.w3u");
+				goto list_races_output;
+			}
+			BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.w3u", "list-all-races");
+			const uint32_t version = reader.read<uint32_t>();
+
+			auto parse_table = [&](bool custom) {
+				const uint32_t objects = reader.read<uint32_t>();
+				for (uint32_t i = 0; i < objects; ++i) {
+					const std::string orig = reader.read_string(4);
+					const std::string mod = reader.read_string(4);
+					const std::string obj = custom ? mod : orig;
+					if (version >= 3) { (void)reader.read<uint32_t>(); (void)reader.read<uint32_t>(); }
+					const uint32_t mods = reader.read<uint32_t>();
+					for (uint32_t j = 0; j < mods; ++j) {
+						const std::string mod_id = reader.read_string(4);
+						const uint32_t type = reader.read<uint32_t>();
+						std::string col = to_lower(meta_slk.data<std::string>("field", mod_id));
+						std::string v;
+						switch (type) {
+							case 0: v = std::to_string(reader.read<int>()); break;
+							case 1: case 2: v = std::to_string(reader.read<float>()); break;
+							case 3: v = reader.read_c_string(); break;
+							default: v.clear(); break;
+						}
+						reader.advance(4);
+						if (col == "editorsuffix") unit_suffixes[obj] = resolve_trigger_string(v, ts);
+						else if (col == "isbldg") unit_isbldg[obj] = v;
+						else if (col == "name") unit_name[obj] = resolve_trigger_string(v, ts);
+						else if (col == "trains") unit_trains[obj] = v;
+						else if (col == "primaryattribute") unit_primary[obj] = v;
+						else if (col == "builds") unit_builds[obj] = v;
+					}
+				}
+			};
+			parse_table(false);
+			parse_table(true);
+		}
+
+	list_races_output:
+		{
+			std::map<std::string, std::vector<std::string>> race_units;
+			for (const auto& [id, suffix] : unit_suffixes) {
+				std::string s = suffix;
+				while (s.starts_with("(")) s.erase(0, 1);
+				while (s.ends_with(")")) s.pop_back();
+				if (s.empty() || s.size() > 60) continue;
+				if (s.size() < 3) continue;
+				if (s.find("Level") != std::string::npos) continue;
+				if (s.find(")(\'") != std::string::npos) continue;
+				if (s.find(")(") != std::string::npos) continue;
+				race_units[s].push_back(id);
+			}
+
+			std::string arr = "[";
+			bool first_race = true;
+			for (const auto& [race_suffix, ids] : race_units) {
+				JsonObject ro;
+				ro.str("suffix", race_suffix);
+				std::string short_code;
+				for (char c : race_suffix) {
+					if (std::isalpha(static_cast<unsigned char>(c))) short_code.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+					if (short_code.size() >= 2) break;
+				}
+				if (short_code.empty()) short_code = "??";
+
+				std::vector<std::string> workers;
+				int building_count = 0;
+				int unit_count = 0;
+				int hero_count = 0;
+				std::string tech;
+
+				for (const auto& uid : ids) {
+					bool is_bldg = unit_isbldg.contains(uid) && unit_isbldg.at(uid) == "1";
+					bool has_builds = unit_builds.contains(uid) && !unit_builds.at(uid).empty();
+					bool has_primary = unit_primary.contains(uid) && !unit_primary.at(uid).empty() && unit_primary.at(uid) != "0";
+					bool is_hero = !is_bldg && has_primary;
+
+					if (is_bldg) {
+						building_count++;
+					} else if (is_hero) {
+						hero_count++;
+					} else {
+						unit_count++;
+						if (has_builds) {
+							workers.push_back(unit_name.contains(uid) ? std::format("{} {}", uid, unit_name.at(uid)) : uid);
+						}
+					}
+				}
+
+				if (building_count + unit_count + hero_count < 3) continue;
+				if (building_count == 0) continue;
+				if (unit_count == 0) continue;
+
+				if (!first_race) arr += ",";
+				first_race = false;
+
+				ro.str("short", short_code);
+				ro.number("buildings", building_count);
+				ro.number("units", unit_count);
+				ro.number("heroes", hero_count);
+				ro.raw("workers", string_array_json(workers));
+				arr += ro.dump();
+			}
+			arr += "]";
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.number("race_count", race_units.size());
+			o.raw("races", arr);
+			if (!warnings.empty()) {
+				o.raw("warnings", string_array_json(warnings));
+			}
+			ok = true;
+			return o.dump();
+		}
+	}
+
 	std::string warcraft;
 	if (const auto w = args.get("warcraft")) {
 		warcraft = *w;
@@ -609,12 +1284,12 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 			return !s.empty() && to_lower_utf8(s).find(query) != std::string::npos;
 		};
 		for (const auto& [id, index] : slk.row_headers) {
-			if (!check(id) && !check(display_name(slk, id))
+			if (!check(id) && !check(display_name(slk, id, ts))
 				&& !check(editor_suffix(slk, id, ts))
 				&& !check(slk.data<std::string>("comment(s)", id))) {
 				continue;
 			}
-			const std::string name = display_name(slk, id);
+			const std::string name = display_name(slk, id, ts);
 			JsonObject m;
 			m.str("id", id);
 			m.str("name", name);
@@ -692,7 +1367,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		o.str("map", *map_opt);
 		o.str("type", *type_opt);
 		o.str("id", id);
-		o.str("name", display_name(slk, id));
+		o.str("name", display_name(slk, id, ts));
 		o.raw("fields", fields.dump());
 		o.raw("overrides", overrides.dump());
 		ok = true;

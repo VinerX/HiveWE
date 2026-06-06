@@ -151,6 +151,17 @@ fs::path executable_dir() {
 	return fs::path(buffer).parent_path();
 }
 
+fs::path project_root() {
+	fs::path dir = executable_dir();
+	while (!dir.empty() && dir != dir.root_path()) {
+		if (fs::is_regular_file(dir / "data" / "overrides" / "units" / "UnitMetaData.slk")) {
+			return dir;
+		}
+		dir = dir.parent_path();
+	}
+	return executable_dir();
+}
+
 // Run a program, wait, and capture combined stdout/stderr. Returns exit code,
 // or -1 if the process could not be started.
 int run_capture(const std::wstring& command_line, const fs::path& working_dir, std::string& output) {
@@ -1295,16 +1306,37 @@ void cmd_validate_script(const Args& args) {
 } // namespace
 
 int main(int argc, char* argv[]) {
+	fs::current_path(project_root());
 	const Utf8Args utf8_args = windows_utf8_args();
-	const int effective_argc = utf8_args.argv.empty() ? argc : static_cast<int>(utf8_args.argv.size());
+	int effective_argc = utf8_args.argv.empty() ? argc : static_cast<int>(utf8_args.argv.size());
 	char** effective_argv = utf8_args.argv.empty() ? argv : const_cast<char**>(utf8_args.argv.data());
-	const Args args = parse_args(effective_argc, effective_argv);
+	Args args = parse_args(effective_argc, effective_argv);
+
+	// Handle global flags that may appear before the command
+	while (!args.command.empty() && args.command.starts_with("--")) {
+		std::string flag = args.command.substr(2);
+		if (flag == "utf8") {
+			SetConsoleOutputCP(CP_UTF8);
+		}
+		if (effective_argc <= 2) {
+			args.command.clear();
+			break;
+		}
+		--effective_argc;
+		++effective_argv;
+		args = parse_args(effective_argc, effective_argv);
+	}
+
+	if (args.has_flag("utf8")) {
+		SetConsoleOutputCP(CP_UTF8);
+	}
 
 	if (args.command.empty() || args.command == "help" || args.has_flag("help")) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "set-field", "describe-race"})},
+									   "list-object-types", "search-objects", "get-object", "set-field", "describe-race",
+									   "show-building", "list-race-objects", "list-all-races"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -1317,6 +1349,9 @@ int main(int argc, char* argv[]) {
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
 				   {"describe-race", "--map <dir> --suffix <text> [--tokens a,b,c] [--warcraft <dir>] [--hd]"},
+				   {"show-building", "--map <dir> --id <rawcode> [--warcraft <dir>]"},
+				   {"list-race-objects", "--map <dir> --suffix <text> [--type all|building|unit|hero] [--warcraft <dir>]"},
+				   {"list-all-races", "--map <dir> [--warcraft <dir>]"},
 			   })}});
 	}
 
@@ -1333,7 +1368,8 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "set-field" || args.command == "describe-race") {
+			   args.command == "get-object" || args.command == "set-field" || args.command == "describe-race" ||
+			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);

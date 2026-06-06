@@ -624,7 +624,9 @@ void upsert_node(
 	const UnitRecord* record,
 	const std::string& id,
 	const std::string& category,
-	const std::string& source
+	const std::string& source,
+	const std::unordered_map<std::string, std::string>* ability_names = nullptr,
+	const std::unordered_map<std::string, std::string>* upgrade_names = nullptr
 ) {
 	RaceGraphNode& node = nodes[id];
 	node.id = id;
@@ -647,6 +649,17 @@ void upsert_node(
 			}
 		}
 		std::sort(node.fields.begin(), node.fields.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+	}
+	if (node.name.empty() && !record) {
+		if (node.category == "ability" && ability_names) {
+			if (auto it = ability_names->find(id); it != ability_names->end()) {
+				node.name = it->second;
+			}
+		} else if (node.category == "upgrade" && upgrade_names) {
+			if (auto it = upgrade_names->find(id); it != upgrade_names->end()) {
+				node.name = it->second;
+			}
+		}
 	}
 }
 
@@ -680,7 +693,9 @@ void collect_object_edges(
 	const std::unordered_map<std::string, UnitRecord>& records,
 	std::unordered_map<std::string, RaceGraphNode>& nodes,
 	std::vector<RaceGraphEdge>& edges,
-	const std::vector<std::string>& start_ids
+	const std::vector<std::string>& start_ids,
+	const std::unordered_map<std::string, std::string>* ability_names = nullptr,
+	const std::unordered_map<std::string, std::string>* upgrade_names = nullptr
 ) {
 	std::set<std::tuple<std::string, std::string, std::string, std::string>> seen_edges;
 	std::set<std::string> visited;
@@ -704,39 +719,39 @@ void collect_object_edges(
 			continue;
 		}
 		const UnitRecord& record = it->second;
-		upsert_node(nodes, &record, id, {}, {});
+		upsert_node(nodes, &record, id, {}, {}, ability_names, upgrade_names);
 
 		const auto build_targets = split_rawcode_list(field_value(record, "builds"));
 		for (const auto& target : build_targets) {
-			upsert_node(nodes, records.contains(target) ? &records.at(target) : nullptr, target, records.contains(target) ? "" : "building", "object-data");
+			upsert_node(nodes, records.contains(target) ? &records.at(target) : nullptr, target, records.contains(target) ? "" : "building", "object-data", ability_names, upgrade_names);
 			add_edge(edges, seen_edges, "builds", id, target, "object-data", "builds");
 			enqueue(target);
 		}
 
 		const auto train_targets = split_rawcode_list(field_value(record, "trains"));
 		for (const auto& target : train_targets) {
-			upsert_node(nodes, records.contains(target) ? &records.at(target) : nullptr, target, records.contains(target) ? "" : "unit", "object-data");
+			upsert_node(nodes, records.contains(target) ? &records.at(target) : nullptr, target, records.contains(target) ? "" : "unit", "object-data", ability_names, upgrade_names);
 			add_edge(edges, seen_edges, "trains", id, target, "object-data", "trains");
 			enqueue(target);
 		}
 
 		for (const std::string key : {"upgrades", "researches"}) {
 			for (const auto& target : split_rawcode_list(field_value(record, key))) {
-				upsert_node(nodes, nullptr, target, looks_like_upgrade_id(target) ? "upgrade" : "unknown", "object-data");
+				upsert_node(nodes, nullptr, target, looks_like_upgrade_id(target) ? "upgrade" : "unknown", "object-data", ability_names, upgrade_names);
 				add_edge(edges, seen_edges, "researches", id, target, "object-data", key);
 			}
 		}
 
 		for (const std::string key : {"abillist", "heroabillist"}) {
 			for (const auto& target : split_rawcode_list(field_value(record, key))) {
-				upsert_node(nodes, nullptr, target, looks_like_ability_id(target) ? "ability" : "unknown", "object-data");
+				upsert_node(nodes, nullptr, target, looks_like_ability_id(target) ? "ability" : "unknown", "object-data", ability_names, upgrade_names);
 				add_edge(edges, seen_edges, "has-ability", id, target, "object-data", key);
 			}
 		}
 
 		for (const std::string key : {"upgrade", "revive"}) {
 			for (const auto& target : split_rawcode_list(field_value(record, key))) {
-				upsert_node(nodes, records.contains(target) ? &records.at(target) : nullptr, target, records.contains(target) ? "" : "unit", "object-data");
+				upsert_node(nodes, records.contains(target) ? &records.at(target) : nullptr, target, records.contains(target) ? "" : "unit", "object-data", ability_names, upgrade_names);
 				add_edge(edges, seen_edges, "morphs-to", id, target, "object-data", key);
 				enqueue(target);
 			}
@@ -751,7 +766,9 @@ void collect_lua_edges(
 	std::vector<RaceGraphEdge>& edges,
 	std::vector<RaceLuaReference>& refs,
 	const std::vector<std::string>& tokens,
-	const std::string& race_id
+	const std::string& race_id,
+	const std::unordered_map<std::string, std::string>* ability_names = nullptr,
+	const std::unordered_map<std::string, std::string>* upgrade_names = nullptr
 ) {
 	std::set<std::tuple<std::string, std::string, std::string, std::string>> seen_edges;
 	std::unordered_map<std::string, std::string> trigger_ability_by_base;
@@ -783,9 +800,9 @@ void collect_lua_edges(
 		for (const auto& id : ref.rawcodes) {
 			if (records.contains(id)) {
 				ref.matched_ids.push_back(id);
-				upsert_node(nodes, &records.at(id), id, {}, {});
+				upsert_node(nodes, &records.at(id), id, {}, {}, ability_names, upgrade_names);
 			} else {
-				upsert_node(nodes, nullptr, id, looks_like_upgrade_id(id) ? "upgrade" : (looks_like_ability_id(id) ? "ability" : "unknown"), "lua");
+				upsert_node(nodes, nullptr, id, looks_like_upgrade_id(id) ? "upgrade" : (looks_like_ability_id(id) ? "ability" : "unknown"), "lua", ability_names, upgrade_names);
 			}
 		}
 
@@ -956,11 +973,43 @@ export RaceGraphAnalysis analyze_race_graph(
 	const std::string& suffix,
 	const std::vector<std::string>& race_tokens,
 	const TriggerStrings& ts,
-	const slk::SLK* full_units
+	const slk::SLK* full_units,
+	const slk::SLK* full_abilities = nullptr,
+	const slk::SLK* full_upgrades = nullptr
 ) {
 	RaceGraphAnalysis result;
 	result.suffix = suffix;
 	result.race_tokens = race_tokens;
+
+	std::unordered_map<std::string, std::string> ability_names_map;
+	std::unordered_map<std::string, std::string> upgrade_names_map;
+	const std::unordered_map<std::string, std::string>* ability_names = nullptr;
+	const std::unordered_map<std::string, std::string>* upgrade_names = nullptr;
+
+	if (full_abilities) {
+		for (const auto& [id, index] : full_abilities->row_headers) {
+			for (const char* col : {"name", "editorname", "bufftip"}) {
+				const std::string n = full_abilities->data<std::string>(col, id);
+				if (!n.empty()) {
+					ability_names_map[id] = resolve_trigger_string(n, ts);
+					break;
+				}
+			}
+		}
+		ability_names = &ability_names_map;
+	}
+	if (full_upgrades) {
+		for (const auto& [id, index] : full_upgrades->row_headers) {
+			for (const char* col : {"name1", "name", "bufftip"}) {
+				std::string n = full_upgrades->data<std::string>(col, id);
+				if (!n.empty()) {
+					upgrade_names_map[id] = resolve_trigger_string(n, ts);
+					break;
+				}
+			}
+		}
+		upgrade_names = &upgrade_names_map;
+	}
 
 	std::unordered_map<std::string, UnitRecord> records;
 	if (full_units != nullptr) {
@@ -998,8 +1047,8 @@ export RaceGraphAnalysis analyze_race_graph(
 	}
 
 	std::unordered_map<std::string, RaceGraphNode> node_map;
-	collect_object_edges(records, node_map, result.edges, result.seed_unit_ids);
-	collect_lua_edges(relevant_sections, records, node_map, result.edges, result.lua_references, race_tokens, "race:" + suffix);
+	collect_object_edges(records, node_map, result.edges, result.seed_unit_ids, ability_names, upgrade_names);
+	collect_lua_edges(relevant_sections, records, node_map, result.edges, result.lua_references, race_tokens, "race:" + suffix, ability_names, upgrade_names);
 
 	for (auto& [id, node] : node_map) {
 		result.nodes.push_back(std::move(node));
