@@ -179,6 +179,12 @@ struct TimedChatCommand {
 	std::string text;
 };
 
+struct BridgeCommand {
+	std::size_t after_seconds = 0;
+	std::string op;
+	std::string arg;
+};
+
 std::optional<LaunchedProcess> launch_process(const std::wstring& command_line, const fs::path& working_dir) {
 	STARTUPINFOW si{};
 	si.cb = sizeof(si);
@@ -308,6 +314,40 @@ bool focus_window(HWND hwnd) {
 	return true;
 }
 
+bool send_virtual_key_input(WORD vk) {
+	INPUT inputs[2]{};
+	inputs[0].type = INPUT_KEYBOARD;
+	inputs[0].ki.wVk = vk;
+	inputs[1].type = INPUT_KEYBOARD;
+	inputs[1].ki.wVk = vk;
+	inputs[1].ki.dwFlags = KEYEVENTF_KEYUP;
+	return SendInput(2, inputs, sizeof(INPUT)) == 2;
+}
+
+bool send_unicode_text_input(const std::wstring& text) {
+	if (text.empty()) {
+		return true;
+	}
+
+	std::vector<INPUT> inputs;
+	inputs.reserve(text.size() * 2);
+	for (const wchar_t ch : text) {
+		INPUT down{};
+		down.type = INPUT_KEYBOARD;
+		down.ki.wScan = ch;
+		down.ki.dwFlags = KEYEVENTF_UNICODE;
+		inputs.push_back(down);
+
+		INPUT up{};
+		up.type = INPUT_KEYBOARD;
+		up.ki.wScan = ch;
+		up.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+		inputs.push_back(up);
+	}
+
+	return SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT)) == inputs.size();
+}
+
 bool send_chat_to_window(DWORD pid, const std::string& text) {
 	HWND hwnd = find_main_window(pid);
 	if (hwnd == nullptr) {
@@ -323,16 +363,16 @@ bool send_chat_to_window(DWORD pid, const std::string& text) {
 		return false;
 	}
 
-	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0);
-	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0);
+	Sleep(150);
+	if (!send_virtual_key_input(VK_RETURN)) {
+		return false;
+	}
 	Sleep(120);
-	for (const wchar_t ch : wide) {
-		PostMessageW(hwnd, WM_CHAR, ch, 1);
+	if (!send_unicode_text_input(wide)) {
+		return false;
 	}
 	Sleep(80);
-	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0);
-	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0);
-	return true;
+	return send_virtual_key_input(VK_RETURN);
 }
 
 bool request_process_close(DWORD pid) {
@@ -548,6 +588,132 @@ std::vector<TimedChatCommand> parse_chat_schedule(const Args& args) {
 	return commands;
 }
 
+bool is_safe_bridge_token(const std::string& text) {
+	if (text.empty()) {
+		return false;
+	}
+	for (const char ch : text) {
+		const bool ok = std::isalnum(static_cast<unsigned char>(ch)) != 0 ||
+						ch == '_' || ch == '-' || ch == '.';
+		if (!ok) {
+			return false;
+		}
+	}
+	return true;
+}
+
+BridgeCommand parse_bridge_entry(const std::string& raw_entry) {
+	const std::size_t first = raw_entry.find(':');
+	const std::size_t second = first == std::string::npos ? std::string::npos : raw_entry.find(':', first + 1);
+	if (first == std::string::npos || second == std::string::npos || first == 0 || second <= first + 1 || second + 1 >= raw_entry.size()) {
+		fail("invalid bridge schedule entry: " + raw_entry + " (expected <seconds>:<op>:<arg>)");
+	}
+
+	BridgeCommand command;
+	try {
+		command.after_seconds = static_cast<std::size_t>(std::stoul(raw_entry.substr(0, first)));
+	} catch (...) {
+		fail("invalid bridge schedule time: " + raw_entry);
+	}
+	command.op = raw_entry.substr(first + 1, second - first - 1);
+	command.arg = raw_entry.substr(second + 1);
+	if (!is_safe_bridge_token(command.op) || !is_safe_bridge_token(command.arg)) {
+		fail("bridge command contains unsupported characters: " + raw_entry);
+	}
+	return command;
+}
+
+std::vector<BridgeCommand> parse_bridge_schedule(const Args& args) {
+	std::vector<BridgeCommand> commands;
+	if (const auto bridge_script = args.get("bridge-script")) {
+		std::size_t start = 0;
+		while (start < bridge_script->size()) {
+			const std::size_t separator = bridge_script->find('|', start);
+			const std::string entry = bridge_script->substr(start, separator == std::string::npos ? std::string::npos : separator - start);
+			if (!entry.empty()) {
+				commands.push_back(parse_bridge_entry(entry));
+			}
+			if (separator == std::string::npos) {
+				break;
+			}
+			start = separator + 1;
+		}
+	}
+
+	std::sort(commands.begin(), commands.end(), [](const BridgeCommand& a, const BridgeCommand& b) {
+		if (a.after_seconds != b.after_seconds) {
+			return a.after_seconds < b.after_seconds;
+		}
+		if (a.op != b.op) {
+			return a.op < b.op;
+		}
+		return a.arg < b.arg;
+	});
+	return commands;
+}
+
+void write_text_file_utf8(const fs::path& path, const std::string& text) {
+	std::ofstream out(path, std::ios::binary | std::ios::trunc);
+	if (!out) {
+		fail("failed to write file: " + path.string());
+	}
+	out.write(text.data(), static_cast<std::streamsize>(text.size()));
+	if (!out.good()) {
+		fail("failed to flush file: " + path.string());
+	}
+}
+
+std::string build_bridge_preloader_file(const std::string& payload) {
+	return "function PreloadFiles takes nothing returns nothing\r\n\r\n\tcall PreloadStart()\r\n\tcall Preload( \"\\\" )\\r\\ncall BlzSetAbilityTooltip('ANav',\\\"" + payload + "\\\",0)\\r\\n//\" )\r\n\tcall PreloadEnd( 0.0 )\r\n\r\nendfunction\r\n";
+}
+
+void cleanup_bridge_files(const fs::path& custom_map_data_dir) {
+	std::error_code ec;
+	if (!fs::exists(custom_map_data_dir, ec)) {
+		return;
+	}
+	for (const auto& entry : fs::directory_iterator(custom_map_data_dir, ec)) {
+		if (ec || !entry.is_regular_file()) {
+			continue;
+		}
+		const std::string name = entry.path().filename().string();
+		if (name == "23race_cmd_manifest.pld" || (name.rfind("23race_cmd_", 0) == 0 && entry.path().extension() == ".pld")) {
+			fs::remove(entry.path(), ec);
+		}
+	}
+}
+
+json prepare_bridge_command_files(const std::vector<BridgeCommand>& commands) {
+	const fs::path custom_map_data_dir = war3_custom_map_data_dir();
+	std::error_code ec;
+	fs::create_directories(custom_map_data_dir, ec);
+	cleanup_bridge_files(custom_map_data_dir);
+
+	json result = json::array();
+	if (commands.empty()) {
+		return result;
+	}
+
+	const fs::path manifest_path = custom_map_data_dir / "23race_cmd_manifest.pld";
+	write_text_file_utf8(manifest_path, build_bridge_preloader_file("manifest|" + std::to_string(commands.size())));
+
+	for (std::size_t i = 0; i < commands.size(); ++i) {
+		char filename[64];
+		std::snprintf(filename, sizeof(filename), "23race_cmd_%04zu.pld", i + 1);
+		const fs::path command_path = custom_map_data_dir / filename;
+		const std::string payload = "cmd|" + std::to_string(i + 1) + "|" + std::to_string(commands[i].after_seconds) + "|" + commands[i].op + "|" + commands[i].arg;
+		write_text_file_utf8(command_path, build_bridge_preloader_file(payload));
+		result.push_back({
+			{"sequence", i + 1},
+			{"after_seconds", commands[i].after_seconds},
+			{"op", commands[i].op},
+			{"arg", commands[i].arg},
+			{"file", command_path.string()},
+		});
+	}
+	return result;
+}
+
 // Read the user-configured Warcraft directory that HiveWE stores via QSettings at
 // HKCU\Software\HiveWE\HiveWE\warcraftDirectory (REG_SZ). Empty if unset.
 std::string warcraft_dir_from_registry() {
@@ -685,6 +851,7 @@ void cmd_probe_map(const Args& args) {
 	const fs::path warcraft = fs::path(args.require("warcraft"));
 	const fs::path log_path = war3_log_path(args);
 	const auto probe_log_file = args.get("probe-log");
+	const std::vector<BridgeCommand> bridge_schedule = parse_bridge_schedule(args);
 	if (!fs::exists(map_path)) {
 		fail("map path not found: " + map_path.string());
 	}
@@ -709,6 +876,7 @@ void cmd_probe_map(const Args& args) {
 		fs::create_directories(probe_log_path->parent_path(), ec);
 		fs::remove(*probe_log_path, ec);
 	}
+	const json bridge_files = prepare_bridge_command_files(bridge_schedule);
 
 	auto proc = launch_process(command_line, exe.parent_path());
 	if (!proc) {
@@ -736,6 +904,11 @@ void cmd_probe_map(const Args& args) {
 	for (const auto& command : chat_schedule) {
 		if (command.after_seconds >= wait_seconds) {
 			fail("chat command scheduled outside probe window: " + std::to_string(command.after_seconds) + ":" + command.text);
+		}
+	}
+	for (const auto& command : bridge_schedule) {
+		if (command.after_seconds >= wait_seconds) {
+			fail("bridge command scheduled outside probe window: " + std::to_string(command.after_seconds) + ":" + command.op + ":" + command.arg);
 		}
 	}
 
@@ -831,6 +1004,7 @@ void cmd_probe_map(const Args& args) {
 		});
 	}
 	result["chat_results"] = chat_results;
+	result["bridge_commands"] = bridge_files;
 	emit(result);
 }
 
@@ -941,7 +1115,7 @@ int main(int argc, char* argv[]) {
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
-				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--chat-after 20 --chat-text -ai2] [--chat-script \"20:-ai2|35:-raceselect1\"] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>]"},
+				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--chat-after 20 --chat-text -ai2] [--chat-script \"20:-ai2|35:-raceselect1\"] [--bridge-script \"90:create_ai:2|105:race_select:1\"] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>]"},
 				   {"read-war3-log", "[--map <dir|.w3x>] [--tail 120] [--log <War3Log.txt>]"},
 				   {"read-custom-map-data-log", "--file <relative-or-absolute-file> [--tail 120]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},

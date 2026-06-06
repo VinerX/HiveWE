@@ -8,3 +8,4 @@ logs
 vc140.pdb
 .claude
 *.log
+/tmp
