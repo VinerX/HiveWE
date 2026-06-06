@@ -17,9 +17,11 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 
 #include <StormLib.h>
 #include <nlohmann/json.hpp>
@@ -101,6 +103,43 @@ Args parse_args(int argc, char* argv[]) {
 		}
 	}
 	return args;
+}
+
+std::string wstring_to_utf8(const std::wstring& text) {
+	if (text.empty()) {
+		return {};
+	}
+	const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+	if (size <= 0) {
+		return {};
+	}
+	std::string out(static_cast<std::size_t>(size), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), out.data(), size, nullptr, nullptr);
+	return out;
+}
+
+struct Utf8Args {
+	std::vector<std::string> storage;
+	std::vector<char*> argv;
+};
+
+Utf8Args windows_utf8_args() {
+	Utf8Args converted;
+	int wide_argc = 0;
+	LPWSTR* wide_argv = CommandLineToArgvW(GetCommandLineW(), &wide_argc);
+	if (wide_argv == nullptr) {
+		return converted;
+	}
+	converted.storage.reserve(static_cast<std::size_t>(wide_argc));
+	converted.argv.reserve(static_cast<std::size_t>(wide_argc));
+	for (int i = 0; i < wide_argc; ++i) {
+		converted.storage.push_back(wstring_to_utf8(wide_argv[i]));
+	}
+	for (auto& arg : converted.storage) {
+		converted.argv.push_back(arg.data());
+	}
+	LocalFree(wide_argv);
+	return converted;
 }
 
 // ---- process helpers ------------------------------------------------------
@@ -1249,13 +1288,16 @@ void cmd_validate_script(const Args& args) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-	const Args args = parse_args(argc, argv);
+	const Utf8Args utf8_args = windows_utf8_args();
+	const int effective_argc = utf8_args.argv.empty() ? argc : static_cast<int>(utf8_args.argv.size());
+	char** effective_argv = utf8_args.argv.empty() ? argv : const_cast<char**>(utf8_args.argv.data());
+	const Args args = parse_args(effective_argc, effective_argv);
 
 	if (args.command.empty() || args.command == "help" || args.has_flag("help")) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "set-field"})},
+									   "list-object-types", "search-objects", "get-object", "set-field", "describe-race"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -1267,6 +1309,7 @@ int main(int argc, char* argv[]) {
 				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
+				   {"describe-race", "--map <dir> --suffix <text> [--tokens a,b,c] [--warcraft <dir>] [--hd]"},
 			   })}});
 	}
 
@@ -1283,9 +1326,9 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "set-field") {
+			   args.command == "get-object" || args.command == "set-field" || args.command == "describe-race") {
 		bool ok = false;
-		const std::string result = hivewe_object_command(argc, argv, warcraft_dir_from_registry(), ok);
+		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);
 		std::fputc('\n', stdout);
 		std::exit(ok ? 0 : 1);

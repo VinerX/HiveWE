@@ -35,7 +35,17 @@ export class Hierarchy {
 	bool open_casc(const fs::path& directory) {
 		warcraft_directory = directory;
 
-		bool open = game_data.open(warcraft_directory / (ptr ? ":w3t" : ":w3"));
+		bool open = false;
+		for (const fs::path& candidate : {
+				 warcraft_directory,
+				 warcraft_directory / "Data",
+				 warcraft_directory / ".build.info",
+			 }) {
+			if (game_data.open(candidate)) {
+				open = true;
+				break;
+			}
+		}
 		root_directory = warcraft_directory / (ptr ? "_ptr_" : "_retail_");
 
 		if (open) {

@@ -149,6 +149,7 @@ target_sources(HiveWE_core PUBLIC FILE_SET core_modules TYPE CXX_MODULES FILES
 	"src/file_formats/slk.ixx"
 	"src/utilities/modification_tables.ixx"
 	"src/base/object_data.ixx"
+	"src/base/race_graph.ixx"
 	"src/base/trigger_strings.ixx"
 )
 target_include_directories(HiveWE_core PUBLIC
