@@ -777,15 +777,15 @@ void write_text_file_utf8(const fs::path& path, const std::string& text) {
 }
 
 std::string build_bridge_preloader_file(const std::string& payload) {
-	return "function PreloadFiles takes nothing returns nothing\r\n"
+	return "function PreloadFiles takes nothing returns nothing\n"
 		   "\r\n"
 		   "\tcall PreloadStart()\r\n"
-		   "\tcall Preload( \"\\\" )\r\n"
-		   "call BlzSetAbilityTooltip('ANav',\"" + payload + "\",0)\r\n"
-		   "//\" )\r\n"
+		   "\tcall Preload( \"\")\n"
+		   "call BlzSetAbilityTooltip('AHbz',\"" + payload + "\",0)\n"
+		   "call Preload(\"\" )\r\n"
 		   "\tcall PreloadEnd( 0.0 )\r\n"
-		   "\r\n"
-		   "endfunction\r\n";
+		   "\n"
+		   "endfunction\n\n\r\n";
 }
 
 void cleanup_bridge_files(const fs::path& custom_map_data_dir) {
@@ -997,6 +997,8 @@ void cmd_probe_map(const Args& args) {
 		fs::create_directories(probe_log_path->parent_path(), ec);
 		fs::remove(*probe_log_path, ec);
 	}
+	const json bridge_files = prepare_bridge_command_files(bridge_schedule);
+
 	auto proc = launch_process(command_line, exe.parent_path());
 	if (!proc) {
 		fail("failed to launch Warcraft III (error " + std::to_string(GetLastError()) + ")");
