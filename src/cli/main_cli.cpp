@@ -1070,8 +1070,7 @@ void cmd_probe_map(const Args& args) {
 	bool enter_after_click_sent = false;
 	bool close_confirm_enter_sent = false;
 	std::vector<bool> chat_sent(chat_schedule.size(), false);
-	std::size_t next_bridge_index = 0;
-	std::vector<bool> bridge_sent(bridge_schedule.size(), false);
+	std::vector<bool> bridge_sent(bridge_schedule.size(), !bridge_schedule.empty());
 	DWORD wait_result = WAIT_TIMEOUT;
 
 	if (click_after_opt) {
@@ -1120,12 +1119,6 @@ void cmd_probe_map(const Args& args) {
 		while (next_chat_index < chat_schedule.size() && elapsed_seconds >= chat_schedule[next_chat_index].after_seconds) {
 			chat_sent[next_chat_index] = send_chat_to_window(proc->pid, chat_schedule[next_chat_index].text);
 			++next_chat_index;
-		}
-
-		while (next_bridge_index < bridge_schedule.size() && elapsed_seconds >= bridge_schedule[next_bridge_index].after_seconds) {
-			const std::string bridge_chat = "-bridge:" + bridge_schedule[next_bridge_index].op + ":" + bridge_schedule[next_bridge_index].arg;
-			bridge_sent[next_bridge_index] = send_chat_all_methods(proc->pid, bridge_chat);
-			++next_bridge_index;
 		}
 
 		if (elapsed_ms >= static_cast<ULONGLONG>(wait_seconds) * 1000ULL) {
@@ -1197,7 +1190,7 @@ void cmd_probe_map(const Args& args) {
 			{"after_seconds", bridge_schedule[i].after_seconds},
 			{"op", bridge_schedule[i].op},
 			{"arg", bridge_schedule[i].arg},
-			{"chat", "-bridge:" + bridge_schedule[i].op + ":" + bridge_schedule[i].arg},
+			{"delivery", "preloader-file"},
 			{"sent", bridge_sent[i]},
 		});
 	}
