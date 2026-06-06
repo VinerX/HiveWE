@@ -306,11 +306,17 @@ bool focus_window(HWND hwnd) {
 		return false;
 	}
 
+	const DWORD target_thread = GetWindowThreadProcessId(hwnd, nullptr);
+	const DWORD my_thread = GetCurrentThreadId();
+	AttachThreadInput(my_thread, target_thread, TRUE);
+
 	ShowWindow(hwnd, SW_RESTORE);
 	BringWindowToTop(hwnd);
 	SetForegroundWindow(hwnd);
 	SetActiveWindow(hwnd);
 	SetFocus(hwnd);
+
+	AttachThreadInput(my_thread, target_thread, FALSE);
 	return true;
 }
 
@@ -348,6 +354,60 @@ bool send_unicode_text_input(const std::wstring& text) {
 	return SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT)) == inputs.size();
 }
 
+bool set_clipboard_text(const std::wstring& text) {
+	if (!OpenClipboard(nullptr)) {
+		return false;
+	}
+	EmptyClipboard();
+	const std::size_t bytes = (text.size() + 1) * sizeof(wchar_t);
+	HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, bytes);
+	if (mem == nullptr) {
+		CloseClipboard();
+		return false;
+	}
+	wchar_t* dst = static_cast<wchar_t*>(GlobalLock(mem));
+	if (dst == nullptr) {
+		GlobalFree(mem);
+		CloseClipboard();
+		return false;
+	}
+	std::memcpy(dst, text.c_str(), bytes);
+	GlobalUnlock(mem);
+	SetClipboardData(CF_UNICODETEXT, mem);
+	CloseClipboard();
+	return true;
+}
+
+bool send_ctrl_v() {
+	INPUT inputs[4]{};
+	inputs[0].type = INPUT_KEYBOARD;
+	inputs[0].ki.wVk = VK_CONTROL;
+	inputs[1].type = INPUT_KEYBOARD;
+	inputs[1].ki.wVk = 'V';
+	inputs[2].type = INPUT_KEYBOARD;
+	inputs[2].ki.wVk = 'V';
+	inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+	inputs[3].type = INPUT_KEYBOARD;
+	inputs[3].ki.wVk = VK_CONTROL;
+	inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+	return SendInput(4, inputs, sizeof(INPUT)) == 4;
+}
+
+HKL force_english_layout(HWND hwnd) {
+	HKL english = LoadKeyboardLayoutW(L"00000409", 0);
+	HKL previous = reinterpret_cast<HKL>(SendMessageW(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, reinterpret_cast<LPARAM>(english)));
+	PostMessageW(hwnd, WM_INPUTLANGCHANGEREQUEST, 0, reinterpret_cast<LPARAM>(english));
+	Sleep(50);
+	ActivateKeyboardLayout(english, 0);
+	return previous;
+}
+
+void restore_layout(HKL layout) {
+	if (layout != nullptr) {
+		ActivateKeyboardLayout(layout, 0);
+	}
+}
+
 bool send_chat_to_window(DWORD pid, const std::string& text) {
 	HWND hwnd = find_main_window(pid);
 	if (hwnd == nullptr) {
@@ -359,20 +419,73 @@ bool send_chat_to_window(DWORD pid, const std::string& text) {
 		return false;
 	}
 
-	if (!focus_window(hwnd)) {
+	focus_window(hwnd);
+	HKL prev_layout = force_english_layout(hwnd);
+	Sleep(100);
+
+	send_virtual_key_input(VK_RETURN);
+	Sleep(150);
+	send_unicode_text_input(wide);
+	Sleep(100);
+	send_virtual_key_input(VK_RETURN);
+
+	Sleep(50);
+	restore_layout(prev_layout);
+	return true;
+}
+
+bool send_chat_all_methods(DWORD pid, const std::string& text) {
+	HWND hwnd = find_main_window(pid);
+	if (hwnd == nullptr) {
 		return false;
 	}
 
+	const std::wstring wide = utf8_to_wstring(text);
+	if (!text.empty() && wide.empty()) {
+		return false;
+	}
+
+	// Method A: force EN layout + SendInput UNICODE
+	focus_window(hwnd);
+	HKL prev = force_english_layout(hwnd);
+	Sleep(100);
+	send_virtual_key_input(VK_RETURN);
 	Sleep(150);
-	if (!send_virtual_key_input(VK_RETURN)) {
-		return false;
+	send_unicode_text_input(wide);
+	Sleep(100);
+	send_virtual_key_input(VK_RETURN);
+	restore_layout(prev);
+
+	Sleep(3000);
+
+	// Method B: force EN layout + PostMessage WM_CHAR
+	focus_window(hwnd);
+	prev = force_english_layout(hwnd);
+	Sleep(100);
+	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0x001C0001);
+	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0xC01C0001);
+	Sleep(150);
+	for (const wchar_t ch : wide) {
+		PostMessageW(hwnd, WM_CHAR, ch, 1);
 	}
-	Sleep(120);
-	if (!send_unicode_text_input(wide)) {
-		return false;
-	}
-	Sleep(80);
-	return send_virtual_key_input(VK_RETURN);
+	Sleep(100);
+	PostMessageW(hwnd, WM_KEYDOWN, VK_RETURN, 0x001C0001);
+	PostMessageW(hwnd, WM_KEYUP, VK_RETURN, 0xC01C0001);
+	restore_layout(prev);
+
+	Sleep(3000);
+
+	// Method C: clipboard + Ctrl+V
+	focus_window(hwnd);
+	set_clipboard_text(wide);
+	Sleep(100);
+	send_virtual_key_input(VK_RETURN);
+	Sleep(150);
+	send_ctrl_v();
+	Sleep(100);
+	send_virtual_key_input(VK_RETURN);
+
+	return true;
 }
 
 bool request_process_close(DWORD pid) {
@@ -664,7 +777,15 @@ void write_text_file_utf8(const fs::path& path, const std::string& text) {
 }
 
 std::string build_bridge_preloader_file(const std::string& payload) {
-	return "function PreloadFiles takes nothing returns nothing\r\n\r\n\tcall PreloadStart()\r\n\tcall Preload( \"\\\" )\\r\\ncall BlzSetAbilityTooltip('ANav',\\\"" + payload + "\\\",0)\\r\\n//\" )\r\n\tcall PreloadEnd( 0.0 )\r\n\r\nendfunction\r\n";
+	return "function PreloadFiles takes nothing returns nothing\r\n"
+		   "\r\n"
+		   "\tcall PreloadStart()\r\n"
+		   "\tcall Preload( \"\\\" )\r\n"
+		   "call BlzSetAbilityTooltip('ANav',\"" + payload + "\",0)\r\n"
+		   "//\" )\r\n"
+		   "\tcall PreloadEnd( 0.0 )\r\n"
+		   "\r\n"
+		   "endfunction\r\n";
 }
 
 void cleanup_bridge_files(const fs::path& custom_map_data_dir) {
@@ -876,8 +997,6 @@ void cmd_probe_map(const Args& args) {
 		fs::create_directories(probe_log_path->parent_path(), ec);
 		fs::remove(*probe_log_path, ec);
 	}
-	const json bridge_files = prepare_bridge_command_files(bridge_schedule);
-
 	auto proc = launch_process(command_line, exe.parent_path());
 	if (!proc) {
 		fail("failed to launch Warcraft III (error " + std::to_string(GetLastError()) + ")");
@@ -893,6 +1012,8 @@ void cmd_probe_map(const Args& args) {
 	bool enter_after_click_sent = false;
 	bool close_confirm_enter_sent = false;
 	std::vector<bool> chat_sent(chat_schedule.size(), false);
+	std::size_t next_bridge_index = 0;
+	std::vector<bool> bridge_sent(bridge_schedule.size(), false);
 	DWORD wait_result = WAIT_TIMEOUT;
 
 	if (click_after_opt) {
@@ -930,7 +1051,9 @@ void cmd_probe_map(const Args& args) {
 			click_sent = click_window_center(proc->pid);
 			click_window_found = find_main_window(proc->pid) != nullptr;
 			if (click_sent) {
-				Sleep(150);
+				Sleep(5000);
+				send_enter_to_window(proc->pid);
+				Sleep(5000);
 				enter_after_click_sent = send_enter_to_window(proc->pid);
 			}
 			click_handled = true;
@@ -939,6 +1062,12 @@ void cmd_probe_map(const Args& args) {
 		while (next_chat_index < chat_schedule.size() && elapsed_seconds >= chat_schedule[next_chat_index].after_seconds) {
 			chat_sent[next_chat_index] = send_chat_to_window(proc->pid, chat_schedule[next_chat_index].text);
 			++next_chat_index;
+		}
+
+		while (next_bridge_index < bridge_schedule.size() && elapsed_seconds >= bridge_schedule[next_bridge_index].after_seconds) {
+			const std::string bridge_chat = "-bridge:" + bridge_schedule[next_bridge_index].op + ":" + bridge_schedule[next_bridge_index].arg;
+			bridge_sent[next_bridge_index] = send_chat_all_methods(proc->pid, bridge_chat);
+			++next_bridge_index;
 		}
 
 		if (elapsed_ms >= static_cast<ULONGLONG>(wait_seconds) * 1000ULL) {
@@ -1004,7 +1133,17 @@ void cmd_probe_map(const Args& args) {
 		});
 	}
 	result["chat_results"] = chat_results;
-	result["bridge_commands"] = bridge_files;
+	json bridge_results = json::array();
+	for (std::size_t i = 0; i < bridge_schedule.size(); ++i) {
+		bridge_results.push_back({
+			{"after_seconds", bridge_schedule[i].after_seconds},
+			{"op", bridge_schedule[i].op},
+			{"arg", bridge_schedule[i].arg},
+			{"chat", "-bridge:" + bridge_schedule[i].op + ":" + bridge_schedule[i].arg},
+			{"sent", bridge_sent[i]},
+		});
+	}
+	result["bridge_commands"] = bridge_results;
 	emit(result);
 }
 
