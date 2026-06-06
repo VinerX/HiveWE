@@ -757,6 +757,20 @@ bool is_safe_bridge_token(const std::string& text) {
 	return true;
 }
 
+bool is_safe_bridge_arg(const std::string& text) {
+	if (text.empty()) {
+		return false;
+	}
+	for (const char ch : text) {
+		const bool ok = std::isalnum(static_cast<unsigned char>(ch)) != 0 ||
+						ch == '_' || ch == '-' || ch == '.' || ch == ':';
+		if (!ok) {
+			return false;
+		}
+	}
+	return true;
+}
+
 BridgeCommand parse_bridge_entry(const std::string& raw_entry) {
 	const std::size_t first = raw_entry.find(':');
 	const std::size_t second = first == std::string::npos ? std::string::npos : raw_entry.find(':', first + 1);
@@ -772,7 +786,7 @@ BridgeCommand parse_bridge_entry(const std::string& raw_entry) {
 	}
 	command.op = raw_entry.substr(first + 1, second - first - 1);
 	command.arg = raw_entry.substr(second + 1);
-	if (!is_safe_bridge_token(command.op) || !is_safe_bridge_token(command.arg)) {
+	if (!is_safe_bridge_token(command.op) || !is_safe_bridge_arg(command.arg)) {
 		fail("bridge command contains unsupported characters: " + raw_entry);
 	}
 	return command;
