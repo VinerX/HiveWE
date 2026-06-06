@@ -434,6 +434,9 @@ bool send_chat_to_window(DWORD pid, const std::string& text) {
 	return true;
 }
 
+// UNSTABLE: chat bridge requires EN keyboard layout and window focus.
+// SendInput unreliable with fullscreen DirectX games. Needs further work.
+// Preloader bridge (via .pld files) is the primary stable path.
 bool send_chat_all_methods(DWORD pid, const std::string& text) {
 	HWND hwnd = find_main_window(pid);
 	if (hwnd == nullptr) {
