@@ -1,7 +1,10 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QSplitter>
 #include <QTreeWidget>
+#include <QGraphicsView>
+#include <QGraphicsScene>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QPushButton>
@@ -22,14 +25,24 @@ public:
 
 private:
 	void rebuildTree();
-	void addNode(QTreeWidgetItem* parent, const std::string& id, int depth,
-	            std::unordered_set<std::string>& visited,
-	            std::unordered_map<std::string, QTreeWidgetItem*>& node_map);
+	void rebuildGraph();
+
+	struct NodeInfo {
+		std::string id;
+		std::string name;
+		bool is_building = false;
+		bool is_worker = false;
+		std::vector<std::pair<std::string, std::string>> children; // {id, relation}
+	};
+
+	std::vector<std::pair<std::string, std::string>> getChildren(const std::string& id);
 
 	QLineEdit* search_ = nullptr;
 	QSpinBox* depth_spin_ = nullptr;
 	QPushButton* go_btn_ = nullptr;
 	QLabel* info_label_ = nullptr;
 	QTreeWidget* tree_ = nullptr;
+	QGraphicsView* graph_view_ = nullptr;
+	QGraphicsScene* graph_scene_ = nullptr;
 	QString current_id_;
 };

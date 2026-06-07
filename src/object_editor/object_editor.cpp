@@ -17,12 +17,15 @@
 #include <QMenu>
 #include <QMessageBox>
 
+#include "techtree_viewer.h"
+
 import std;
 import UnitSelector;
 import MapGlobal;
 import Globals;
 import ResourceManager;
 import SlkConversions;
+import WindowHandler;
 import "single_model.h";
 
 ObjectEditor::ObjectEditor(QWidget* parent) : QMainWindow(parent) {
@@ -504,6 +507,22 @@ void ObjectEditor::addTypeTreeView(
 				table->deleteRow(i);
 			}
 		});
+
+		if (category == Category::unit || category == Category::doodad || category == Category::destructible) {
+			menu.addSeparator();
+			QAction* techtree_act = menu.addAction("Show in TechTree");
+			connect(techtree_act, &QAction::triggered, [=, this]() {
+				const auto sel = view->selectionModel()->selectedIndexes();
+				for (const auto& idx : sel) {
+					auto* item = static_cast<BaseTreeItem*>(filter->mapToSource(idx).internalPointer());
+					if (!item || item->baseCategory || item->subCategory) continue;
+					bool created;
+					auto* viewer = window_handler.create_or_raise<TechTreeViewer>(nullptr, created);
+					viewer->setUnit(item->id);
+					break;
+				}
+			});
+		}
 
 		menu.exec(view->mapToGlobal(pos));
 	});

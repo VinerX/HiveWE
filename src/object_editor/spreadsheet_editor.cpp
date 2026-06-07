@@ -38,9 +38,12 @@
 #include <map>
 #include <algorithm>
 
+#include "techtree_viewer.h"
+
 import std;
 import Globals;
 import Hierarchy;
+import WindowHandler;
 
 // Quiet per-map file holding "in-map" editor-column definitions and their per-row values.
 // It is an ordinary file in the map folder (not object data), so it travels with the map,
@@ -1930,6 +1933,20 @@ void SpreadsheetEditor::addCategoryTab(
 			QAction* clear = menu.addAction("Clear column filter");
 			connect(clear, &QAction::triggered, px, [px]() { px->setFieldFilter("", ""); });
 		}
+
+		menu.addSeparator();
+		QAction* techtree_act = menu.addAction("Show in TechTree");
+		techtree_act->setEnabled(!v->selectionModel()->selectedRows().isEmpty());
+		connect(techtree_act, &QAction::triggered, this, [this, v, px]() {
+			const auto rows = v->selectionModel()->selectedRows();
+			if (rows.isEmpty()) return;
+			const QModelIndex src = px->mapToSource(rows.first());
+			if (!src.isValid()) return;
+			const std::string id = px->slk->index_to_row.at(static_cast<size_t>(src.row()));
+			bool created;
+			auto* viewer = window_handler.create_or_raise<TechTreeViewer>(nullptr, created);
+			viewer->setUnit(id);
+		});
 
 		menu.exec(v->viewport()->mapToGlobal(pos));
 	};
