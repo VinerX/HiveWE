@@ -119,6 +119,7 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 		rebuildTree();
 	});
 	connect(search_, &QLineEdit::returnPressed, go_btn_, &QPushButton::click);
+	show();
 }
 
 void TechTreeViewer::setUnit(const std::string& rawcode) {
