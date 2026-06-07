@@ -1335,7 +1335,7 @@ int main(int argc, char* argv[]) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "set-field", "safe-move", "describe-race",
+									   "list-object-types", "search-objects", "get-object", "set-field", "batch-edit", "safe-move", "describe-race",
 									   "show-building", "list-race-objects", "list-all-races"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
@@ -1345,9 +1345,10 @@ int main(int argc, char* argv[]) {
 				   {"read-custom-map-data-log", "--file <relative-or-absolute-file> [--tail 120]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},
 				   {"list-object-types", "(no args)"},
-				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
+				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--field <col> --field-value <substr>] [--warcraft <dir>] [--limit N] [--hd]"},
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
+				   {"batch-edit", "--map <dir> --type <...> --field <col> --value <v> --ids id1,id2,... [--id-file <path>] [--warcraft <dir>] [--hd] [--dry-run]"},
 				   {"safe-move", "--map <dir> --from <relpath> --to <relpath> [--warcraft <dir>] [--hd] [--dry-run]"},
 				   {"describe-race", "--map <dir> --suffix <text> [--tokens a,b,c] [--warcraft <dir>] [--hd]"},
 				   {"show-building", "--map <dir> --id <rawcode> [--warcraft <dir>]"},
@@ -1369,7 +1370,7 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "set-field" || args.command == "describe-race" ||
+			   args.command == "get-object" || args.command == "set-field" || args.command == "batch-edit" || args.command == "describe-race" ||
 			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);

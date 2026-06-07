@@ -1273,25 +1273,51 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 	// ---- search-objects ----
 	if (args.command == "search-objects") {
 		const auto query_opt = args.get("query");
-		if (!query_opt) {
-			return error("missing required option: --query <substring>");
+		const auto field_opt = args.get("field");
+		const auto field_value_opt = args.get("field-value");
+
+		if (!query_opt && !(field_opt && field_value_opt)) {
+			return error("missing required option: --query <substring> or (--field <col> --field-value <substr>)");
 		}
-		const std::string query = to_lower_utf8(to_utf8(*query_opt));
+		if (field_opt && !field_value_opt) {
+			return error("--field requires --field-value");
+		}
+
 		std::size_t limit = 50;
 		if (const auto l = args.get("limit")) {
 			limit = static_cast<std::size_t>(std::max(0, std::atoi(l->c_str())));
 		}
 
-		std::vector<std::string> matches;
-		auto check = [&](const std::string& s) -> bool {
-			return !s.empty() && to_lower_utf8(s).find(query) != std::string::npos;
+		std::string query_lower;
+		if (query_opt) {
+			query_lower = to_lower_utf8(to_utf8(*query_opt));
+		}
+		std::string fval_lower;
+		if (field_value_opt) {
+			fval_lower = to_lower_utf8(to_utf8(*field_value_opt));
+		}
+
+		auto text_check = [&](const std::string& s) -> bool {
+			return !s.empty() && to_lower_utf8(s).find(query_lower) != std::string::npos;
 		};
+
+		std::vector<std::string> matches;
 		for (const auto& [id, index] : slk.row_headers) {
-			if (!check(id) && !check(display_name(slk, id, ts))
-				&& !check(editor_suffix(slk, id, ts))
-				&& !check(slk.data<std::string>("comment(s)", id))) {
-				continue;
+			if (query_opt) {
+				if (!text_check(id) && !text_check(display_name(slk, id, ts))
+					&& !text_check(editor_suffix(slk, id, ts))
+					&& !text_check(slk.data<std::string>("comment(s)", id))) {
+					continue;
+				}
 			}
+
+			if (field_opt && field_value_opt) {
+				std::string fval = to_lower_utf8(slk.data<std::string>(*field_opt, id));
+				if (fval.find(fval_lower) == std::string::npos) {
+					continue;
+				}
+			}
+
 			const std::string name = display_name(slk, id, ts);
 			JsonObject m;
 			m.str("id", id);
@@ -1408,6 +1434,81 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		o.str("old_value", old_value);
 		o.str("new_value", new_value);
 		o.str("written", info->mod_file);
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- batch-edit ----
+	if (args.command == "batch-edit") {
+		const auto field_opt = args.get("field");
+		const auto value_opt = args.get("value");
+		if (!field_opt) return error("missing required option: --field <column>");
+		if (!value_opt) return error("missing required option: --value <value>");
+
+		std::vector<std::string> ids;
+		if (const auto ids_opt = args.get("ids")) {
+			ids = split_csv(*ids_opt);
+		} else if (const auto file_opt = args.get("id-file")) {
+			std::ifstream file(*file_opt, std::ios::binary);
+			if (!file) return error("cannot open id-file: " + *file_opt);
+			std::string line;
+			while (std::getline(file, line)) {
+				while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+				while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front()))) line.erase(line.begin());
+				while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back()))) line.pop_back();
+				if (!line.empty()) ids.push_back(line);
+			}
+		}
+		if (ids.empty()) {
+			return error("missing required option: --ids <a,b,c> or --id-file <path>");
+		}
+
+		const std::string field = to_lower(*field_opt);
+		const bool dry_run = args.has_flag("dry-run");
+
+		std::vector<std::string> warnings;
+		std::string changed_arr = "[";
+		bool first = true;
+		std::size_t count_changed = 0;
+
+		for (const auto& id : ids) {
+			if (!slk.row_headers.contains(id)) {
+				warnings.push_back("id not found: " + id);
+				continue;
+			}
+			const std::string old_value = slk.data<std::string>(field, id);
+			slk.set_shadow_data(field, id, *value_opt);
+			const std::string new_value = slk.data<std::string>(field, id);
+			const bool written = (old_value != new_value);
+			if (written) ++count_changed;
+
+			if (!first) changed_arr += ",";
+			first = false;
+			JsonObject entry;
+			entry.str("id", id);
+			entry.str("old", old_value);
+			entry.str("new", new_value);
+			entry.boolean("written", written);
+			changed_arr += entry.dump();
+		}
+		changed_arr += "]";
+
+		if (!dry_run) {
+			save_modification_file(info->mod_file, *info->slk, *info->meta, info->optional_ints, false);
+		}
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("type", *type_opt);
+		o.str("field", field);
+		o.str("value", *value_opt);
+		o.number("count_processed", ids.size());
+		o.number("count_changed", count_changed);
+		o.boolean("dry_run", dry_run);
+		o.raw("warnings", string_array_json(warnings));
+		o.raw("changed", changed_arr);
 		ok = true;
 		return o.dump();
 	}
