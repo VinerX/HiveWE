@@ -40,6 +40,8 @@ private:
 		std::string name;
 		bool is_building = false;
 		bool is_worker = false;
+		bool is_repeat = false;
+		std::string requires_field;
 		std::vector<std::pair<std::string, std::string>> children;
 	};
 
@@ -60,7 +62,7 @@ private:
 	QCheckBox* chk_trained_by_ = nullptr;
 	QCheckBox* chk_built_by_ = nullptr;
 	QCheckBox* chk_upgraded_from_ = nullptr;
-	QCheckBox* chk_recursive_ = nullptr;
+	QCheckBox* chk_repeats_ = nullptr;
 
 	QString current_id_;
 };
