@@ -17,7 +17,7 @@ import ResourceManager;
 import "pathing_palette.h";
 import "object_editor/object_editor.h";
 import "object_editor/spreadsheet_editor.h";
-import "object_editor/techtree_viewer.h";
+#include "object_editor/techtree_viewer.h"
 import "model_editor/model_editor.h";
 import "tile_setter.h";
 import "map_info_editor.h";
