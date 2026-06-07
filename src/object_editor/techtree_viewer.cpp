@@ -178,8 +178,8 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 	graph_view_->viewport()->installEventFilter(this);
 	splitter->addWidget(graph_view_);
 
-	splitter->setStretchFactor(0, 3);
-	splitter->setStretchFactor(1, 5);
+	splitter->setStretchFactor(0, 2);
+	splitter->setStretchFactor(1, 8);
 	main_layout->addWidget(splitter, 1);
 
 	// Bottom zoom
@@ -364,7 +364,7 @@ void TechTreeViewer::rebuildGraph() {
 	std::unordered_map<int, std::vector<NodeInfo*>> dg;
 	for (auto& n : nodes) dg[depth_map[n.id]].push_back(&n);
 
-	const float cw = 250, rh = 100, bw = 210, bh = 70;
+	const float cw = 250, rh = 120, bw = 210, bh = 110;
 
 	for (int d = 0; d < max_depth && dg.count(d); ++d) {
 		auto& grp = dg[d];
@@ -388,23 +388,24 @@ void TechTreeViewer::rebuildGraph() {
 			QIcon ic = get_unit_icon(n->id);
 			if (!ic.isNull()) { auto* pm = graph_scene_->addPixmap(ic.pixmap(36, 36)); pm->setPos(x + bw - 42, y + 12); store_id(pm, n->id); }
 
-			// Requirements: names + icons
+			// Requirements: vertical list with icons
 			if (!n->requires_field.empty() && !n->is_repeat) {
 				auto reqs = split_rcx(n->requires_field);
 				std::sort(reqs.begin(), reqs.end()); reqs.erase(std::unique(reqs.begin(), reqs.end()), reqs.end());
-				float rx = x + 6, ry = y + 48;
-				for (size_t ri = 0; ri < std::min(reqs.size(), size_t(3)); ++ri) {
+				float ry = y + 54;
+				for (size_t ri = 0; ri < std::min(reqs.size(), size_t(4)); ++ri) {
 					const std::string& rid = reqs[ri];
 					QIcon ric = get_unit_icon(rid);
-					if (!ric.isNull()) { auto* rp = graph_scene_->addPixmap(ric.pixmap(12, 12)); rp->setPos(rx, ry); store_id(rp, rid); rx += 16; }
-					QString rn = QString::fromStdString(rid + " " + resolve_name(rid));
-					auto* rt = graph_scene_->addText(rn); rt->setPos(rx, ry - 1); rx += rt->boundingRect().width() + 10;
-					rt->setDefaultTextColor(QColor(180, 80, 80));
+					if (!ric.isNull()) { auto* rp = graph_scene_->addPixmap(ric.pixmap(14, 14)); rp->setPos(x + 6, ry); store_id(rp, rid); }
+					QString rn = QString::fromStdString("  " + rid + " " + resolve_name(rid));
+					auto* rt = graph_scene_->addText(rn); rt->setPos(x + 20, ry - 1);
+					rt->setDefaultTextColor(QColor(180, 60, 60));
 					QFont rf = rt->font(); rf.setPointSize(7); rt->setFont(rf);
+					ry += 15;
 				}
-				if (reqs.size() > 3) {
-					auto* more = graph_scene_->addText("..."); more->setPos(rx, ry - 1);
-					more->setDefaultTextColor(QColor(180, 80, 80));
+				if (reqs.size() > 4) {
+					auto* more = graph_scene_->addText("..."); more->setPos(x + 20, ry - 1);
+					more->setDefaultTextColor(QColor(180, 60, 60));
 				}
 			}
 		}
