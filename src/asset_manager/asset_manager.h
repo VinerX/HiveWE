@@ -50,6 +50,7 @@ class AssetTreeView : public QTreeView {
 	void files_dropped(const QModelIndex& target_index);
 
   protected:
+	void startDrag(Qt::DropActions supported_actions) override;
 	void dragEnterEvent(QDragEnterEvent* event) override;
 	void dragMoveEvent(QDragMoveEvent* event) override;
 	void dropEvent(QDropEvent* event) override;

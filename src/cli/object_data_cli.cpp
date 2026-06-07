@@ -1513,6 +1513,214 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		return o.dump();
 	}
 
+	// ---- get-objects-bulk ----
+	if (args.command == "get-objects-bulk") {
+		std::vector<std::string> ids;
+		if (const auto ids_opt = args.get("ids")) {
+			ids = split_csv(*ids_opt);
+		} else if (const auto file_opt = args.get("id-file")) {
+			std::ifstream file(*file_opt, std::ios::binary);
+			if (!file) return error("cannot open id-file: " + *file_opt);
+			std::string line;
+			while (std::getline(file, line)) {
+				while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+				while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front()))) line.erase(line.begin());
+				while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back()))) line.pop_back();
+				if (line.empty() || line.starts_with('#')) continue;
+				ids.push_back(line);
+			}
+		}
+		if (ids.empty()) {
+			return error("missing required option: --ids <a,b,c> or --id-file <path>");
+		}
+
+		std::optional<std::vector<std::string>> filter;
+		if (const auto f = args.get("fields")) {
+			filter = split_csv(*f);
+			for (auto& col : *filter) col = to_lower(col);
+		}
+
+		std::vector<std::string> missing;
+		std::string objects_arr = "[";
+		bool first = true;
+		for (const auto& id : ids) {
+			if (!slk.row_headers.contains(id)) {
+				missing.push_back(id);
+				continue;
+			}
+			JsonObject fields;
+			if (filter) {
+				for (const auto& col : *filter) {
+					fields.str(col, slk.data<std::string>(col, id));
+				}
+			} else {
+				for (const auto& [col, col_idx] : slk.column_headers) {
+					std::string v = slk.data<std::string>(col, id);
+					if (!v.empty()) fields.str(col, v);
+				}
+			}
+			if (!first) objects_arr += ",";
+			first = false;
+			JsonObject obj;
+			obj.str("id", id);
+			obj.str("name", display_name(slk, id, ts));
+			obj.raw("fields", fields.dump());
+			objects_arr += obj.dump();
+		}
+		objects_arr += "]";
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("type", *type_opt);
+		o.number("count", ids.size() - missing.size());
+		o.raw("missing", string_array_json(missing));
+		o.raw("objects", objects_arr);
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- dump-objects ----
+	if (args.command == "dump-objects") {
+		const std::string type_name = to_lower(*type_opt);
+		std::vector<std::string> use_fields;
+		if (const auto f = args.get("fields")) {
+			use_fields = split_csv(*f);
+			for (auto& col : use_fields) col = to_lower(col);
+		} else {
+			if (type_name == "unit") {
+				use_fields = {"name", "editorsuffix", "goldcost", "lumbercost", "foodcost", "hitpoints",
+					"damagebase", "damagenumberofdice", "damagesidesperdie", "defense", "buildtime",
+					"attacks1enabled", "isbldg"};
+			} else if (type_name == "item") {
+				use_fields = {"name", "editorsuffix", "goldcost", "lumbercost", "level"};
+			} else if (type_name == "ability") {
+				use_fields = {"name", "editorsuffix", "mana", "cool", "levels", "race"};
+			} else if (type_name == "upgrade") {
+				use_fields = {"name", "editorsuffix", "goldcost", "lumbercost", "levels"};
+			} else if (type_name == "doodad") {
+				use_fields = {"name", "editorsuffix"};
+			} else if (type_name == "destructible") {
+				use_fields = {"name", "editorsuffix", "hitpoints"};
+			} else if (type_name == "buff") {
+				use_fields = {"name", "editorsuffix", "race"};
+			}
+		}
+
+		const auto suffix_opt = resolve_suffix(args);
+
+		std::size_t max_count = 1000;
+		if (const auto m = args.get("max")) {
+			max_count = static_cast<std::size_t>(std::max<std::size_t>(1, std::stoull(*m)));
+		}
+
+		std::string suffix_lower;
+		if (suffix_opt) {
+			suffix_lower = to_lower_utf8(*suffix_opt);
+		}
+
+		std::string objects_arr = "[";
+		bool first = true;
+		std::size_t count = 0;
+
+		for (const auto& [id, idx] : slk.row_headers) {
+			if (suffix_opt) {
+				std::string es = editor_suffix(slk, id, ts);
+				if (to_lower_utf8(es).find(suffix_lower) == std::string::npos) {
+					continue;
+				}
+			}
+			if (count >= max_count) break;
+
+			JsonObject fields;
+			for (const auto& col : use_fields) {
+				if (col == "name" || col == "editorsuffix") continue;
+				fields.str(col, slk.data<std::string>(col, id));
+			}
+
+			if (!first) objects_arr += ",";
+			first = false;
+			JsonObject obj;
+			obj.str("id", id);
+			obj.str("name", display_name(slk, id, ts));
+			obj.str("editor_suffix", editor_suffix(slk, id, ts));
+			obj.raw("fields", fields.dump());
+			objects_arr += obj.dump();
+			++count;
+		}
+		objects_arr += "]";
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("type", *type_opt);
+		o.raw("fields_used", string_array_json(use_fields));
+		if (suffix_opt) o.str("filtered_by_suffix", *suffix_opt);
+		o.number("count", count);
+		o.raw("objects", objects_arr);
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- list-fields ----
+	if (args.command == "list-fields") {
+		std::unordered_map<std::string, std::string> col_display;
+		for (const auto& [code, row_idx] : info->meta->row_headers) {
+			std::string col = info->meta->data<std::string>("field", code);
+			std::string display = info->meta->data<std::string>("displayname", code);
+			if (!col.empty() && !display.empty()) {
+				col_display[col] = display;
+			}
+		}
+
+		const auto search_opt = args.get("search");
+		std::string search_lower;
+		if (search_opt) {
+			search_lower = to_lower_utf8(to_utf8(*search_opt));
+		}
+
+		std::string arr = "[";
+		bool first = true;
+		std::size_t count = 0;
+
+		for (const auto& [col, col_idx] : slk.column_headers) {
+			if (search_opt) {
+				std::string col_lower = to_lower_utf8(col);
+				std::string disp_lower;
+				if (auto it = col_display.find(col); it != col_display.end()) {
+					disp_lower = to_lower_utf8(it->second);
+				}
+				if (col_lower.find(search_lower) == std::string::npos
+					&& disp_lower.find(search_lower) == std::string::npos) {
+					continue;
+				}
+			}
+
+			if (!first) arr += ",";
+			first = false;
+			const std::string display = col_display.contains(col) ? col_display.at(col) : "";
+			JsonObject f;
+			f.str("column", col);
+			f.str("display", display);
+			arr += f.dump();
+			++count;
+		}
+		arr += "]";
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("type", *type_opt);
+		o.number("count", count);
+		if (search_opt) o.str("search", *search_opt);
+		o.raw("fields", arr);
+		ok = true;
+		return o.dump();
+	}
+
 	return error("unknown object-data command: " + args.command);
 }
 

@@ -2,10 +2,15 @@
 
 #include <QApplication>
 #include <QSizePolicy>
+#include <QDrag>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QFileIconProvider>
+#include <QFontMetrics>
+#include <QMimeData>
+#include <QPainter>
+#include <QPixmap>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QMenu>
@@ -39,6 +44,59 @@ static constexpr int IsFileRole = Qt::UserRole + 3;   // bool, on file items
 static constexpr int IsFolderRole = Qt::UserRole + 4; // bool, on folder items
 static constexpr int SizeRole = Qt::UserRole + 5;     // qlonglong, on file/folder items (raw bytes)
 static constexpr int PathRole = Qt::UserRole + 6;     // QString full relative path, on file items
+
+void AssetTreeView::startDrag(Qt::DropActions supported_actions) {
+	const QModelIndexList rows = selectionModel()->selectedRows(0);
+	if (rows.isEmpty()) {
+		return;
+	}
+
+	auto* drag = new QDrag(this);
+	QMimeData* mime = model() ? model()->mimeData(rows) : nullptr;
+	drag->setMimeData(mime ? mime : new QMimeData);
+
+	const int count = static_cast<int>(rows.size());
+	const QIcon icon = qvariant_cast<QIcon>(rows.first().data(Qt::DecorationRole));
+
+	// Compose a compact Explorer-style cursor: one file icon, plus a count
+	// badge when several files are being dragged.
+	const int icon_px = 32;
+	QFont font = this->font();
+	font.setBold(true);
+	const QString text = QString::number(count);
+	const QFontMetrics fm(font);
+	const int badge_h = 18;
+	const int badge_w = count > 1 ? std::max(badge_h, fm.horizontalAdvance(text) + 10) : 0;
+
+	const QSize logical(icon_px + (count > 1 ? badge_w - 8 : 0), icon_px);
+	const qreal dpr = devicePixelRatioF();
+	QPixmap pixmap(logical * dpr);
+	pixmap.setDevicePixelRatio(dpr);
+	pixmap.fill(Qt::transparent);
+
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+	if (!icon.isNull()) {
+		painter.drawPixmap(0, 0, icon.pixmap(icon_px, icon_px));
+	}
+	if (count > 1) {
+		const QRectF badge(logical.width() - badge_w, logical.height() - badge_h, badge_w, badge_h);
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(QColor(0, 120, 215)); // Windows accent blue
+		painter.drawRoundedRect(badge, badge_h / 2.0, badge_h / 2.0);
+		painter.setPen(Qt::white);
+		painter.setFont(font);
+		painter.drawText(badge, Qt::AlignCenter, text);
+	}
+	painter.end();
+
+	if (!pixmap.isNull()) {
+		drag->setPixmap(pixmap);
+		drag->setHotSpot(QPoint(icon_px / 2, icon_px / 2));
+	}
+
+	drag->exec(supported_actions, defaultDropAction());
+}
 
 void AssetTreeView::dragEnterEvent(QDragEnterEvent* event) {
 	// Only our own internal row drags are interesting.
