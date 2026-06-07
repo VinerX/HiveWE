@@ -44,6 +44,7 @@ public:
 	QRibbonButton* trigger_editor = new QRibbonButton;
 	QRibbonButton* object_editor = new QRibbonButton;
 	QRibbonButton* spreadsheet_editor = new QRibbonButton;
+	QRibbonButton* techtree_viewer = new QRibbonButton;
 	QRibbonButton* model_editor = new QRibbonButton;
 	QRibbonButton* asset_manager = new QRibbonButton;
 

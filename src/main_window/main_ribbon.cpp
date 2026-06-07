@@ -32,6 +32,10 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	spreadsheet_editor->setText("Spread\nsheet");
 	editor_section->addWidget(spreadsheet_editor);
 
+	techtree_viewer->setIcon(QIcon("data/icons/ribbon/objecteditor.png"));
+	techtree_viewer->setText("Tech\nTree");
+	editor_section->addWidget(techtree_viewer);
+
 	model_editor->setIcon(QIcon("data/icons/ribbon/model_editor.png"));
 	model_editor->setText("Model\nEditor");
 	editor_section->addWidget(model_editor);
