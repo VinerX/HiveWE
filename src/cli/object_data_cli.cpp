@@ -1270,6 +1270,235 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		}
 	}
 
+	// ---- trace-unit ----
+	if (args.command == "trace-unit") {
+		const auto id_opt = args.get("id");
+		if (!id_opt) return error("missing required option: --id <rawcode>");
+		const std::string root_id = *id_opt;
+		if (root_id.size() != 4) return error("--id must be a 4-character rawcode, got: " + root_id);
+
+		const int max_depth = args.get("depth") ? std::stoi(*args.get("depth")) : -1;
+		const std::string format = args.get("format").value_or("tree");
+		if (format != "tree" && format != "flat" && format != "json")
+			return error("--format must be tree, flat, or json");
+
+		std::string warcraft;
+		if (const auto w = args.get("warcraft")) warcraft = *w;
+		else if (!warcraft_fallback.empty()) warcraft = warcraft_fallback;
+		else return error("could not determine Warcraft III directory");
+
+		TriggerStrings ts;
+		if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts))
+			return error(*err);
+
+		if (!units_slk.row_headers.contains(root_id))
+			return error("unit not found: " + root_id);
+
+		// Precompute reverse lookups: who trains/builds/upgrades-to a given rawcode
+		std::unordered_map<std::string, std::vector<std::string>> trained_by;
+		std::unordered_map<std::string, std::vector<std::string>> built_by;
+		std::unordered_map<std::string, std::vector<std::string>> upgraded_from;
+
+		for (const auto& [row_id, idx] : units_slk.row_headers) {
+			for (const auto& t : split_rawcode_list(units_slk.data<std::string>("trains", row_id)))
+				trained_by[t].push_back(row_id);
+			for (const auto& b : split_rawcode_list(units_slk.data<std::string>("builds", row_id)))
+				built_by[b].push_back(row_id);
+			for (const char* f : {"upgrade", "upgrades", "revive"}) {
+				for (const auto& u : split_rawcode_list(units_slk.data<std::string>(f, row_id)))
+					upgraded_from[u].push_back(row_id);
+			}
+		}
+
+		struct TNode {
+			std::string id, name, editorsuffix, requires_field;
+			bool is_building = false, is_worker = false;
+			std::vector<std::string> trains, builds, upgrades_to, researches, abillist;
+			std::vector<TNode> children;
+		};
+
+		std::unordered_set<std::string> visited;
+
+		std::function<TNode(const std::string&, int)> build_node;
+		build_node = [&](const std::string& id, int depth) -> TNode {
+			TNode n;
+			n.id = id;
+			n.name = display_name(units_slk, id, ts);
+			n.editorsuffix = editor_suffix(units_slk, id, ts);
+			n.is_building = units_slk.data<std::string>("isbldg", id) == "1";
+			n.trains = split_rawcode_list(units_slk.data<std::string>("trains", id));
+			n.builds = split_rawcode_list(units_slk.data<std::string>("builds", id));
+			n.is_worker = !n.builds.empty();
+			n.researches = split_rawcode_list(units_slk.data<std::string>("researches", id));
+			n.requires_field = units_slk.data<std::string>("requires", id);
+
+			for (const char* f : {"abillist", "heroabillist"}) {
+				auto list = split_rawcode_list(units_slk.data<std::string>(f, id));
+				n.abillist.insert(n.abillist.end(), list.begin(), list.end());
+			}
+			std::sort(n.abillist.begin(), n.abillist.end());
+			n.abillist.erase(std::unique(n.abillist.begin(), n.abillist.end()), n.abillist.end());
+
+			for (const char* f : {"upgrade", "upgrades", "revive"}) {
+				auto list = split_rawcode_list(units_slk.data<std::string>(f, id));
+				n.upgrades_to.insert(n.upgrades_to.end(), list.begin(), list.end());
+			}
+			std::sort(n.upgrades_to.begin(), n.upgrades_to.end());
+			n.upgrades_to.erase(std::unique(n.upgrades_to.begin(), n.upgrades_to.end()), n.upgrades_to.end());
+
+			if (max_depth >= 0 && depth >= max_depth) return n;
+			if (!visited.insert(id).second) return n;
+
+			std::vector<std::string> child_ids;
+			auto push_children = [&](const std::vector<std::string>& ids) {
+				for (const auto& c : ids)
+					if (units_slk.row_headers.contains(c)) child_ids.push_back(c);
+			};
+			push_children(n.builds);
+			push_children(n.trains);
+			push_children(n.upgrades_to);
+			if (auto it = trained_by.find(id); it != trained_by.end()) push_children(it->second);
+			if (auto it = built_by.find(id); it != built_by.end()) push_children(it->second);
+			if (auto it = upgraded_from.find(id); it != upgraded_from.end()) push_children(it->second);
+
+			std::sort(child_ids.begin(), child_ids.end());
+			child_ids.erase(std::unique(child_ids.begin(), child_ids.end()), child_ids.end());
+
+			for (const auto& child : child_ids)
+				n.children.push_back(build_node(child, depth + 1));
+
+			return n;
+		};
+
+		TNode root = build_node(root_id, 0);
+
+		// ---- JSON output ----
+		if (format == "json") {
+			std::function<JsonObject(const TNode&)> to_json;
+			to_json = [&](const TNode& n) -> JsonObject {
+				JsonObject obj;
+				obj.str("id", n.id);
+				obj.str("name", n.name);
+				if (!n.editorsuffix.empty()) obj.str("editor_suffix", n.editorsuffix);
+				obj.str("type", n.is_building ? "building" : (n.is_worker ? "worker" : "unit"));
+				if (!n.trains.empty()) obj.raw("trains", string_array_json(n.trains));
+				if (!n.builds.empty()) obj.raw("builds", string_array_json(n.builds));
+				if (!n.upgrades_to.empty()) obj.raw("upgrades_to", string_array_json(n.upgrades_to));
+				if (!n.researches.empty()) obj.raw("researches", string_array_json(n.researches));
+				if (!n.abillist.empty()) obj.raw("abilities", string_array_json(n.abillist));
+				if (!n.requires_field.empty()) obj.str("requires", n.requires_field);
+				if (!n.children.empty()) {
+					std::string arr = "[";
+					for (size_t i = 0; i < n.children.size(); ++i) {
+						if (i) arr += ",";
+						arr += to_json(n.children[i]).dump();
+					}
+					arr += "]";
+					obj.raw("children", arr);
+				}
+				return obj;
+			};
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.str("root_id", root_id);
+			o.number("max_depth", max_depth);
+			o.number("nodes", static_cast<int>(visited.size()) + 1);
+			o.raw("tree", to_json(root).dump());
+			ok = true;
+			return o.dump();
+		}
+
+		// ---- text output (tree / flat) ----
+		std::string output;
+
+		auto type_label = [](const TNode& n) -> std::string {
+			std::string t;
+			if (n.is_building) t = "building";
+			else if (n.is_worker) t = "worker";
+			else t = "unit";
+			if (!n.editorsuffix.empty()) t += ", " + n.editorsuffix;
+			return t;
+		};
+
+		auto field_list = [](const std::vector<std::string>& v) -> std::string {
+			if (v.empty()) return "(none)";
+			std::string s;
+			for (size_t i = 0; i < v.size(); ++i) {
+				if (i) s += ", ";
+				s += v[i];
+			}
+			return s;
+		};
+
+		auto node_header = [&](const TNode& n) -> std::string {
+			std::string h = n.id;
+			if (!n.name.empty()) h += " (" + n.name + ")";
+			h += " [" + type_label(n) + "]";
+			return h;
+		};
+
+		auto append_fields = [&](const TNode& n, const std::string& indent) {
+			if (!n.trains.empty()) output += indent + "trains: " + field_list(n.trains) + "\n";
+			if (!n.builds.empty()) output += indent + "builds: " + field_list(n.builds) + "\n";
+			if (!n.upgrades_to.empty()) output += indent + "upgrades_to: " + field_list(n.upgrades_to) + "\n";
+			if (!n.researches.empty()) output += indent + "researches: " + field_list(n.researches) + "\n";
+			if (!n.abillist.empty()) output += indent + "abilities: " + field_list(n.abillist) + "\n";
+			if (!n.requires_field.empty()) output += indent + "requires: " + n.requires_field + "\n";
+		};
+
+		if (format == "flat") {
+			std::function<void(const TNode&, int)> flat_out;
+			flat_out = [&](const TNode& n, int depth) {
+				std::string indent(depth * 2, ' ');
+				output += indent + node_header(n) + "\n";
+				append_fields(n, indent + "  ");
+				for (const auto& child : n.children)
+					flat_out(child, depth + 1);
+			};
+			flat_out(root, 0);
+		} else {
+			// tree: ASCII tree with +-- / \-- connectors and continuation bars
+			std::function<void(const TNode&, const std::string&)> tree_out;
+			tree_out = [&](const TNode& n, const std::string& line_prefix) {
+				output += line_prefix + node_header(n) + "\n";
+
+				// Field indent: replace the last 4-char connector with a continuation bar
+				std::string field_indent = line_prefix;
+				if (field_indent.size() >= 4) {
+					std::string_view tail(field_indent.c_str() + field_indent.size() - 4, 4);
+					if (tail == std::string_view("+-- ")) field_indent.replace(field_indent.size() - 4, 4, "|   ");
+					else if (tail == std::string_view("\\-- ")) field_indent.replace(field_indent.size() - 4, 4, "    ");
+				} else {
+					field_indent = "    ";
+				}
+
+				append_fields(n, field_indent);
+
+				for (size_t i = 0; i < n.children.size(); ++i) {
+					bool last = (i == n.children.size() - 1);
+					std::string child_prefix = field_indent + (last ? "\\-- " : "+-- ");
+					tree_out(n.children[i], child_prefix);
+				}
+			};
+			tree_out(root, "");
+		}
+
+		std::cout << output << std::flush;
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("root_id", root_id);
+		o.str("format", format);
+		o.number("max_depth", max_depth);
+		o.number("nodes", static_cast<int>(visited.size()) + 1);
+		ok = true;
+		return o.dump();
+	}
+
 	std::string warcraft;
 	if (const auto w = args.get("warcraft")) {
 		warcraft = *w;
