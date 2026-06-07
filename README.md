@@ -6,12 +6,13 @@
 > historically managed by hand through name prefixes — a process that took months.
 >
 > The goal of this fork is to remove that pain by adding mass-editing and organization tools directly
-> in the Object Editor:
+> in the Object Editor, plus a **headless CLI for agent-driven automation**:
 > - **Race column** in the unit table (reads the `urac` / SLK `race` field), sortable.
 > - **Filtering / grouping by race**.
 > - **Spreadsheet view** — all units as rows, configurable fields as editable columns.
 > - **Batch edit** — set a field for many selected objects at once.
 > - **Editor-only metadata** (group / note / status) stored so it never reaches the game build.
+> - **HiveWE_cli** — headless CLI for bulk object-data queries, batch edits, and agent-to-game bridge.
 >
 > All changes stay backward-compatible (maps still open in vanilla HiveWE/WE) and the fork remains
 > open-source under **AGPL-3.0**. See the upstream description below for the base editor.
@@ -51,7 +52,24 @@ Some of the benefits over the vanilla WE:
 
 ## Download
 
-See the [releases page](https://github.com/stijnherfst/HiveWE/releases) for binary downloads.
+See the [releases page](https://github.com/VinerX/HiveWE/releases) for binary downloads.
+
+## CLI Agent Tools (VinerX Edition)
+
+The fork includes `HiveWE_cli.exe` — a headless CLI for scripted/agent-driven map editing:
+
+```bash
+# Search all units whose editor suffix contains "elite"
+HiveWE_cli search-objects --map "23races.w3x" --type units --field-filter editorsuffix:elite
+
+# Batch-set HP for all selected objects
+HiveWE_cli batch-edit --map "23races.w3x" --type units --ids 1,2,3 --field uhpm:500
+
+# Probe a running map via Preloader-based agent bridge
+HiveWE_cli probe-map --map "23races.w3x" --port 6112
+```
+
+Run `HiveWE_cli --help` for the full command list.
 
 ## Other Community Tools
 
@@ -63,7 +81,7 @@ or [Retera Model Studio](https://github.com/Retera/ReterasModelStudio)
 
 0. Requires Visual Studio 17.14 or higher (C++20 modules)
 1. Clone HiveWE somewhere 
-`git clone https://github.com/stijnherfst/HiveWE.git`
+`git clone https://github.com/VinerX/HiveWE.git`
 2. Clone [vcpkg](https://github.com/microsoft/vcpkg) somewhere central (eg. "C:/")
 `git clone https://github.com/Microsoft/vcpkg.git`
 3. Run vcpkg/bootstrap-vcpkg.bat
