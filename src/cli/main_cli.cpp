@@ -1335,7 +1335,7 @@ int main(int argc, char* argv[]) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "get-objects-bulk", "set-field", "batch-edit", "safe-move", "describe-race",
+									   "list-object-types", "search-objects", "get-object", "get-objects-bulk", "set-field", "copy-object", "batch-edit", "safe-move", "describe-race",
 									   "show-building", "list-race-objects", "list-all-races", "dump-objects", "list-fields"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
@@ -1349,6 +1349,7 @@ int main(int argc, char* argv[]) {
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"get-objects-bulk", "--map <dir> --type <...> --ids id1,id2,... [--id-file <path>] [--fields a,b,c] [--warcraft <dir>] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
+				   {"copy-object", "--map <dir> --type <...> --source <rawcode> --new-id <rawcode> [--name <text>] [--warcraft <dir>] [--hd] [--dry-run]"},
 				   {"batch-edit", "--map <dir> --type <...> --field <col> --value <v> --ids id1,id2,... [--id-file <path>] [--warcraft <dir>] [--hd] [--dry-run]"},
 				   {"dump-objects", "--map <dir> --type <...> [--fields a,b,c] [--suffix <text>] [--suffix-hex <hex>] [--max N] [--warcraft <dir>] [--hd]"},
 				   {"list-fields", "--map <dir> --type <...> [--search <substr>] [--warcraft <dir>] [--hd]"},
@@ -1373,7 +1374,7 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "get-objects-bulk" || args.command == "set-field" || args.command == "batch-edit" || args.command == "describe-race" ||
+			   args.command == "get-object" || args.command == "get-objects-bulk" || args.command == "set-field" || args.command == "copy-object" || args.command == "batch-edit" || args.command == "describe-race" ||
 			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races" ||
 			   args.command == "dump-objects" || args.command == "list-fields") {
 		bool ok = false;

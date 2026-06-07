@@ -1477,6 +1477,58 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		return o.dump();
 	}
 
+	// ---- copy-object ----
+	if (args.command == "copy-object") {
+		const auto source_opt = args.get("source");
+		const auto new_id_opt = args.get("new-id");
+		if (!source_opt) return error("missing required option: --source <rawcode>");
+		if (!new_id_opt) return error("missing required option: --new-id <rawcode>");
+		if (new_id_opt->size() != 4) return error("--new-id must be exactly 4 characters, got: " + *new_id_opt);
+		if (!slk.base_data.contains(*source_opt) && !slk.shadow_data.contains(*source_opt)) {
+			if (slk.row_headers.contains(*source_opt)) {
+				return error("copy-object requires source to be a base-game object, not a custom object. Use get-object to check base_id.");
+			}
+			return error("source object not found in type " + *type_opt + ": " + *source_opt);
+		}
+		if (slk.row_headers.contains(*new_id_opt)) {
+			return error("new-id already exists in type " + *type_opt + ": " + *new_id_opt);
+		}
+
+		const bool dry_run = args.has_flag("dry-run");
+		if (!dry_run) {
+			slk.copy_row(*source_opt, *new_id_opt, false);
+
+			if (const auto name_opt = args.get("name")) {
+				slk.set_shadow_data("name", *new_id_opt, *name_opt);
+			}
+
+			save_modification_file(info->mod_file, *info->slk, *info->meta, info->optional_ints, false);
+			{
+				JsonObject log;
+				log.str("ts", changelog_ts());
+				log.str("command", "copy-object");
+				log.str("type", *type_opt);
+				log.str("source", *source_opt);
+				log.str("new_id", *new_id_opt);
+				if (const auto name_opt2 = args.get("name")) log.str("name", *name_opt2);
+				append_changelog(*map_opt, log.dump());
+			}
+		}
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("type", *type_opt);
+		o.str("source", *source_opt);
+		o.str("new_id", *new_id_opt);
+		if (const auto name_opt3 = args.get("name")) o.str("name", *name_opt3);
+		o.boolean("dry_run", dry_run);
+		o.str("written", dry_run ? "" : info->mod_file);
+		ok = true;
+		return o.dump();
+	}
+
 	// ---- batch-edit ----
 	if (args.command == "batch-edit") {
 		const auto field_opt = args.get("field");
