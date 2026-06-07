@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QCloseEvent>
 #include <QSplitter>
 #include <QTreeWidget>
 #include <QGraphicsView>
@@ -24,6 +25,9 @@ public:
 	explicit TechTreeViewer(QWidget* parent = nullptr);
 
 	void setUnit(const std::string& rawcode);
+
+protected:
+	void closeEvent(QCloseEvent* event) override { hide(); event->ignore(); }
 
 private:
 	void rebuildTree();

@@ -518,6 +518,7 @@ void ObjectEditor::addTypeTreeView(
 					if (!item || item->baseCategory || item->subCategory) continue;
 					bool created;
 					auto* viewer = window_handler.create_or_raise<TechTreeViewer>(nullptr, created);
+					viewer->show();
 					viewer->setUnit(item->id);
 					break;
 				}

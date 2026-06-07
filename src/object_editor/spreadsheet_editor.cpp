@@ -1945,6 +1945,7 @@ void SpreadsheetEditor::addCategoryTab(
 			const std::string id = px->slk->index_to_row.at(static_cast<size_t>(src.row()));
 			bool created;
 			auto* viewer = window_handler.create_or_raise<TechTreeViewer>(nullptr, created);
+			viewer->show();
 			viewer->setUnit(id);
 		});
 

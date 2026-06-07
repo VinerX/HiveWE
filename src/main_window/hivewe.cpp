@@ -200,7 +200,8 @@ HiveWE::HiveWE(QWidget* parent)
 
 	connect(ui.ribbon->techtree_viewer, &QRibbonButton::clicked, [this]() {
 		bool created = false;
-		window_handler.create_or_raise<TechTreeViewer>(nullptr, created);
+		auto* v = window_handler.create_or_raise<TechTreeViewer>(nullptr, created);
+		v->show();
 	});
 
 	connect(ui.ribbon->model_editor, &QRibbonButton::clicked, [this]() {
