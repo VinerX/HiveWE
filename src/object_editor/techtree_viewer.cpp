@@ -13,6 +13,7 @@
 #include <QWheelEvent>
 #include <QIcon>
 #include <QScrollBar>
+#include <QEvent>
 
 import std;
 import Globals;
@@ -157,7 +158,7 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 
 	// --- info label ---
 	info_label_ = new QLabel;
-	info_label_->setWordWrap(true);
+	info_label_->setMaximumHeight(20);
 	main_layout->addWidget(info_label_);
 
 	// --- splitter: tree | graph ---
@@ -178,11 +179,12 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 	graph_view_->setDragMode(QGraphicsView::ScrollHandDrag);
 	graph_view_->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
 	graph_view_->setResizeAnchor(QGraphicsView::AnchorUnderMouse);
+	graph_view_->viewport()->installEventFilter(this);
 	splitter->addWidget(graph_view_);
 
 	splitter->setStretchFactor(0, 3);
 	splitter->setStretchFactor(1, 5);
-	main_layout->addWidget(splitter);
+	main_layout->addWidget(splitter, 1);
 
 	// --- bottom: zoom buttons ---
 	QHBoxLayout* zoom_row = new QHBoxLayout;
@@ -377,8 +379,19 @@ void TechTreeViewer::rebuildGraph() {
 				collect(child_id, depth + 1);
 			}
 		} else {
-			for (const auto& [child_id, rel] : ni.children)
+			// Non-recursive: still add child nodes so edges render
+			for (const auto& [child_id, rel] : ni.children) {
 				edges.push_back({id, child_id, rel});
+				if (!depth_map.contains(child_id)) {
+					NodeInfo ci;
+					ci.id = child_id;
+					ci.name = resolve_name(child_id);
+					ci.is_building = units_slk.data<std::string>("isbldg", child_id) == "1";
+					ci.is_worker = !split_rcx(units_slk.data<std::string>("builds", child_id)).empty();
+					nodes.push_back(ci);
+					depth_map[child_id] = depth + 1;
+				}
+			}
 		}
 	};
 
@@ -390,9 +403,9 @@ void TechTreeViewer::rebuildGraph() {
 		depth_groups[depth_map[n.id]].push_back(&n);
 
 	const float col_width = 250;
-	const float row_height = 90;
+	const float row_height = 100;
 	const float box_w = 210;
-	const float box_h = 62;
+	const float box_h = 70;
 
 	for (int d = 0; d < max_depth && depth_groups.count(d); ++d) {
 		auto& group = depth_groups[d];
@@ -420,8 +433,8 @@ void TechTreeViewer::rebuildGraph() {
 
 			QIcon icon = get_unit_icon(n->id);
 			if (!icon.isNull()) {
-				QPixmap pm = icon.pixmap(24, 24);
-				graph_scene_->addPixmap(pm)->setPos(x + box_w - 30, y + 10);
+				QPixmap pm = icon.pixmap(36, 36);
+				graph_scene_->addPixmap(pm)->setPos(x + box_w - 42, y + 10);
 			}
 		}
 	}
@@ -466,4 +479,15 @@ void TechTreeViewer::rebuildGraph() {
 
 	graph_scene_->setSceneRect(graph_scene_->itemsBoundingRect().adjusted(-30, -30, 30, 30));
 	graph_view_->fitInView(graph_scene_->sceneRect(), Qt::KeepAspectRatio);
+}
+
+bool TechTreeViewer::eventFilter(QObject* obj, QEvent* event) {
+	if (obj == graph_view_->viewport() && event->type() == QEvent::Wheel) {
+		auto* we = static_cast<QWheelEvent*>(event);
+		const double factor = (we->angleDelta().y() > 0) ? 1.15 : 0.87;
+		graph_view_->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+		graph_view_->scale(factor, factor);
+		return true;
+	}
+	return QMainWindow::eventFilter(obj, event);
 }

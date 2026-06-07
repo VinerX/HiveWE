@@ -28,6 +28,7 @@ public:
 
 protected:
 	void closeEvent(QCloseEvent* event) override { hide(); event->ignore(); }
+	bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
 	void rebuildTree();
