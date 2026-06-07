@@ -227,6 +227,34 @@ std::vector<std::string> split_csv(std::string_view sv) {
 	return out;
 }
 
+std::string changelog_ts() {
+	using namespace std::chrono;
+	const auto now = system_clock::now();
+	const auto ms = duration_cast<milliseconds>(now.time_since_epoch()).count() % 1000;
+	auto secs = static_cast<int64_t>(duration_cast<seconds>(now.time_since_epoch()).count());
+	if (secs < 0) secs = 0;
+
+	const int64_t z = secs / 86400 + 719468;
+	const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+	const int64_t doe = z - era * 146097;
+	const int64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	const int64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+	const int64_t mp = (5 * doy + 2) / 153;
+	const int d = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
+	const int m = static_cast<int>(mp + (mp < 10 ? 3 : -9));
+	const int y = static_cast<int>(yoe + era * 400 + (m <= 2));
+
+	const int64_t sod = static_cast<int64_t>(duration_cast<seconds>(now.time_since_epoch()).count()) % 86400;
+	return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z",
+		y, m, d, static_cast<int>(sod / 3600), static_cast<int>((sod % 3600) / 60), static_cast<int>(sod % 60), ms);
+}
+
+void append_changelog(const fs::path& map_dir, const std::string& line) {
+	const fs::path log_path = map_dir / "_cli_changelog.jsonl";
+	std::ofstream log(log_path, std::ios::app | std::ios::binary);
+	if (log) log << line << "\n";
+}
+
 std::string string_array_json(const std::vector<std::string>& values) {
 	std::string out = "[";
 	for (std::size_t i = 0; i < values.size(); ++i) {
@@ -1423,6 +1451,17 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 
 		// Persist the modification table back into the map folder.
 		save_modification_file(info->mod_file, *info->slk, *info->meta, info->optional_ints, false);
+		{
+			JsonObject log;
+			log.str("ts", changelog_ts());
+			log.str("command", "set-field");
+			log.str("type", *type_opt);
+			log.str("id", id);
+			log.str("field", field);
+			log.str("old", old_value);
+			log.str("new", new_value);
+			append_changelog(*map_opt, log.dump());
+		}
 
 		JsonObject o;
 		o.boolean("ok", true);
@@ -1495,6 +1534,16 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 
 		if (!dry_run) {
 			save_modification_file(info->mod_file, *info->slk, *info->meta, info->optional_ints, false);
+			{
+				JsonObject log;
+				log.str("ts", changelog_ts());
+				log.str("command", "batch-edit");
+				log.str("type", *type_opt);
+				log.str("field", field);
+				log.number("count_changed", count_changed);
+				log.raw("changes", changed_arr);
+				append_changelog(*map_opt, log.dump());
+			}
 		}
 
 		JsonObject o;
