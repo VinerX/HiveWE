@@ -12,27 +12,20 @@ import Utilities;
 
 namespace {
 
-std::vector<std::string> split_list(const std::string& val) {
+std::vector<std::string> split_rcx(std::string_view value) {
 	std::vector<std::string> result;
-	if (val.empty()) return result;
-	std::string_view sv(val);
-	if (sv.size() >= 2 && sv.front() == '"' && sv.back() == '"') {
-		sv = sv.substr(1, sv.size() - 2);
+	std::string current;
+	for (char c : value) {
+		if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '\'') {
+			current.push_back(c);
+		} else {
+			if (current.size() == 4) result.push_back(current);
+			current.clear();
+		}
 	}
-	if (sv.find(',') == std::string_view::npos) {
-		result.push_back(std::string(sv));
-		return result;
-	}
-	std::size_t start = 0;
-	while (start < sv.size()) {
-		std::size_t end = sv.find(',', start);
-		if (end == std::string_view::npos) end = sv.size();
-		auto token = sv.substr(start, end - start);
-		while (!token.empty() && token.front() == ' ') token.remove_prefix(1);
-		while (!token.empty() && token.back() == ' ') token.remove_suffix(1);
-		if (!token.empty()) result.push_back(std::string(token));
-		start = end + 1;
-	}
+	if (current.size() == 4) result.push_back(current);
+	std::sort(result.begin(), result.end());
+	result.erase(std::unique(result.begin(), result.end()), result.end());
 	return result;
 }
 
@@ -150,12 +143,12 @@ void TechTreeViewer::rebuildTree() {
 	std::unordered_map<std::string, std::vector<std::string>> upgraded_from;
 
 	for (const auto& [row_id, idx] : units_slk.row_headers) {
-		for (const auto& t : split_list(units_slk.data<std::string>("trains", row_id)))
+		for (const auto& t : split_rcx(units_slk.data<std::string>("trains", row_id)))
 			trained_by[t].push_back(row_id);
-		for (const auto& b : split_list(units_slk.data<std::string>("builds", row_id)))
+		for (const auto& b : split_rcx(units_slk.data<std::string>("builds", row_id)))
 			built_by[b].push_back(row_id);
 		for (const char* f : {"upgrade", "upgrades", "revive"}) {
-			for (const auto& u : split_list(units_slk.data<std::string>(f, row_id)))
+			for (const auto& u : split_rcx(units_slk.data<std::string>(f, row_id)))
 				upgraded_from[u].push_back(row_id);
 		}
 	}
@@ -165,18 +158,18 @@ void TechTreeViewer::rebuildTree() {
 		std::vector<std::pair<std::string, std::string>> children; // {rawcode, relation}
 
 		// Forward: what this unit builds/trains/upgrades-to/researches
-		for (const auto& t : split_list(units_slk.data<std::string>("trains", id)))
+		for (const auto& t : split_rcx(units_slk.data<std::string>("trains", id)))
 			if (units_slk.row_headers.contains(t))
 				children.push_back({t, "trains"});
-		for (const auto& b : split_list(units_slk.data<std::string>("builds", id)))
+		for (const auto& b : split_rcx(units_slk.data<std::string>("builds", id)))
 			if (units_slk.row_headers.contains(b))
 				children.push_back({b, "builds"});
 		for (const char* f : {"upgrade", "upgrades", "revive"}) {
-			for (const auto& u : split_list(units_slk.data<std::string>(f, id)))
+			for (const auto& u : split_rcx(units_slk.data<std::string>(f, id)))
 				if (units_slk.row_headers.contains(u))
 					children.push_back({u, "upgrades to"});
 		}
-		for (const auto& r : split_list(units_slk.data<std::string>("researches", id)))
+		for (const auto& r : split_rcx(units_slk.data<std::string>("researches", id)))
 			children.push_back({r, "researches"});
 
 		// Reverse: who trains/builds/upgrades-to this unit
