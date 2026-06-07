@@ -1255,7 +1255,7 @@ int main(int argc, char* argv[]) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "set-field"})},
+									   "list-object-types", "search-objects", "get-object", "set-field", "safe-move"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -1267,6 +1267,7 @@ int main(int argc, char* argv[]) {
 				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
+				   {"safe-move", "--map <dir> --from <relpath> --to <relpath> [--warcraft <dir>] [--hd] [--dry-run]"},
 			   })}});
 	}
 
@@ -1286,6 +1287,12 @@ int main(int argc, char* argv[]) {
 			   args.command == "get-object" || args.command == "set-field") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(argc, argv, warcraft_dir_from_registry(), ok);
+		std::fputs(result.c_str(), stdout);
+		std::fputc('\n', stdout);
+		std::exit(ok ? 0 : 1);
+	} else if (args.command == "safe-move") {
+		bool ok = false;
+		const std::string result = hivewe_safe_move_command(argc, argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);
 		std::fputc('\n', stdout);
 		std::exit(ok ? 0 : 1);

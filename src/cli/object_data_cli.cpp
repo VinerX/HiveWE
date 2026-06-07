@@ -18,6 +18,9 @@ import Hierarchy;
 import SLK;
 import INI;
 import TriggerStrings;
+import MapInfo;
+import Sounds;
+import SafeMove;
 
 namespace {
 
@@ -525,4 +528,114 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 	}
 
 	return error("unknown object-data command: " + args.command);
+}
+
+// safe-move: move an imported file inside the map and rewrite every detectable
+// reference to it (object data, sounds, map info, map script), then regenerate
+// war3map.imp. Pass --dry-run to preview without changing anything.
+export std::string hivewe_safe_move_command(int argc, char* argv[], const std::string& warcraft_fallback, bool& ok) {
+	const CliArgs args = parse(argc, argv);
+	ok = false;
+
+	auto error = [&](const std::string& msg) {
+		JsonObject o;
+		o.boolean("ok", false);
+		o.str("command", args.command);
+		o.str("error", msg);
+		return o.dump();
+	};
+
+	const auto map_opt = args.get("map");
+	const auto from_opt = args.get("from");
+	const auto to_opt = args.get("to");
+	if (!map_opt) {
+		return error("missing required option: --map <map folder>");
+	}
+	if (!from_opt) {
+		return error("missing required option: --from <relative path>");
+	}
+	if (!to_opt) {
+		return error("missing required option: --to <relative path>");
+	}
+	if (!std::filesystem::is_directory(*map_opt)) {
+		return error("map folder not found: " + *map_opt);
+	}
+
+	std::string warcraft;
+	if (const auto w = args.get("warcraft")) {
+		warcraft = *w;
+	} else if (!warcraft_fallback.empty()) {
+		warcraft = warcraft_fallback;
+	} else {
+		return error("could not determine Warcraft III directory; pass --warcraft <dir>");
+	}
+
+	TriggerStrings ts;
+	try {
+		if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts)) {
+			return error(*err);
+		}
+	} catch (const std::exception& e) {
+		return error(std::string("failed to load object data: ") + e.what());
+	}
+
+	MapInfo info;
+	try {
+		info.load();
+	} catch (const std::exception& e) {
+		return error(std::string("failed to load war3map.w3i: ") + e.what());
+	}
+
+	Sounds sounds;
+	if (hierarchy.map_file_exists("war3map.w3s")) {
+		try {
+			sounds.load();
+		} catch (const std::exception&) {
+			// A malformed w3s shouldn't block the move; the raw rewriter handles it.
+		}
+	}
+
+	const bool dry_run = args.has_flag("dry-run");
+
+	MoveReport rep;
+	try {
+		rep = safe_move_file(*from_opt, *to_opt, dry_run, info, sounds);
+	} catch (const std::exception& e) {
+		return error(std::string("safe-move failed: ") + e.what());
+	}
+
+	std::string refs = "[";
+	for (std::size_t i = 0; i < rep.references.size(); ++i) {
+		if (i) refs += ",";
+		JsonObject r;
+		r.str("location", rep.references[i].location);
+		r.str("old_value", rep.references[i].old_value);
+		r.str("new_value", rep.references[i].new_value);
+		refs += r.dump();
+	}
+	refs += "]";
+
+	std::string warns = "[";
+	for (std::size_t i = 0; i < rep.warnings.size(); ++i) {
+		if (i) warns += ",";
+		warns += jstr(rep.warnings[i]);
+	}
+	warns += "]";
+
+	JsonObject o;
+	o.boolean("ok", rep.ok);
+	o.str("command", args.command);
+	o.str("map", *map_opt);
+	o.str("from", rep.from);
+	o.str("to", rep.to);
+	o.boolean("dry_run", rep.dry_run);
+	o.boolean("renamed", rep.renamed);
+	o.number("reference_count", rep.reference_count());
+	o.raw("references", refs);
+	o.raw("warnings", warns);
+	if (!rep.ok) {
+		o.str("error", rep.error);
+	}
+	ok = rep.ok;
+	return o.dump();
 }

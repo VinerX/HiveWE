@@ -4,6 +4,7 @@
 #include <QSizePolicy>
 #include <QFileIconProvider>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -15,6 +16,7 @@ import SLK;
 import Map;
 import MapGlobal;
 import Globals;
+import SafeMove;
 import TableModel;
 import ResourceManager;
 import QIconResource;
@@ -23,10 +25,62 @@ import "object_editor/object_editor.h";
 
 namespace fs = std::filesystem;
 
+// Column layout
+enum Column { ColFile = 0, ColType = 1, ColSize = 2, ColUsages = 3, ColumnCount = 4 };
+
 // Custom item data roles
-static constexpr int IsUnusedRole = Qt::UserRole; // bool, on file items
-static constexpr int ObjectIdRole = Qt::UserRole + 1; // QString, on child items
-static constexpr int CategoryRole = Qt::UserRole + 2; // int, on child items (-1 = not an object)
+static constexpr int IsUnusedRole = Qt::UserRole;     // bool, on file items
+static constexpr int ObjectIdRole = Qt::UserRole + 1; // QString, on usage child items
+static constexpr int CategoryRole = Qt::UserRole + 2; // int, on usage child items (-1 = not an object)
+static constexpr int IsFileRole = Qt::UserRole + 3;   // bool, on file items
+static constexpr int IsFolderRole = Qt::UserRole + 4; // bool, on folder items
+static constexpr int SizeRole = Qt::UserRole + 5;     // qlonglong, on file/folder items (raw bytes)
+static constexpr int PathRole = Qt::UserRole + 6;     // QString full relative path, on file items
+
+AssetType classify_asset_type(const std::string& path) {
+	std::string ext = fs::path(path).extension().string();
+	for (auto& c : ext) {
+		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	}
+	if (ext == ".mdx" || ext == ".mdl") {
+		return AssetType::Model;
+	}
+	if (ext == ".blp" || ext == ".tga" || ext == ".dds" || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".gif") {
+		return AssetType::Texture;
+	}
+	if (ext == ".wav" || ext == ".mp3" || ext == ".flac" || ext == ".ogg") {
+		return AssetType::Sound;
+	}
+	return AssetType::Other;
+}
+
+QString type_label(const std::string& path) {
+	std::string ext = fs::path(path).extension().string();
+	if (!ext.empty() && ext.front() == '.') {
+		ext.erase(ext.begin());
+	}
+	for (auto& c : ext) {
+		c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+	}
+	return ext.empty() ? QString("—") : QString::fromStdString(ext);
+}
+
+QString human_size(long long bytes) {
+	if (bytes < 0) {
+		return {};
+	}
+	static const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+	double value = static_cast<double>(bytes);
+	int unit = 0;
+	while (value >= 1024.0 && unit < 4) {
+		value /= 1024.0;
+		unit += 1;
+	}
+	if (unit == 0) {
+		return QString("%1 B").arg(bytes);
+	}
+	return QString("%1 %2").arg(value, 0, 'f', 1).arg(units[unit]);
+}
 
 QIcon get_file_icon(const std::string& path) {
 	static const QIcon model_icon = QApplication::style()->standardIcon(QStyle::SP_FileDialogDetailedView);
@@ -34,21 +88,16 @@ QIcon get_file_icon(const std::string& path) {
 	static const QIcon sound_icon = QApplication::style()->standardIcon(QStyle::SP_MediaVolume);
 	static const QIcon file_icon = QFileIconProvider().icon(QFileIconProvider::File);
 
-	std::string ext = fs::path(path).extension().string();
-	for (auto& c : ext) {
-		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	switch (classify_asset_type(path)) {
+		case AssetType::Model:
+			return model_icon;
+		case AssetType::Texture:
+			return image_icon;
+		case AssetType::Sound:
+			return sound_icon;
+		default:
+			return file_icon;
 	}
-
-	if (ext == ".mdx" || ext == ".mdl") {
-		return model_icon;
-	}
-	if (ext == ".blp" || ext == ".tga" || ext == ".dds" || ext == ".png" || ext == ".jpg" || ext == ".jpeg") {
-		return image_icon;
-	}
-	if (ext == ".wav" || ext == ".mp3" || ext == ".flac" || ext == ".ogg") {
-		return sound_icon;
-	}
-	return file_icon;
 }
 
 QIcon get_object_icon(const TableModel* table, const std::string_view id, const std::string_view art_field) {
@@ -152,17 +201,65 @@ ObjectInfo resolve_used_by_id(const std::string& id) {
 }
 
 bool AssetFilterModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
-	// Sort the Usages column numerically
-	if (left.column() == 1) {
+	// Keep folders grouped above files regardless of sort direction.
+	const bool left_folder = left.siblingAtColumn(0).data(IsFolderRole).toBool();
+	const bool right_folder = right.siblingAtColumn(0).data(IsFolderRole).toBool();
+	if (left_folder != right_folder) {
+		return sortOrder() == Qt::AscendingOrder ? left_folder : right_folder;
+	}
+
+	if (left.column() == ColUsages) {
 		return left.data(Qt::DisplayRole).toInt() < right.data(Qt::DisplayRole).toInt();
 	}
+	if (left.column() == ColSize) {
+		return left.siblingAtColumn(0).data(SizeRole).toLongLong() < right.siblingAtColumn(0).data(SizeRole).toLongLong();
+	}
 	return QSortFilterProxyModel::lessThan(left, right);
+}
+
+bool AssetFilterModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const {
+	const QModelIndex idx = sourceModel()->index(source_row, 0, source_parent);
+
+	// Type / unused filters only apply to file items. Folders and usage rows
+	// fall through to the recursive base behaviour (a folder is kept if any of
+	// its descendant files pass).
+	if (idx.data(IsFileRole).toBool()) {
+		if (unused_only && !idx.data(IsUnusedRole).toBool()) {
+			return false;
+		}
+		if (type_filter != AssetType::All) {
+			QString p = idx.data(PathRole).toString();
+			if (p.isEmpty()) {
+				p = idx.data(Qt::DisplayRole).toString();
+			}
+			if (classify_asset_type(p.toStdString()) != type_filter) {
+				return false;
+			}
+		}
+	}
+	return QSortFilterProxyModel::filterAcceptsRow(source_row, source_parent);
+}
+
+void AssetFilterModel::set_type_filter(AssetType type) {
+	if (type_filter != type) {
+		beginFilterChange();
+		type_filter = type;
+		endFilterChange(QSortFilterProxyModel::Direction::Rows);
+	}
+}
+
+void AssetFilterModel::set_unused_only(bool value) {
+	if (unused_only != value) {
+		beginFilterChange();
+		unused_only = value;
+		endFilterChange(QSortFilterProxyModel::Direction::Rows);
+	}
 }
 
 AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	setAttribute(Qt::WA_DeleteOnClose);
 	setWindowTitle("Asset Manager");
-	resize(600, 800);
+	resize(700, 800);
 
 	auto* layout = new QVBoxLayout(this);
 
@@ -189,8 +286,28 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 
 	layout->addLayout(search_bar);
 
+	// Toolbar: type filter + toggles
+	auto* tool_bar = new QHBoxLayout;
+	tool_bar->addWidget(new QLabel("Type:", this));
+	type_combo = new QComboBox(this);
+	type_combo->addItem("All", QVariant::fromValue(static_cast<int>(AssetType::All)));
+	type_combo->addItem("Models", QVariant::fromValue(static_cast<int>(AssetType::Model)));
+	type_combo->addItem("Textures", QVariant::fromValue(static_cast<int>(AssetType::Texture)));
+	type_combo->addItem("Sounds", QVariant::fromValue(static_cast<int>(AssetType::Sound)));
+	type_combo->addItem("Other", QVariant::fromValue(static_cast<int>(AssetType::Other)));
+	tool_bar->addWidget(type_combo);
+
+	unused_checkbox = new QCheckBox("Unused only", this);
+	tool_bar->addWidget(unused_checkbox);
+
+	group_checkbox = new QCheckBox("Group by folder", this);
+	tool_bar->addWidget(group_checkbox);
+
+	tool_bar->addStretch();
+	layout->addLayout(tool_bar);
+
 	model = new QStandardItemModel(this);
-	model->setHorizontalHeaderLabels({"File"});
+	model->setHorizontalHeaderLabels({"File", "Type", "Size", "Usages"});
 
 	filter_model = new AssetFilterModel(this);
 	filter_model->setSourceModel(model);
@@ -202,8 +319,10 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	tree_view->setModel(filter_model);
 	tree_view->setUniformRowHeights(true);
 	tree_view->setContextMenuPolicy(Qt::CustomContextMenu);
+	tree_view->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	tree_view->setSelectionBehavior(QAbstractItemView::SelectRows);
 	tree_view->setSortingEnabled(true);
-	tree_view->sortByColumn(1, Qt::AscendingOrder);
+	tree_view->sortByColumn(ColUsages, Qt::AscendingOrder);
 	tree_view->header()->setStretchLastSection(false);
 
 	layout->addWidget(tree_view);
@@ -213,6 +332,16 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 
 	connect(search_edit, &QLineEdit::textChanged, filter_model, &QSortFilterProxyModel::setFilterFixedString);
 	connect(refresh_button, &QPushButton::clicked, this, &AssetManager::refresh);
+	connect(type_combo, &QComboBox::currentIndexChanged, this, [this](int) {
+		filter_model->set_type_filter(static_cast<AssetType>(type_combo->currentData().toInt()));
+	});
+	connect(unused_checkbox, &QCheckBox::toggled, this, [this](bool checked) {
+		filter_model->set_unused_only(checked);
+	});
+	connect(group_checkbox, &QCheckBox::toggled, this, [this](bool checked) {
+		group_by_folder = checked;
+		refresh();
+	});
 
 	// When objects are deleted in the Object Editor, remove their references from the tree.
 	// We use rowsAboutToBeRemoved so the SLK index_to_row mapping is still intact.
@@ -236,11 +365,146 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	show();
 }
 
+QStandardItem* AssetManager::sibling_column(QStandardItem* item, int column) const {
+	if (!item) {
+		return nullptr;
+	}
+	if (QStandardItem* parent = item->parent()) {
+		return parent->child(item->row(), column);
+	}
+	return model->item(item->row(), column);
+}
+
+QList<QStandardItem*> AssetManager::make_file_row(const std::string& full_path, const QString& display, const std::unordered_set<std::string>& used_by) const {
+	const bool is_unused = used_by.empty();
+
+	long long size = -1;
+	{
+		std::error_code ec;
+		const auto bytes = fs::file_size(map->filesystem_path / full_path, ec);
+		if (!ec) {
+			size = static_cast<long long>(bytes);
+		}
+	}
+
+	auto* file_item = new QStandardItem(display);
+	file_item->setEditable(false);
+	file_item->setData(is_unused, IsUnusedRole);
+	file_item->setData(true, IsFileRole);
+	file_item->setData(static_cast<qlonglong>(size), SizeRole);
+	file_item->setData(QString::fromStdString(full_path), PathRole);
+	file_item->setIcon(get_file_icon(full_path));
+
+	auto* type_item = new QStandardItem(type_label(full_path));
+	type_item->setEditable(false);
+
+	auto* size_item = new QStandardItem(human_size(size));
+	size_item->setEditable(false);
+	size_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+	auto* count_item = new QStandardItem(QString::number(used_by.size()));
+	count_item->setEditable(false);
+	count_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+	if (is_unused) {
+		constexpr QColor orange(200, 120, 0);
+		file_item->setForeground(orange);
+		type_item->setForeground(orange);
+		size_item->setForeground(orange);
+		count_item->setForeground(orange);
+	}
+
+	for (const auto& id : used_by) {
+		const auto& info = resolve_used_by_id(id);
+
+		auto* child_item = new QStandardItem(info.display_name);
+		child_item->setEditable(false);
+		if (!info.icon.isNull()) {
+			child_item->setIcon(info.icon);
+		}
+		child_item->setData(QString::fromStdString(id), ObjectIdRole);
+		child_item->setData(info.category, CategoryRole);
+
+		file_item->appendRow(child_item);
+	}
+
+	return {file_item, type_item, size_item, count_item};
+}
+
+QStandardItem* AssetManager::ensure_folder(const std::string& folder_path, std::unordered_map<std::string, QStandardItem*>& cache) const {
+	if (folder_path.empty()) {
+		return nullptr; // root
+	}
+	if (const auto it = cache.find(folder_path); it != cache.end()) {
+		return it->second;
+	}
+
+	const auto slash = folder_path.find_last_of('/');
+	const std::string parent_path = slash == std::string::npos ? "" : folder_path.substr(0, slash);
+	const std::string name = slash == std::string::npos ? folder_path : folder_path.substr(slash + 1);
+
+	auto* folder_item = new QStandardItem(QApplication::style()->standardIcon(QStyle::SP_DirIcon), QString::fromStdString(name));
+	folder_item->setEditable(false);
+	folder_item->setData(true, IsFolderRole);
+
+	auto* type_item = new QStandardItem("folder");
+	type_item->setEditable(false);
+	auto* size_item = new QStandardItem;
+	size_item->setEditable(false);
+	size_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+	auto* count_item = new QStandardItem;
+	count_item->setEditable(false);
+	count_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+	const QList<QStandardItem*> row = {folder_item, type_item, size_item, count_item};
+	if (QStandardItem* parent = ensure_folder(parent_path, cache)) {
+		parent->appendRow(row);
+	} else {
+		model->appendRow(row);
+	}
+
+	cache.emplace(folder_path, folder_item);
+	return folder_item;
+}
+
+std::pair<long long, int> AssetManager::aggregate_folder(QStandardItem* folder) const {
+	long long total = 0;
+	int files = 0;
+	for (int r = 0; r < folder->rowCount(); r++) {
+		QStandardItem* child = folder->child(r, ColFile);
+		if (!child) {
+			continue;
+		}
+		if (child->data(IsFolderRole).toBool()) {
+			const auto [bytes, count] = aggregate_folder(child);
+			total += bytes;
+			files += count;
+		} else if (child->data(IsFileRole).toBool()) {
+			const long long s = child->data(SizeRole).toLongLong();
+			if (s > 0) {
+				total += s;
+			}
+			files += 1;
+		}
+	}
+
+	folder->setData(static_cast<qlonglong>(total), SizeRole);
+	if (QStandardItem* size_item = sibling_column(folder, ColSize)) {
+		size_item->setText(human_size(total));
+	}
+	if (QStandardItem* count_item = sibling_column(folder, ColUsages)) {
+		count_item->setText(QString("%1 files").arg(files));
+	}
+	return {total, files};
+}
+
 void AssetManager::refresh() const {
 	model->clear();
-	model->setHorizontalHeaderLabels({"File", "Usages"});
-	tree_view->header()->setSectionResizeMode(0, QHeaderView::Stretch);
-	tree_view->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+	model->setHorizontalHeaderLabels({"File", "Type", "Size", "Usages"});
+	tree_view->header()->setSectionResizeMode(ColFile, QHeaderView::Stretch);
+	tree_view->header()->setSectionResizeMode(ColType, QHeaderView::ResizeToContents);
+	tree_view->header()->setSectionResizeMode(ColSize, QHeaderView::ResizeToContents);
+	tree_view->header()->setSectionResizeMode(ColUsages, QHeaderView::ResizeToContents);
 
 	auto results = map->get_file_usage();
 
@@ -254,52 +518,73 @@ void AssetManager::refresh() const {
 		return a.path < b.path;
 	});
 
-	for (const auto& [path, used_by] : results) {
-		const bool is_unused = used_by.empty();
+	if (group_by_folder) {
+		std::unordered_map<std::string, QStandardItem*> folders;
+		for (const auto& [path, used_by] : results) {
+			const auto slash = path.find_last_of('/');
+			const std::string folder_path = slash == std::string::npos ? "" : path.substr(0, slash);
+			const std::string file_name = slash == std::string::npos ? path : path.substr(slash + 1);
 
-		auto* file_item = new QStandardItem(QString::fromStdString(path));
-		file_item->setEditable(false);
-		file_item->setData(is_unused, IsUnusedRole);
-		file_item->setIcon(get_file_icon(path));
-
-		auto* count_item = new QStandardItem(QString::number(used_by.size()));
-		count_item->setEditable(false);
-		count_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-
-		if (is_unused) {
-			constexpr QColor orange(200, 120, 0);
-			file_item->setForeground(orange);
-			count_item->setForeground(orange);
-		}
-
-		for (const auto& id : used_by) {
-			const auto& info = resolve_used_by_id(id);
-
-			auto* child_item = new QStandardItem(info.display_name);
-			child_item->setEditable(false);
-			if (!info.icon.isNull()) {
-				child_item->setIcon(info.icon);
+			const QList<QStandardItem*> row = make_file_row(path, QString::fromStdString(file_name), used_by);
+			if (QStandardItem* folder = ensure_folder(folder_path, folders)) {
+				folder->appendRow(row);
+			} else {
+				model->appendRow(row);
 			}
-			child_item->setData(QString::fromStdString(id), ObjectIdRole);
-			child_item->setData(info.category, CategoryRole);
-
-			file_item->appendRow(child_item);
 		}
-
-		model->appendRow({file_item, count_item});
+		// Fill folder aggregates (top-level folders only; recurses internally).
+		for (int r = 0; r < model->rowCount(); r++) {
+			QStandardItem* item = model->item(r, ColFile);
+			if (item && item->data(IsFolderRole).toBool()) {
+				aggregate_folder(item);
+			}
+		}
+		tree_view->expandToDepth(0);
+	} else {
+		for (const auto& [path, used_by] : results) {
+			model->appendRow(make_file_row(path, QString::fromStdString(path), used_by));
+		}
 	}
 
 	update_status();
 }
 
 void AssetManager::update_status() const {
-	const size_t total = static_cast<size_t>(model->rowCount());
+	size_t total = 0;
 	size_t unused = 0;
-	for (int i = 0; i < model->rowCount(); i++) {
-		if (model->item(i)->data(IsUnusedRole).toBool()) {
-			unused += 1;
+
+	std::function<void(QStandardItem*)> walk = [&](QStandardItem* item) {
+		for (int r = 0; r < item->rowCount(); r++) {
+			QStandardItem* child = item->child(r, ColFile);
+			if (!child) {
+				continue;
+			}
+			if (child->data(IsFileRole).toBool()) {
+				total += 1;
+				if (child->data(IsUnusedRole).toBool()) {
+					unused += 1;
+				}
+			} else if (child->data(IsFolderRole).toBool()) {
+				walk(child);
+			}
+		}
+	};
+
+	for (int r = 0; r < model->rowCount(); r++) {
+		QStandardItem* item = model->item(r, ColFile);
+		if (!item) {
+			continue;
+		}
+		if (item->data(IsFileRole).toBool()) {
+			total += 1;
+			if (item->data(IsUnusedRole).toBool()) {
+				unused += 1;
+			}
+		} else if (item->data(IsFolderRole).toBool()) {
+			walk(item);
 		}
 	}
+
 	status_label->setText(QString("%1 unused · %2 total").arg(unused).arg(total));
 }
 
@@ -307,12 +592,7 @@ void AssetManager::remove_object_references(const std::string& id) {
 	const QString qid = QString::fromStdString(id);
 	constexpr QColor orange(200, 120, 0);
 
-	for (int row = 0; row < model->rowCount(); row++) {
-		QStandardItem* const file_item = model->item(row, 0);
-		if (!file_item) {
-			continue;
-		}
-
+	std::function<void(QStandardItem*)> visit_file = [&](QStandardItem* file_item) {
 		bool changed = false;
 		for (int child_row = file_item->rowCount() - 1; child_row >= 0; child_row--) {
 			const QStandardItem* const child = file_item->child(child_row);
@@ -321,20 +601,43 @@ void AssetManager::remove_object_references(const std::string& id) {
 				changed = true;
 			}
 		}
-
 		if (!changed) {
-			continue;
+			return;
 		}
-
 		const int new_count = file_item->rowCount();
 		const bool is_now_unused = (new_count == 0);
-
-		if (QStandardItem* count_item = model->item(row, 1)) {
+		if (QStandardItem* count_item = sibling_column(file_item, ColUsages)) {
 			count_item->setText(QString::number(new_count));
 			count_item->setData(is_now_unused ? QVariant(QBrush(orange)) : QVariant(), Qt::ForegroundRole);
 		}
 		file_item->setData(is_now_unused, IsUnusedRole);
 		file_item->setData(is_now_unused ? QVariant(QBrush(orange)) : QVariant(), Qt::ForegroundRole);
+	};
+
+	std::function<void(QStandardItem*)> walk = [&](QStandardItem* item) {
+		for (int r = 0; r < item->rowCount(); r++) {
+			QStandardItem* child = item->child(r, ColFile);
+			if (!child) {
+				continue;
+			}
+			if (child->data(IsFolderRole).toBool()) {
+				walk(child);
+			} else if (child->data(IsFileRole).toBool()) {
+				visit_file(child);
+			}
+		}
+	};
+
+	for (int row = 0; row < model->rowCount(); row++) {
+		QStandardItem* item = model->item(row, ColFile);
+		if (!item) {
+			continue;
+		}
+		if (item->data(IsFolderRole).toBool()) {
+			walk(item);
+		} else if (item->data(IsFileRole).toBool()) {
+			visit_file(item);
+		}
 	}
 
 	update_status();
@@ -344,12 +647,13 @@ void AssetManager::open_in_editor(const QModelIndex& proxy_index) const {
 	if (!proxy_index.isValid()) {
 		return;
 	}
-	const QModelIndex source_index = filter_model->mapToSource(proxy_index).siblingAtColumn(0);
-	if (!source_index.parent().isValid()) {
-		return; // root (file) item — nothing to open
-	}
+	const QModelIndex source_index = filter_model->mapToSource(proxy_index).siblingAtColumn(ColFile);
 	QStandardItem* item = model->itemFromIndex(source_index);
 	if (!item) {
+		return;
+	}
+	// Only usage (child) items open an object; files/folders do nothing.
+	if (item->data(IsFileRole).toBool() || item->data(IsFolderRole).toBool()) {
 		return;
 	}
 	const int category = item->data(CategoryRole).toInt();
@@ -368,8 +672,7 @@ void AssetManager::show_context_menu(const QPoint& pos) {
 		return;
 	}
 
-	// Always work with column 0 so IsUnusedRole / ObjectIdRole are accessible
-	const QModelIndex source_index = filter_model->mapToSource(proxy_index).siblingAtColumn(0);
+	const QModelIndex source_index = filter_model->mapToSource(proxy_index).siblingAtColumn(ColFile);
 	QStandardItem* item = model->itemFromIndex(source_index);
 	if (!item) {
 		return;
@@ -377,12 +680,35 @@ void AssetManager::show_context_menu(const QPoint& pos) {
 
 	QMenu menu;
 
-	const bool is_root = !source_index.parent().isValid();
-	if (is_root) {
+	if (item->data(IsFolderRole).toBool()) {
+		// Move every file in the folder, keeping the relative layout below it.
+		const std::vector<std::string> paths = descendant_file_paths(item);
+		if (!paths.empty()) {
+			QAction* move_action =
+				menu.addAction(QApplication::style()->standardIcon(QStyle::SP_DirIcon), QString("Move %1 files in folder…").arg(paths.size()));
+			connect(move_action, &QAction::triggered, [this, paths]() {
+				move_files(paths);
+			});
+		}
+	} else if (item->data(IsFileRole).toBool()) {
+		// Move / rename — operates on the whole selection if the clicked file is
+		// part of it, otherwise just on the clicked file.
+		std::vector<std::string> paths = selected_file_paths();
+		const std::string clicked = item->data(PathRole).toString().toStdString();
+		if (std::find(paths.begin(), paths.end(), clicked) == paths.end()) {
+			paths = {clicked};
+		}
+		const QString move_label =
+			paths.size() > 1 ? QString("Move %1 files…").arg(paths.size()) : QString("Move / rename file…");
+		QAction* move_action = menu.addAction(QApplication::style()->standardIcon(QStyle::SP_DirIcon), move_label);
+		connect(move_action, &QAction::triggered, [this, paths]() {
+			move_files(paths);
+		});
+
 		if (item->data(IsUnusedRole).toBool()) {
 			QAction* delete_action = menu.addAction(QApplication::style()->standardIcon(QStyle::SP_TrashIcon), "Delete file");
 			connect(delete_action, &QAction::triggered, [this, item]() {
-				const QString path_str = item->text();
+				const QString path_str = item->data(PathRole).toString();
 				const int answer =
 					QMessageBox::question(this, "Delete file", QString("Delete '%1'?").arg(path_str), QMessageBox::Yes | QMessageBox::No);
 				if (answer != QMessageBox::Yes) {
@@ -399,7 +725,11 @@ void AssetManager::show_context_menu(const QPoint& pos) {
 					);
 					return;
 				}
-				model->removeRow(item->row());
+				if (QStandardItem* parent = item->parent()) {
+					parent->removeRow(item->row());
+				} else {
+					model->removeRow(item->row());
+				}
 				update_status();
 			});
 		}
@@ -416,4 +746,122 @@ void AssetManager::show_context_menu(const QPoint& pos) {
 	if (!menu.isEmpty()) {
 		menu.exec(tree_view->viewport()->mapToGlobal(pos));
 	}
+}
+
+std::vector<std::string> AssetManager::selected_file_paths() const {
+	std::vector<std::string> paths;
+	const auto selection = tree_view->selectionModel()->selectedRows(ColFile);
+	for (const QModelIndex& proxy_index : selection) {
+		const QModelIndex source_index = filter_model->mapToSource(proxy_index);
+		QStandardItem* item = model->itemFromIndex(source_index);
+		if (item && item->data(IsFileRole).toBool()) {
+			paths.push_back(item->data(PathRole).toString().toStdString());
+		}
+	}
+	return paths;
+}
+
+std::vector<std::string> AssetManager::descendant_file_paths(QStandardItem* item) const {
+	std::vector<std::string> paths;
+	if (!item) {
+		return paths;
+	}
+	if (item->data(IsFileRole).toBool()) {
+		paths.push_back(item->data(PathRole).toString().toStdString());
+		return paths;
+	}
+	for (int r = 0; r < item->rowCount(); r++) {
+		QStandardItem* child = item->child(r, ColFile);
+		if (!child) {
+			continue;
+		}
+		auto sub = descendant_file_paths(child);
+		paths.insert(paths.end(), sub.begin(), sub.end());
+	}
+	return paths;
+}
+
+void AssetManager::move_files(const std::vector<std::string>& paths) {
+	if (paths.empty() || !map) {
+		return;
+	}
+
+	// Build the from→to list.
+	std::vector<std::pair<std::string, std::string>> moves;
+	if (paths.size() == 1) {
+		bool accepted = false;
+		const QString current = QString::fromStdString(paths.front());
+		const QString dest = QInputDialog::getText(
+			this, "Move / rename file", "New path (relative to the map folder):", QLineEdit::Normal, current, &accepted
+		);
+		if (!accepted || dest.isEmpty() || dest == current) {
+			return;
+		}
+		moves.emplace_back(paths.front(), dest.toStdString());
+	} else {
+		bool accepted = false;
+		QString folder = QInputDialog::getText(
+			this,
+			"Move files",
+			QString("Move %1 files into folder (relative to the map folder):").arg(paths.size()),
+			QLineEdit::Normal,
+			"",
+			&accepted
+		);
+		if (!accepted) {
+			return;
+		}
+		std::string folder_str = folder.toStdString();
+		while (!folder_str.empty() && (folder_str.back() == '/' || folder_str.back() == '\\')) {
+			folder_str.pop_back();
+		}
+		for (const auto& from : paths) {
+			const std::string file_name = fs::path(from).filename().string();
+			const std::string to = folder_str.empty() ? file_name : (folder_str + "/" + file_name);
+			moves.emplace_back(from, to);
+		}
+	}
+
+	// Dry-run preview so the user sees how many references will be rewritten.
+	std::size_t total_refs = 0;
+	bool any_error = false;
+	QString details;
+	for (const auto& [from, to] : moves) {
+		const MoveReport rep = safe_move_file(from, to, true, map->info, map->sounds);
+		if (!rep.ok) {
+			any_error = true;
+			details += QString("✗ %1 → %2: %3\n")
+						   .arg(QString::fromStdString(from), QString::fromStdString(to), QString::fromStdString(rep.error));
+		} else {
+			total_refs += rep.reference_count();
+			details += QString("%1 → %2  (%3 references)\n")
+						   .arg(QString::fromStdString(from), QString::fromStdString(to))
+						   .arg(rep.reference_count());
+		}
+	}
+
+	const QString summary =
+		QString("Move %1 file(s), rewriting %2 reference(s):\n\n%3\nProceed?").arg(moves.size()).arg(total_refs).arg(details);
+	const auto answer = QMessageBox::question(
+		this, "Confirm safe move", summary, QMessageBox::Yes | QMessageBox::No, any_error ? QMessageBox::No : QMessageBox::Yes
+	);
+	if (answer != QMessageBox::Yes) {
+		return;
+	}
+
+	// Apply.
+	QStringList failures;
+	for (const auto& [from, to] : moves) {
+		const MoveReport rep = safe_move_file(from, to, false, map->info, map->sounds);
+		if (!rep.ok) {
+			failures << QString("%1 → %2: %3")
+							.arg(QString::fromStdString(from), QString::fromStdString(to), QString::fromStdString(rep.error));
+		}
+	}
+
+	if (!failures.isEmpty()) {
+		QMessageBox::warning(this, "Some moves failed", failures.join("\n"));
+	}
+
+	refresh();
 }

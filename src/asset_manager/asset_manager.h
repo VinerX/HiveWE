@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QCheckBox>
+#include <QComboBox>
 #include <QDialog>
 #include <QHeaderView>
 #include <QLabel>
@@ -9,13 +11,30 @@
 #include <QStandardItemModel>
 #include <QSortFilterProxyModel>
 
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
+
+// Coarse asset classification used by the type filter.
+enum class AssetType { All, Model, Texture, Sound, Other };
+
 class AssetFilterModel : public QSortFilterProxyModel {
 	Q_OBJECT
   public:
 	using QSortFilterProxyModel::QSortFilterProxyModel;
 
+	void set_type_filter(AssetType type);
+	void set_unused_only(bool unused_only);
+
 protected:
 	bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
+	bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
+
+  private:
+	AssetType type_filter = AssetType::All;
+	bool unused_only = false;
 };
 
 class AssetManager : public QDialog {
@@ -30,9 +49,31 @@ class AssetManager : public QDialog {
 	void open_in_editor(const QModelIndex& proxy_index) const;
 	void remove_object_references(const std::string& id);
 
+	// Builds the column items (File/Type/Size/Usages) for one file, appending
+	// its "used by" rows as children of the first item.
+	QList<QStandardItem*> make_file_row(const std::string& full_path, const QString& display, const std::unordered_set<std::string>& used_by) const;
+	// Returns (or creates) the folder item for a "a/b/c" path, nesting as needed.
+	QStandardItem* ensure_folder(const std::string& folder_path, std::unordered_map<std::string, QStandardItem*>& cache) const;
+	// Fills a folder's Size/Usages columns with recursive aggregates; returns {bytes, file_count}.
+	std::pair<long long, int> aggregate_folder(QStandardItem* folder) const;
+	// The sibling item in another column for the given column-0 item.
+	QStandardItem* sibling_column(QStandardItem* item, int column) const;
+
+	// Collects the relative paths of every selected file item.
+	std::vector<std::string> selected_file_paths() const;
+	// Collects the relative paths of every file under the given item (recursive).
+	std::vector<std::string> descendant_file_paths(QStandardItem* item) const;
+	// Safely moves/renames the given files, rewriting all detectable references.
+	void move_files(const std::vector<std::string>& paths);
+
 	QLineEdit* search_edit;
+	QComboBox* type_combo;
+	QCheckBox* unused_checkbox;
+	QCheckBox* group_checkbox;
 	QTreeView* tree_view;
 	QLabel* status_label;
 	QStandardItemModel* model;
 	AssetFilterModel* filter_model;
+
+	bool group_by_folder = false;
 };

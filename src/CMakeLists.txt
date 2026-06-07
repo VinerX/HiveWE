@@ -18,6 +18,7 @@ target_sources(HiveWE_lib PUBLIC FILE_SET yeet TYPE CXX_MODULES FILES
 	"base/gameplay_constants.ixx"
 	"base/imports.ixx"
 	"base/map_info.ixx"
+	"base/safe_move.ixx"
 	"base/pathing_map.ixx"
 	"base/regions.ixx"
 	"base/camera.ixx"

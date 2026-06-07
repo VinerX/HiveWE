@@ -150,6 +150,10 @@ target_sources(HiveWE_core PUBLIC FILE_SET core_modules TYPE CXX_MODULES FILES
 	"src/utilities/modification_tables.ixx"
 	"src/base/object_data.ixx"
 	"src/base/trigger_strings.ixx"
+	"src/base/map_info.ixx"
+	"src/base/sounds.ixx"
+	"src/base/imports.ixx"
+	"src/base/safe_move.ixx"
 )
 target_include_directories(HiveWE_core PUBLIC
 	"src"
