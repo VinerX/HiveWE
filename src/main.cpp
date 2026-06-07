@@ -35,7 +35,6 @@ import Hierarchy;
 import BinaryReader;
 import GLThreadPool;
 import WindowHandler;
-import "object_editor/object_editor.h";
 namespace fs = std::filesystem;
 
 int main(int argc, char* argv[]) {
@@ -250,12 +249,6 @@ int main(int argc, char* argv[]) {
 		log_line(std::string("[ERROR] Failed to load startup map: ") + ex.what());
 	}
 
-	try {
-		bool created = false;
-		window_handler.create_or_raise<ObjectEditor>(nullptr, created);
-	} catch (const std::exception& ex) {
-		log_line(std::string("[ERROR] Failed to open ObjectEditor: ") + ex.what());
-	}
 	// map->load("C:/Users/User/Desktop/MCFC.w3x");
 
 	return QApplication::exec();
