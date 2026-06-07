@@ -102,6 +102,6 @@ class AssetManager : public QDialog {
 	QStandardItemModel* model;
 	AssetFilterModel* filter_model;
 
-	bool group_by_folder = false;
-	bool show_dependencies = true;
+	bool group_by_folder = true;
+	bool show_dependencies = false;
 };

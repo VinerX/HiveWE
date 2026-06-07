@@ -335,12 +335,21 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	tool_bar->addWidget(unused_checkbox);
 
 	group_checkbox = new QCheckBox("Group by folder", this);
+	group_checkbox->setChecked(group_by_folder);
 	tool_bar->addWidget(group_checkbox);
 
 	deps_checkbox = new QCheckBox("Show dependencies", this);
-	deps_checkbox->setChecked(true);
+	deps_checkbox->setChecked(show_dependencies);
 	deps_checkbox->setToolTip("Show what each file is used by as expandable children.\nTurn off for a lighter tree when moving lots of files.");
 	tool_bar->addWidget(deps_checkbox);
+
+	auto* expand_button = new QPushButton("Expand all", this);
+	expand_button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	tool_bar->addWidget(expand_button);
+
+	auto* collapse_button = new QPushButton("Collapse all", this);
+	collapse_button->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Minimum);
+	tool_bar->addWidget(collapse_button);
 
 	tool_bar->addStretch();
 	layout->addLayout(tool_bar);
@@ -391,6 +400,8 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 		show_dependencies = checked;
 		refresh();
 	});
+	connect(expand_button, &QPushButton::clicked, tree_view, &QTreeView::expandAll);
+	connect(collapse_button, &QPushButton::clicked, tree_view, &QTreeView::collapseAll);
 
 	// When objects are deleted in the Object Editor, remove their references from the tree.
 	// We use rowsAboutToBeRemoved so the SLK index_to_row mapping is still intact.
