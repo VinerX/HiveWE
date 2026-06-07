@@ -1373,8 +1373,9 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "set-field" || args.command == "batch-edit" || args.command == "describe-race" ||
-			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races") {
+			   args.command == "get-object" || args.command == "get-objects-bulk" || args.command == "set-field" || args.command == "batch-edit" || args.command == "describe-race" ||
+			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races" ||
+			   args.command == "dump-objects" || args.command == "list-fields") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);
