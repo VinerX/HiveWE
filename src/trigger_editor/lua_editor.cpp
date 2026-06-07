@@ -32,6 +32,9 @@ LuaEditor::LuaEditor(QWidget* parent) : QsciScintilla(parent) {
 	setMarginWidth(1, 0);
 	setMarginLineNumbers(0, true);
 
+	SendScintilla(SCI_STYLESETFORE, STYLE_LINENUMBER, palette().color(QPalette::ColorRole::Text).rgb());
+	SendScintilla(SCI_STYLESETBACK, STYLE_LINENUMBER, palette().color(QPalette::ColorRole::Base).rgb());
+
 	setIndentationsUseTabs(true);
 	setTabIndents(true);
 	setIndentationGuides(true);
