@@ -73,6 +73,7 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	void setUnitTypeFilter(bool show_buildings, bool show_units);
 	void setEditorSuffixFilter(const QString& suffix);
 	void setFieldFilter(const QString& field_name, const QString& text);
+	void setShowRawcodes(bool show);
 
 	QModelIndex mapToSource(QModelIndex proxyIndex) const;
 
@@ -117,6 +118,7 @@ class SpreadsheetProxy : public QIdentityProxyModel {
 	QString editor_suffix;
 	std::string field_filter_name;
 	QString field_filter_text;
+	bool show_rawcodes = false;
 	int sort_column = -1;
 	Qt::SortOrder sort_order = Qt::AscendingOrder;
 	std::vector<SpreadsheetComputedColumn> computed_columns_;

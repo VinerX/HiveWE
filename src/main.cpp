@@ -224,6 +224,16 @@ int main(int argc, char* argv[]) {
 			startup_map_path = fs::path(env_map.toStdString());
 		}
 	}
+	if (!startup_map_path && QSettings().value("loadLastMap", "True").toString() != "False") {
+		const QStringList recent = QSettings().value("recentMaps").toStringList();
+		if (!recent.isEmpty()) {
+			const fs::path last_map = recent.first().toStdWString();
+			if (fs::is_directory(last_map) && fs::is_regular_file(last_map / "war3map.w3i")) {
+				startup_map_path = last_map;
+				log_line("[INFO] Loading last map from recent list");
+			}
+		}
+	}
 	if (!startup_map_path) {
 		const fs::path test_map = "data/test map/";
 		if (fs::is_directory(test_map) && fs::is_regular_file(test_map / "war3map.w3i")) {

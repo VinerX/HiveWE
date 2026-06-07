@@ -290,7 +290,9 @@ void SpreadsheetProxy::rebuildVisibleRows() {
 		if (!text_filter.isEmpty() && name_column >= 0) {
 			const QModelIndex src_idx = sourceModel()->index(r, name_column);
 			const QString name = sourceModel()->data(src_idx, Qt::DisplayRole).toString();
-			if (!name.contains(text_filter, Qt::CaseInsensitive)) continue;
+			const QString rawcode = QString::fromStdString(id);
+			if (!name.contains(text_filter, Qt::CaseInsensitive)
+				&& !rawcode.contains(text_filter, Qt::CaseInsensitive)) continue;
 		}
 
 		visible_rows_.push_back(r);
@@ -365,6 +367,12 @@ void SpreadsheetProxy::setFieldFilter(const QString& field_name, const QString& 
 	field_filter_name = std::move(s);
 	field_filter_text = text;
 	reapplyFilters();
+}
+
+void SpreadsheetProxy::setShowRawcodes(bool show) {
+	if (show_rawcodes == show) return;
+	show_rawcodes = show;
+	emit dataChanged(index(0, name_column), index(rowCount() - 1, name_column), {Qt::DisplayRole, Qt::EditRole});
 }
 
 void SpreadsheetProxy::populateBuiltInComputedColumns() {
@@ -1168,6 +1176,13 @@ QVariant SpreadsheetProxy::data(const QModelIndex& index, int role) const {
 		if (index.column() != icon_column) return {};
 	}
 
+	if (show_rawcodes && name_column >= 0 && index.column() == name_column
+		&& (role == Qt::DisplayRole || role == Qt::EditRole)) {
+		const int src_row = visible_rows_.at(static_cast<size_t>(index.row()));
+		const std::string& id = slk->index_to_row.at(static_cast<size_t>(src_row));
+		return QString::fromStdString(id);
+	}
+
 	try {
 		const QModelIndex src = mapToSource(index);
 		return sourceModel()->data(src, role);
@@ -1752,7 +1767,6 @@ void SpreadsheetEditor::addCategoryTab(
 			}
 		}
 		frozen_view->setMinimumWidth(width);
-		frozen_view->setMaximumWidth(width);
 	};
 	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionResized,
 	        frozen_view, [update_frozen_geometry](int, int, int) { update_frozen_geometry(); });
@@ -1820,7 +1834,7 @@ void SpreadsheetEditor::addCategoryTab(
 	connect(view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, sort_fn);
 	connect(frozen_view->horizontalHeader(), &QHeaderView::sectionClicked, proxy, sort_fn);
 
-	// ---- Right-click on main view column header → Freeze ----
+	// ---- Right-click on main view column header → Freeze / Hide ----
 	view->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(view->horizontalHeader(), &QHeaderView::customContextMenuRequested,
 	        this, [=](const QPoint& pos) {
@@ -1828,15 +1842,27 @@ void SpreadsheetEditor::addCategoryTab(
 		if (logical < 0) return;
 		QMenu menu;
 		QAction* freeze_act = menu.addAction("Freeze column");
-		if (menu.exec(view->horizontalHeader()->mapToGlobal(pos)) == freeze_act) {
+		QAction* hide_act = menu.addAction("Hide column");
+		QAction* chosen = menu.exec(view->horizontalHeader()->mapToGlobal(pos));
+		if (chosen == freeze_act) {
 			frozen_cols->insert(logical);
 			view->setColumnHidden(logical, true);
 			frozen_view->setColumnHidden(logical, false);
 			update_frozen_geometry();
+		} else if (chosen == hide_act) {
+			frozen_cols->remove(logical);
+			view->setColumnHidden(logical, true);
+			frozen_view->setColumnHidden(logical, true);
+			update_frozen_geometry();
+			QSettings s;
+			QStringList hidden = s.value(settings_key).toString().split(',', Qt::SkipEmptyParts);
+			QString key = proxy->columnKey(logical);
+			if (!hidden.contains(key)) hidden.append(key);
+			s.setValue(settings_key, hidden.join(','));
 		}
 	});
 
-	// ---- Right-click on frozen view column header → Unfreeze ----
+	// ---- Right-click on frozen view column header → Unfreeze / Hide ----
 	frozen_view->horizontalHeader()->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(frozen_view->horizontalHeader(), &QHeaderView::customContextMenuRequested,
 	        this, [=](const QPoint& pos) {
@@ -1846,11 +1872,23 @@ void SpreadsheetEditor::addCategoryTab(
 		if (logical == proxy->nameColumn()) return;
 		QMenu menu;
 		QAction* unfreeze_act = menu.addAction("Unfreeze column");
-		if (menu.exec(frozen_view->horizontalHeader()->mapToGlobal(pos)) == unfreeze_act) {
+		QAction* hide_act = menu.addAction("Hide column");
+		QAction* chosen = menu.exec(frozen_view->horizontalHeader()->mapToGlobal(pos));
+		if (chosen == unfreeze_act) {
 			frozen_cols->remove(logical);
 			frozen_view->setColumnHidden(logical, true);
 			view->setColumnHidden(logical, false);
 			update_frozen_geometry();
+		} else if (chosen == hide_act) {
+			frozen_cols->remove(logical);
+			frozen_view->setColumnHidden(logical, true);
+			view->setColumnHidden(logical, true);
+			update_frozen_geometry();
+			QSettings s;
+			QStringList hidden = s.value(settings_key).toString().split(',', Qt::SkipEmptyParts);
+			QString key = proxy->columnKey(logical);
+			if (!hidden.contains(key)) hidden.append(key);
+			s.setValue(settings_key, hidden.join(','));
 		}
 	});
 
@@ -2042,21 +2080,27 @@ void SpreadsheetEditor::addCategoryTab(
 	        [this, view, frozen_view, proxy, table, curated, full_reset]() {
 		openColumnDialog(view, frozen_view, proxy, table, curated, full_reset);
 	});
+
+	QCheckBox* chk_rawcodes = new QCheckBox("Rawcodes");
+	chk_rawcodes->setToolTip("Show rawcode IDs instead of display names");
+	connect(chk_rawcodes, &QCheckBox::toggled, proxy, &SpreadsheetProxy::setShowRawcodes);
+
+	bar->addWidget(chk_rawcodes);
 	bar->addWidget(columns_button);
 
-	QWidget* table_row = new QWidget;
-	QHBoxLayout* row_layout = new QHBoxLayout(table_row);
-	row_layout->setContentsMargins(0, 0, 0, 0);
-	row_layout->setSpacing(0);
-	row_layout->addWidget(frozen_view);
-	row_layout->addWidget(view, 1);
+	QSplitter* splitter = new QSplitter(Qt::Horizontal);
+	splitter->setHandleWidth(3);
+	splitter->addWidget(frozen_view);
+	splitter->addWidget(view);
+	splitter->setStretchFactor(0, 0);
+	splitter->setStretchFactor(1, 1);
 
 	QWidget* container = new QWidget;
 	QVBoxLayout* layout = new QVBoxLayout(container);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 	layout->addWidget(bar);
-	layout->addWidget(table_row);
+	layout->addWidget(splitter);
 
 	tabs->addTab(container, name);
 	update_frozen_geometry();
@@ -2116,6 +2160,13 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetView*
 			gname = groupForField(key.toStdString());
 		}
 		groups[gname].push_back({c, label});
+	}
+
+	// Sort columns within each group alphabetically by label
+	for (auto& [gname, cols] : groups) {
+		std::sort(cols.begin(), cols.end(), [](const auto& a, const auto& b) {
+			return a.second.compare(b.second, Qt::CaseInsensitive) < 0;
+		});
 	}
 
 	std::vector<QString> ordered_groups = {
@@ -2188,6 +2239,16 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetView*
 			QTreeWidgetItem* gitem = tree->topLevelItem(i);
 			for (int j = 0; j < gitem->childCount(); ++j) {
 				gitem->child(j)->setCheckState(0, Qt::Checked);
+			}
+		}
+	});
+
+	QPushButton* hide_all_btn = new QPushButton("Hide all");
+	connect(hide_all_btn, &QPushButton::clicked, tree, [tree]() {
+		for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+			QTreeWidgetItem* gitem = tree->topLevelItem(i);
+			for (int j = 0; j < gitem->childCount(); ++j) {
+				gitem->child(j)->setCheckState(0, Qt::Unchecked);
 			}
 		}
 	});
@@ -2299,9 +2360,23 @@ void SpreadsheetEditor::openColumnDialog(SpreadsheetView* view, SpreadsheetView*
 
 	btn_row->addWidget(defaults_btn);
 	btn_row->addWidget(show_all_btn);
+	btn_row->addWidget(hide_all_btn);
 	btn_row->addWidget(balance_btn);
 	btn_row->addWidget(formula_btn);
 	btn_row->addWidget(field_btn);
+
+	QPushButton* collapse_btn = new QPushButton(QString::fromUtf8(u8"\u25B6"));   // ▶
+	collapse_btn->setToolTip("Collapse all groups");
+	collapse_btn->setFixedWidth(28);
+	connect(collapse_btn, &QPushButton::clicked, tree, [tree]() { tree->collapseAll(); });
+
+	QPushButton* expand_btn = new QPushButton(QString::fromUtf8(u8"\u25BC"));     // ▼
+	expand_btn->setToolTip("Expand all groups");
+	expand_btn->setFixedWidth(28);
+	connect(expand_btn, &QPushButton::clicked, tree, [tree]() { tree->expandAll(); });
+
+	btn_row->addWidget(collapse_btn);
+	btn_row->addWidget(expand_btn);
 	btn_row->addStretch();
 	main_layout->addLayout(btn_row);
 

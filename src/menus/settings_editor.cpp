@@ -22,6 +22,7 @@ SettingsEditor::SettingsEditor(QWidget* parent)
 	QSettings settings;
 	ui.theme->setCurrentText(settings.value("theme", "Dark").toString());
 	ui.comments->setChecked(settings.value("comments", "True").toString() != "False");
+	ui.loadLastMap->setChecked(settings.value("loadLastMap", "True").toString() != "False");
 	ui.flavour->setCurrentText(settings.value("flavour").toString());
 	ui.hd->setChecked(settings.value("hd", "True").toString() != "False");
 	ui.teen->setChecked(settings.value("teen", "False").toString() != "False");
@@ -70,6 +71,7 @@ void SettingsEditor::save() const {
 	settings.setValue("theme", ui.theme->currentText());
 	settings.setValue("flavour", ui.flavour->currentText());
 	settings.setValue("comments", ui.comments->isChecked() ? "True" : "False");
+	settings.setValue("loadLastMap", ui.loadLastMap->isChecked() ? "True" : "False");
 	settings.setValue("hd", ui.hd->isChecked() ? "True" : "False");
 	settings.setValue("teen", ui.teen->isChecked() ? "True" : "False");
 	settings.setValue("userArgs", ui.userArgs->text());
