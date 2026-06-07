@@ -37,6 +37,24 @@ protected:
 	bool unused_only = false;
 };
 
+// Tree view that turns a drag-drop of file rows onto a folder/file/empty area
+// into a single signal carrying the drop target — the actual move (with the
+// dependency-rewrite confirmation) is handled by AssetManager.
+class AssetTreeView : public QTreeView {
+	Q_OBJECT
+  public:
+	using QTreeView::QTreeView;
+
+  signals:
+	// target_index is the (proxy) index dropped onto; invalid = dropped on empty space (map root).
+	void files_dropped(const QModelIndex& target_index);
+
+  protected:
+	void dragEnterEvent(QDragEnterEvent* event) override;
+	void dragMoveEvent(QDragMoveEvent* event) override;
+	void dropEvent(QDropEvent* event) override;
+};
+
 class AssetManager : public QDialog {
 	Q_OBJECT
   public:
@@ -50,7 +68,7 @@ class AssetManager : public QDialog {
 	void remove_object_references(const std::string& id);
 
 	// Builds the column items (File/Type/Size/Usages) for one file, appending
-	// its "used by" rows as children of the first item.
+	// its "used by" rows as children of the first item (unless deps are hidden).
 	QList<QStandardItem*> make_file_row(const std::string& full_path, const QString& display, const std::unordered_set<std::string>& used_by) const;
 	// Returns (or creates) the folder item for a "a/b/c" path, nesting as needed.
 	QStandardItem* ensure_folder(const std::string& folder_path, std::unordered_map<std::string, QStandardItem*>& cache) const;
@@ -58,6 +76,8 @@ class AssetManager : public QDialog {
 	std::pair<long long, int> aggregate_folder(QStandardItem* folder) const;
 	// The sibling item in another column for the given column-0 item.
 	QStandardItem* sibling_column(QStandardItem* item, int column) const;
+	// Reconstructs the full relative folder path of a folder item by climbing parents.
+	std::string folder_path_for(QStandardItem* item) const;
 
 	// Collects the relative paths of every selected file item.
 	std::vector<std::string> selected_file_paths() const;
@@ -65,15 +85,23 @@ class AssetManager : public QDialog {
 	std::vector<std::string> descendant_file_paths(QStandardItem* item) const;
 	// Safely moves/renames the given files, rewriting all detectable references.
 	void move_files(const std::vector<std::string>& paths);
+	// Moves the given files into target_folder (keeping their filenames).
+	void move_files_to_folder(const std::vector<std::string>& paths, const std::string& target_folder);
+	// Shared apply path: dry-run preview, confirm if there are dependencies, then move.
+	void apply_moves(const std::vector<std::pair<std::string, std::string>>& moves);
+	// Resolves a drop onto the tree into a safe move of the current selection.
+	void handle_drop(const QModelIndex& target_proxy_index);
 
 	QLineEdit* search_edit;
 	QComboBox* type_combo;
 	QCheckBox* unused_checkbox;
 	QCheckBox* group_checkbox;
-	QTreeView* tree_view;
+	QCheckBox* deps_checkbox;
+	AssetTreeView* tree_view;
 	QLabel* status_label;
 	QStandardItemModel* model;
 	AssetFilterModel* filter_model;
 
 	bool group_by_folder = false;
+	bool show_dependencies = true;
 };

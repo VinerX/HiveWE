@@ -2,6 +2,9 @@
 
 #include <QApplication>
 #include <QSizePolicy>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QFileIconProvider>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -36,6 +39,37 @@ static constexpr int IsFileRole = Qt::UserRole + 3;   // bool, on file items
 static constexpr int IsFolderRole = Qt::UserRole + 4; // bool, on folder items
 static constexpr int SizeRole = Qt::UserRole + 5;     // qlonglong, on file/folder items (raw bytes)
 static constexpr int PathRole = Qt::UserRole + 6;     // QString full relative path, on file items
+
+void AssetTreeView::dragEnterEvent(QDragEnterEvent* event) {
+	// Only our own internal row drags are interesting.
+	if (event->source() == this) {
+		event->acceptProposedAction();
+	} else {
+		QTreeView::dragEnterEvent(event);
+	}
+}
+
+void AssetTreeView::dragMoveEvent(QDragMoveEvent* event) {
+	if (event->source() == this) {
+		event->setDropAction(Qt::MoveAction);
+		event->accept();
+	} else {
+		QTreeView::dragMoveEvent(event);
+	}
+}
+
+void AssetTreeView::dropEvent(QDropEvent* event) {
+	if (event->source() != this) {
+		QTreeView::dropEvent(event);
+		return;
+	}
+	// We perform the move ourselves (safe_move + confirmation); never let the
+	// base class shuffle model rows.
+	const QModelIndex target = indexAt(event->position().toPoint());
+	event->setDropAction(Qt::IgnoreAction);
+	event->accept();
+	emit files_dropped(target);
+}
 
 AssetType classify_asset_type(const std::string& path) {
 	std::string ext = fs::path(path).extension().string();
@@ -303,6 +337,11 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	group_checkbox = new QCheckBox("Group by folder", this);
 	tool_bar->addWidget(group_checkbox);
 
+	deps_checkbox = new QCheckBox("Show dependencies", this);
+	deps_checkbox->setChecked(true);
+	deps_checkbox->setToolTip("Show what each file is used by as expandable children.\nTurn off for a lighter tree when moving lots of files.");
+	tool_bar->addWidget(deps_checkbox);
+
 	tool_bar->addStretch();
 	layout->addLayout(tool_bar);
 
@@ -315,7 +354,7 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	filter_model->setRecursiveFilteringEnabled(true);
 	filter_model->setFilterKeyColumn(0);
 
-	tree_view = new QTreeView(this);
+	tree_view = new AssetTreeView(this);
 	tree_view->setModel(filter_model);
 	tree_view->setUniformRowHeights(true);
 	tree_view->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -324,6 +363,12 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	tree_view->setSortingEnabled(true);
 	tree_view->sortByColumn(ColUsages, Qt::AscendingOrder);
 	tree_view->header()->setStretchLastSection(false);
+	// Drag files onto a folder to move them there (with reference rewrite).
+	tree_view->setDragEnabled(true);
+	tree_view->setAcceptDrops(true);
+	tree_view->setDropIndicatorShown(true);
+	tree_view->setDragDropMode(QAbstractItemView::DragDrop);
+	tree_view->setDefaultDropAction(Qt::MoveAction);
 
 	layout->addWidget(tree_view);
 
@@ -340,6 +385,10 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	});
 	connect(group_checkbox, &QCheckBox::toggled, this, [this](bool checked) {
 		group_by_folder = checked;
+		refresh();
+	});
+	connect(deps_checkbox, &QCheckBox::toggled, this, [this](bool checked) {
+		show_dependencies = checked;
 		refresh();
 	});
 
@@ -360,6 +409,7 @@ AssetManager::AssetManager(QWidget* parent) : QDialog(parent) {
 	connect(buff_table, &QAbstractItemModel::rowsAboutToBeRemoved, this, make_removal_handler(buff_slk));
 	connect(tree_view, &QTreeView::customContextMenuRequested, this, &AssetManager::show_context_menu);
 	connect(tree_view, &QTreeView::doubleClicked, this, &AssetManager::open_in_editor);
+	connect(tree_view, &AssetTreeView::files_dropped, this, &AssetManager::handle_drop);
 
 	refresh();
 	show();
@@ -414,18 +464,20 @@ QList<QStandardItem*> AssetManager::make_file_row(const std::string& full_path, 
 		count_item->setForeground(orange);
 	}
 
-	for (const auto& id : used_by) {
-		const auto& info = resolve_used_by_id(id);
+	if (show_dependencies) {
+		for (const auto& id : used_by) {
+			const auto& info = resolve_used_by_id(id);
 
-		auto* child_item = new QStandardItem(info.display_name);
-		child_item->setEditable(false);
-		if (!info.icon.isNull()) {
-			child_item->setIcon(info.icon);
+			auto* child_item = new QStandardItem(info.display_name);
+			child_item->setEditable(false);
+			if (!info.icon.isNull()) {
+				child_item->setIcon(info.icon);
+			}
+			child_item->setData(QString::fromStdString(id), ObjectIdRole);
+			child_item->setData(info.category, CategoryRole);
+
+			file_item->appendRow(child_item);
 		}
-		child_item->setData(QString::fromStdString(id), ObjectIdRole);
-		child_item->setData(info.category, CategoryRole);
-
-		file_item->appendRow(child_item);
 	}
 
 	return {file_item, type_item, size_item, count_item};
@@ -822,6 +874,38 @@ void AssetManager::move_files(const std::vector<std::string>& paths) {
 		}
 	}
 
+	apply_moves(moves);
+}
+
+void AssetManager::move_files_to_folder(const std::vector<std::string>& paths, const std::string& target_folder) {
+	if (paths.empty() || !map) {
+		return;
+	}
+
+	std::string folder_str = target_folder;
+	while (!folder_str.empty() && (folder_str.back() == '/' || folder_str.back() == '\\')) {
+		folder_str.pop_back();
+	}
+
+	std::vector<std::pair<std::string, std::string>> moves;
+	for (const auto& from : paths) {
+		const std::string file_name = fs::path(from).filename().string();
+		const std::string to = folder_str.empty() ? file_name : (folder_str + "/" + file_name);
+		if (to != from) {
+			moves.emplace_back(from, to);
+		}
+	}
+	if (moves.empty()) {
+		return; // everything already in the target folder
+	}
+	apply_moves(moves);
+}
+
+void AssetManager::apply_moves(const std::vector<std::pair<std::string, std::string>>& moves) {
+	if (moves.empty() || !map) {
+		return;
+	}
+
 	// Dry-run preview so the user sees how many references will be rewritten.
 	std::size_t total_refs = 0;
 	bool any_error = false;
@@ -840,13 +924,20 @@ void AssetManager::move_files(const std::vector<std::string>& paths) {
 		}
 	}
 
-	const QString summary =
-		QString("Move %1 file(s), rewriting %2 reference(s):\n\n%3\nProceed?").arg(moves.size()).arg(total_refs).arg(details);
-	const auto answer = QMessageBox::question(
-		this, "Confirm safe move", summary, QMessageBox::Yes | QMessageBox::No, any_error ? QMessageBox::No : QMessageBox::Yes
-	);
-	if (answer != QMessageBox::Yes) {
-		return;
+	// Only prompt when there is something to think about: an error, or
+	// dependencies that would be rewritten. A clean move with no references
+	// goes through silently.
+	if (any_error || total_refs > 0) {
+		const QString summary = QString("Move %1 file(s), rewriting %2 reference(s):\n\n%3\nProceed?")
+									.arg(moves.size())
+									.arg(total_refs)
+									.arg(details);
+		const auto answer = QMessageBox::question(
+			this, "Dependencies found", summary, QMessageBox::Yes | QMessageBox::No, any_error ? QMessageBox::No : QMessageBox::Yes
+		);
+		if (answer != QMessageBox::Yes) {
+			return;
+		}
 	}
 
 	// Apply.
@@ -864,4 +955,45 @@ void AssetManager::move_files(const std::vector<std::string>& paths) {
 	}
 
 	refresh();
+}
+
+std::string AssetManager::folder_path_for(QStandardItem* item) const {
+	std::vector<std::string> parts;
+	for (QStandardItem* cur = item; cur && cur->data(IsFolderRole).toBool(); cur = cur->parent()) {
+		parts.push_back(cur->text().toStdString());
+	}
+	std::string path;
+	for (auto it = parts.rbegin(); it != parts.rend(); ++it) {
+		if (!path.empty()) {
+			path += '/';
+		}
+		path += *it;
+	}
+	return path;
+}
+
+void AssetManager::handle_drop(const QModelIndex& target_proxy_index) {
+	std::vector<std::string> paths = selected_file_paths();
+	if (paths.empty()) {
+		return;
+	}
+
+	// Resolve the drop target into a destination folder (relative to the map root).
+	std::string target_folder;
+	if (target_proxy_index.isValid()) {
+		const QModelIndex source_index = filter_model->mapToSource(target_proxy_index).siblingAtColumn(ColFile);
+		QStandardItem* item = model->itemFromIndex(source_index);
+		if (item) {
+			if (item->data(IsFolderRole).toBool()) {
+				target_folder = folder_path_for(item);
+			} else if (item->data(IsFileRole).toBool()) {
+				const std::string p = item->data(PathRole).toString().toStdString();
+				const auto slash = p.find_last_of('/');
+				target_folder = slash == std::string::npos ? "" : p.substr(0, slash);
+			}
+		}
+	}
+	// Invalid index (or a usage row) drops into the map root.
+
+	move_files_to_folder(paths, target_folder);
 }
