@@ -1446,8 +1446,14 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		const std::string& id = *id_opt;
 
 		const std::string old_value = slk.data<std::string>(field, id);
-		slk.set_shadow_data(field, id, *value_opt);
-		const std::string new_value = slk.data<std::string>(field, id);
+		if (old_value.starts_with("TRIGSTR")) {
+			std::string key = old_value;
+			ts.set_string(key, *value_opt);
+			ts.save();
+		} else {
+			slk.set_shadow_data(field, id, *value_opt);
+		}
+		const std::string new_value = old_value.starts_with("TRIGSTR") ? *value_opt : slk.data<std::string>(field, id);
 
 		// Persist the modification table back into the map folder.
 		save_modification_file(info->mod_file, *info->slk, *info->meta, info->optional_ints, false);
@@ -1568,8 +1574,13 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				continue;
 			}
 			const std::string old_value = slk.data<std::string>(field, id);
-			slk.set_shadow_data(field, id, *value_opt);
-			const std::string new_value = slk.data<std::string>(field, id);
+			if (old_value.starts_with("TRIGSTR")) {
+				std::string key = old_value;
+				ts.set_string(key, *value_opt);
+			} else {
+				slk.set_shadow_data(field, id, *value_opt);
+			}
+			const std::string new_value = old_value.starts_with("TRIGSTR") ? *value_opt : slk.data<std::string>(field, id);
 			const bool written = (old_value != new_value);
 			if (written) ++count_changed;
 
@@ -1586,6 +1597,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 
 		if (!dry_run) {
 			save_modification_file(info->mod_file, *info->slk, *info->meta, info->optional_ints, false);
+			ts.save();
 			{
 				JsonObject log;
 				log.str("ts", changelog_ts());
