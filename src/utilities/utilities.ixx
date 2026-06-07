@@ -133,6 +133,95 @@ export std::vector<std::string> split_string_escaped(const std::string_view inpu
 	return result;
 }
 
+// Validates that a byte sequence is well-formed UTF-8 (rejecting overlong
+// encodings). Used to decide whether a localized object-data string is already
+// UTF-8 or still in the map's legacy CP1251 encoding.
+export bool is_valid_utf8(std::string_view sv) noexcept {
+	for (std::size_t i = 0; i < sv.size();) {
+		const unsigned char c = static_cast<unsigned char>(sv[i]);
+		std::size_t len;
+		if (c < 0x80) {
+			len = 1;
+		} else if ((c & 0xE0) == 0xC0) {
+			len = 2;
+		} else if ((c & 0xF0) == 0xE0) {
+			len = 3;
+		} else if ((c & 0xF8) == 0xF0) {
+			len = 4;
+		} else {
+			return false;
+		}
+		if (i + len > sv.size()) {
+			return false;
+		}
+		for (std::size_t j = 1; j < len; ++j) {
+			if ((static_cast<unsigned char>(sv[i + j]) & 0xC0) != 0x80) {
+				return false;
+			}
+		}
+		if (len == 2) {
+			const unsigned int cp = ((c & 0x1F) << 6) | (static_cast<unsigned char>(sv[i + 1]) & 0x3F);
+			if (cp < 0x80) return false;
+		} else if (len == 3) {
+			const unsigned int cp = ((c & 0x0F) << 12) | ((static_cast<unsigned char>(sv[i + 1]) & 0x3F) << 6)
+				| (static_cast<unsigned char>(sv[i + 2]) & 0x3F);
+			if (cp < 0x800) return false;
+		} else if (len == 4) {
+			const unsigned int cp = ((c & 0x07) << 18) | ((static_cast<unsigned char>(sv[i + 1]) & 0x3F) << 12)
+				| ((static_cast<unsigned char>(sv[i + 2]) & 0x3F) << 6) | (static_cast<unsigned char>(sv[i + 3]) & 0x3F);
+			if (cp < 0x10000) return false;
+		}
+		i += len;
+	}
+	return true;
+}
+
+// Returns a UTF-8 string. If the input is already valid UTF-8 it passes through
+// unchanged; otherwise it is assumed to be Windows-1251 (the legacy encoding of
+// Russian/localized WC3 maps) and transcoded. Lets the headless data layer emit
+// correct unit/ability names regardless of how the map stored them.
+export std::string to_utf8(std::string_view sv) {
+	if (sv.empty() || is_valid_utf8(sv)) {
+		return std::string(sv);
+	}
+	static constexpr unsigned short cp1251_uni[128] = {
+		0x0402,0x0403,0x201A,0x0453,0x201E,0x2026,0x2020,0x2021, // 80-87
+		0x20AC,0x2030,0x0409,0x2039,0x040A,0x040C,0x040B,0x040F, // 88-8F
+		0x0452,0x2018,0x2019,0x201C,0x201D,0x2022,0x2013,0x2014, // 90-97
+		0x0098,0x2122,0x0459,0x203A,0x045A,0x045C,0x045B,0x045F, // 98-9F
+		0x00A0,0x040E,0x045E,0x0408,0x00A4,0x0490,0x00A6,0x00A7, // A0-A7
+		0x0401,0x00A9,0x0404,0x00AB,0x00AC,0x00AD,0x00AE,0x0407, // A8-AF
+		0x00B0,0x00B1,0x0406,0x0456,0x0491,0x00B5,0x00B6,0x00B7, // B0-B7
+		0x0451,0x2116,0x0454,0x00BB,0x0458,0x0405,0x0455,0x0457, // B8-BF
+		0x0410,0x0411,0x0412,0x0413,0x0414,0x0415,0x0416,0x0417, // C0-C7
+		0x0418,0x0419,0x041A,0x041B,0x041C,0x041D,0x041E,0x041F, // C8-CF
+		0x0420,0x0421,0x0422,0x0423,0x0424,0x0425,0x0426,0x0427, // D0-D7
+		0x0428,0x0429,0x042A,0x042B,0x042C,0x042D,0x042E,0x042F, // D8-DF
+		0x0430,0x0431,0x0432,0x0433,0x0434,0x0435,0x0436,0x0437, // E0-E7
+		0x0438,0x0439,0x043A,0x043B,0x043C,0x043D,0x043E,0x043F, // E8-EF
+		0x0440,0x0441,0x0442,0x0443,0x0444,0x0445,0x0446,0x0447, // F0-F7
+		0x0448,0x0449,0x044A,0x044B,0x044C,0x044D,0x044E,0x044F, // F8-FF
+	};
+	std::string out;
+	out.reserve(sv.size() + sv.size() / 2);
+	for (unsigned char b : sv) {
+		if (b < 0x80) {
+			out.push_back(static_cast<char>(b));
+		} else {
+			const unsigned short u = cp1251_uni[b - 0x80];
+			if (u < 0x800) {
+				out.push_back(static_cast<char>(0xC0 | (u >> 6)));
+				out.push_back(static_cast<char>(0x80 | (u & 0x3F)));
+			} else {
+				out.push_back(static_cast<char>(0xE0 | (u >> 12)));
+				out.push_back(static_cast<char>(0x80 | ((u >> 6) & 0x3F)));
+				out.push_back(static_cast<char>(0x80 | (u & 0x3F)));
+			}
+		}
+	}
+	return out;
+}
+
 export std::string read_text_file(const fs::path& path) {
 	std::ifstream file(path, std::ios::binary | std::ios::ate);
 

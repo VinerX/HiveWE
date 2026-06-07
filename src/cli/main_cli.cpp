@@ -17,9 +17,11 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 
 #include <StormLib.h>
 #include <nlohmann/json.hpp>
@@ -103,6 +105,43 @@ Args parse_args(int argc, char* argv[]) {
 	return args;
 }
 
+std::string wstring_to_utf8(const std::wstring& text) {
+	if (text.empty()) {
+		return {};
+	}
+	const int size = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
+	if (size <= 0) {
+		return {};
+	}
+	std::string out(static_cast<std::size_t>(size), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()), out.data(), size, nullptr, nullptr);
+	return out;
+}
+
+struct Utf8Args {
+	std::vector<std::string> storage;
+	std::vector<char*> argv;
+};
+
+Utf8Args windows_utf8_args() {
+	Utf8Args converted;
+	int wide_argc = 0;
+	LPWSTR* wide_argv = CommandLineToArgvW(GetCommandLineW(), &wide_argc);
+	if (wide_argv == nullptr) {
+		return converted;
+	}
+	converted.storage.reserve(static_cast<std::size_t>(wide_argc));
+	converted.argv.reserve(static_cast<std::size_t>(wide_argc));
+	for (int i = 0; i < wide_argc; ++i) {
+		converted.storage.push_back(wstring_to_utf8(wide_argv[i]));
+	}
+	for (auto& arg : converted.storage) {
+		converted.argv.push_back(arg.data());
+	}
+	LocalFree(wide_argv);
+	return converted;
+}
+
 // ---- process helpers ------------------------------------------------------
 
 fs::path executable_dir() {
@@ -110,6 +149,17 @@ fs::path executable_dir() {
 	const DWORD len = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
 	buffer.resize(len);
 	return fs::path(buffer).parent_path();
+}
+
+fs::path project_root() {
+	fs::path dir = executable_dir();
+	while (!dir.empty() && dir != dir.root_path()) {
+		if (fs::is_regular_file(dir / "data" / "overrides" / "units" / "UnitMetaData.slk")) {
+			return dir;
+		}
+		dir = dir.parent_path();
+	}
+	return executable_dir();
 }
 
 // Run a program, wait, and capture combined stdout/stderr. Returns exit code,
@@ -718,6 +768,20 @@ bool is_safe_bridge_token(const std::string& text) {
 	return true;
 }
 
+bool is_safe_bridge_arg(const std::string& text) {
+	if (text.empty()) {
+		return false;
+	}
+	for (const char ch : text) {
+		const bool ok = std::isalnum(static_cast<unsigned char>(ch)) != 0 ||
+						ch == '_' || ch == '-' || ch == '.' || ch == ':';
+		if (!ok) {
+			return false;
+		}
+	}
+	return true;
+}
+
 BridgeCommand parse_bridge_entry(const std::string& raw_entry) {
 	const std::size_t first = raw_entry.find(':');
 	const std::size_t second = first == std::string::npos ? std::string::npos : raw_entry.find(':', first + 1);
@@ -733,7 +797,7 @@ BridgeCommand parse_bridge_entry(const std::string& raw_entry) {
 	}
 	command.op = raw_entry.substr(first + 1, second - first - 1);
 	command.arg = raw_entry.substr(second + 1);
-	if (!is_safe_bridge_token(command.op) || !is_safe_bridge_token(command.arg)) {
+	if (!is_safe_bridge_token(command.op) || !is_safe_bridge_arg(command.arg)) {
 		fail("bridge command contains unsupported characters: " + raw_entry);
 	}
 	return command;
@@ -1017,8 +1081,7 @@ void cmd_probe_map(const Args& args) {
 	bool enter_after_click_sent = false;
 	bool close_confirm_enter_sent = false;
 	std::vector<bool> chat_sent(chat_schedule.size(), false);
-	std::size_t next_bridge_index = 0;
-	std::vector<bool> bridge_sent(bridge_schedule.size(), false);
+	std::vector<bool> bridge_sent(bridge_schedule.size(), !bridge_schedule.empty());
 	DWORD wait_result = WAIT_TIMEOUT;
 
 	if (click_after_opt) {
@@ -1067,12 +1130,6 @@ void cmd_probe_map(const Args& args) {
 		while (next_chat_index < chat_schedule.size() && elapsed_seconds >= chat_schedule[next_chat_index].after_seconds) {
 			chat_sent[next_chat_index] = send_chat_to_window(proc->pid, chat_schedule[next_chat_index].text);
 			++next_chat_index;
-		}
-
-		while (next_bridge_index < bridge_schedule.size() && elapsed_seconds >= bridge_schedule[next_bridge_index].after_seconds) {
-			const std::string bridge_chat = "-bridge:" + bridge_schedule[next_bridge_index].op + ":" + bridge_schedule[next_bridge_index].arg;
-			bridge_sent[next_bridge_index] = send_chat_all_methods(proc->pid, bridge_chat);
-			++next_bridge_index;
 		}
 
 		if (elapsed_ms >= static_cast<ULONGLONG>(wait_seconds) * 1000ULL) {
@@ -1144,7 +1201,7 @@ void cmd_probe_map(const Args& args) {
 			{"after_seconds", bridge_schedule[i].after_seconds},
 			{"op", bridge_schedule[i].op},
 			{"arg", bridge_schedule[i].arg},
-			{"chat", "-bridge:" + bridge_schedule[i].op + ":" + bridge_schedule[i].arg},
+			{"delivery", "preloader-file"},
 			{"sent", bridge_sent[i]},
 		});
 	}
@@ -1249,13 +1306,37 @@ void cmd_validate_script(const Args& args) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-	const Args args = parse_args(argc, argv);
+	fs::current_path(project_root());
+	const Utf8Args utf8_args = windows_utf8_args();
+	int effective_argc = utf8_args.argv.empty() ? argc : static_cast<int>(utf8_args.argv.size());
+	char** effective_argv = utf8_args.argv.empty() ? argv : const_cast<char**>(utf8_args.argv.data());
+	Args args = parse_args(effective_argc, effective_argv);
+
+	// Handle global flags that may appear before the command
+	while (!args.command.empty() && args.command.starts_with("--")) {
+		std::string flag = args.command.substr(2);
+		if (flag == "utf8") {
+			SetConsoleOutputCP(CP_UTF8);
+		}
+		if (effective_argc <= 2) {
+			args.command.clear();
+			break;
+		}
+		--effective_argc;
+		++effective_argv;
+		args = parse_args(effective_argc, effective_argv);
+	}
+
+	if (args.has_flag("utf8")) {
+		SetConsoleOutputCP(CP_UTF8);
+	}
 
 	if (args.command.empty() || args.command == "help" || args.has_flag("help")) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "set-field", "safe-move"})},
+									   "list-object-types", "search-objects", "get-object", "set-field", "safe-move", "describe-race",
+									   "show-building", "list-race-objects", "list-all-races"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -1268,6 +1349,10 @@ int main(int argc, char* argv[]) {
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
 				   {"safe-move", "--map <dir> --from <relpath> --to <relpath> [--warcraft <dir>] [--hd] [--dry-run]"},
+				   {"describe-race", "--map <dir> --suffix <text> [--tokens a,b,c] [--warcraft <dir>] [--hd]"},
+				   {"show-building", "--map <dir> --id <rawcode> [--warcraft <dir>]"},
+				   {"list-race-objects", "--map <dir> --suffix <text> [--type all|building|unit|hero] [--warcraft <dir>]"},
+				   {"list-all-races", "--map <dir> [--warcraft <dir>]"},
 			   })}});
 	}
 
@@ -1284,9 +1369,10 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "set-field") {
+			   args.command == "get-object" || args.command == "set-field" || args.command == "describe-race" ||
+			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races") {
 		bool ok = false;
-		const std::string result = hivewe_object_command(argc, argv, warcraft_dir_from_registry(), ok);
+		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);
 		std::fputc('\n', stdout);
 		std::exit(ok ? 0 : 1);

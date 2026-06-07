@@ -368,18 +368,29 @@ export class MapInfo {
 		}
 
 		if (version >= 25) {
-			random_item_tables.resize(reader.read<uint32_t>());
-			for (auto&& i : random_item_tables) {
-				i.creation_number = reader.read<uint32_t>();
-				i.name = reader.read_c_string();
-				i.item_sets.resize(reader.read<uint32_t>());
-				for (auto&& j : i.item_sets) {
-					j.items.resize(reader.read<uint32_t>());
-					for (auto&& [chance, id] : j.items) {
-						chance = reader.read<uint32_t>();
-						id = reader.read_string(4);
+			const uint32_t random_item_table_count = reader.read<uint32_t>();
+			random_item_tables.clear();
+			random_item_tables.reserve(random_item_table_count);
+
+			try {
+				for (uint32_t table_index = 0; table_index < random_item_table_count; ++table_index) {
+					RandomItemTable table;
+					table.creation_number = reader.read<uint32_t>();
+					table.name = reader.read_c_string();
+					table.item_sets.resize(reader.read<uint32_t>());
+					for (auto&& item_set : table.item_sets) {
+						item_set.items.resize(reader.read<uint32_t>());
+						for (auto&& [chance, id] : item_set.items) {
+							chance = reader.read<uint32_t>();
+							id = reader.read_string(4);
+						}
 					}
+					random_item_tables.push_back(std::move(table));
 				}
+			} catch (const std::out_of_range&) {
+				random_item_tables.clear();
+				std::println("Truncated random item tables in war3map.w3i; ignoring trailing section");
+				return;
 			}
 		}
 	}
