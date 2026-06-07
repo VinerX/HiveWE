@@ -141,7 +141,7 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 	chk_trained_by_ = new QCheckBox("TrndBy");    chk_trained_by_->setChecked(true);
 	chk_built_by_ = new QCheckBox("BltBy");       chk_built_by_->setChecked(false);
 	chk_upgraded_from_ = new QCheckBox("UpgrFr"); chk_upgraded_from_->setChecked(true);
-	chk_repeats_ = new QCheckBox("Repeats");       chk_repeats_->setChecked(true);
+	chk_repeats_ = new QCheckBox("Repeats");       chk_repeats_->setChecked(false);
 	chk_repeats_->setToolTip("Show duplicate nodes (cycles) as grey repeat markers");
 
 	auto conn = [this](QCheckBox* cb) { connect(cb, &QCheckBox::toggled, this, [this]() { rebuildTree(); }); };
@@ -222,6 +222,7 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 
 	connect(go_btn_, &QPushButton::clicked, this, [this]() { current_id_ = search_->text().trimmed(); rebuildTree(); });
 	connect(search_, &QLineEdit::returnPressed, go_btn_, &QPushButton::click);
+	connect(depth_spin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this]() { rebuildTree(); });
 	show();
 }
 
@@ -387,17 +388,23 @@ void TechTreeViewer::rebuildGraph() {
 			QIcon ic = get_unit_icon(n->id);
 			if (!ic.isNull()) { auto* pm = graph_scene_->addPixmap(ic.pixmap(36, 36)); pm->setPos(x + bw - 42, y + 12); store_id(pm, n->id); }
 
-			// Requirements line
+			// Requirements: names + icons
 			if (!n->requires_field.empty() && !n->is_repeat) {
 				auto reqs = split_rcx(n->requires_field);
 				std::sort(reqs.begin(), reqs.end()); reqs.erase(std::unique(reqs.begin(), reqs.end()), reqs.end());
-				if (!reqs.empty()) {
-					QString rt = "Req:";
-					for (size_t ri = 0; ri < std::min(reqs.size(), size_t(3)); ++ri) rt += " " + QString::fromStdString(reqs[ri]);
-					if (reqs.size() > 3) rt += "...";
-					auto* rtxt = graph_scene_->addText(rt); rtxt->setPos(x + 6, y + 48);
-					rtxt->setDefaultTextColor(QColor(180, 80, 80));
-					QFont rf = rtxt->font(); rf.setPointSize(7); rtxt->setFont(rf);
+				float rx = x + 6, ry = y + 48;
+				for (size_t ri = 0; ri < std::min(reqs.size(), size_t(3)); ++ri) {
+					const std::string& rid = reqs[ri];
+					QIcon ric = get_unit_icon(rid);
+					if (!ric.isNull()) { auto* rp = graph_scene_->addPixmap(ric.pixmap(12, 12)); rp->setPos(rx, ry); store_id(rp, rid); rx += 16; }
+					QString rn = QString::fromStdString(rid + " " + resolve_name(rid));
+					auto* rt = graph_scene_->addText(rn); rt->setPos(rx, ry - 1); rx += rt->boundingRect().width() + 10;
+					rt->setDefaultTextColor(QColor(180, 80, 80));
+					QFont rf = rt->font(); rf.setPointSize(7); rt->setFont(rf);
+				}
+				if (reqs.size() > 3) {
+					auto* more = graph_scene_->addText("..."); more->setPos(rx, ry - 1);
+					more->setDefaultTextColor(QColor(180, 80, 80));
 				}
 			}
 		}
@@ -420,10 +427,9 @@ void TechTreeViewer::rebuildGraph() {
 
 	graph_scene_->setSceneRect(graph_scene_->itemsBoundingRect().adjusted(-30, -30, 30, 30));
 	QRectF sr = graph_scene_->sceneRect();
-	float cx = sr.left() + sr.width() * 0.25f, cy = sr.center().y();
 	graph_view_->resetTransform();
-	graph_view_->scale(1.4, 1.4);
-	graph_view_->centerOn(cx, cy);
+	graph_view_->scale(1.5, 1.5);
+	graph_view_->centerOn(sr.left() + 80, sr.center().y());
 }
 
 bool TechTreeViewer::eventFilter(QObject* obj, QEvent* event) {
@@ -448,6 +454,24 @@ bool TechTreeViewer::eventFilter(QObject* obj, QEvent* event) {
 					return true;
 				}
 			}
+		}
+		if (event->type() == QEvent::MouseButtonRelease) {
+			auto* me = static_cast<QMouseEvent*>(event);
+			if (me->button() != Qt::RightButton) return false;
+			QGraphicsItem* item = graph_view_->itemAt(me->pos());
+			if (!item) return false;
+			while (item->parentItem()) item = item->parentItem();
+			std::string id = get_id(item);
+			if (id.size() != 4 || !units_slk.row_headers.contains(id)) return false;
+			QMenu menu;
+			QAction* act = menu.addAction("Open in Object Editor");
+			if (menu.exec(me->globalPosition().toPoint()) == act) {
+				bool created;
+				auto* oe = window_handler.create_or_raise<class ObjectEditor>(nullptr, created);
+				oe->show();
+				oe->select_id(ObjectEditor::Category::unit, id);
+			}
+			return true;
 		}
 	}
 	return QMainWindow::eventFilter(obj, event);
