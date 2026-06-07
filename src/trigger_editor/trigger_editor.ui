@@ -32,6 +32,10 @@
    </attribute>
    <addaction name="actionGenerateScript"/>
    <addaction name="separator"/>
+   <addaction name="actionNewLuaFile"/>
+   <addaction name="actionRefreshLuaExplorer"/>
+   <addaction name="actionScanOnlyScripts"/>
+   <addaction name="separator"/>
    <addaction name="actionCreateCategory"/>
    <addaction name="actionCreateGuiTrigger"/>
    <addaction name="actionCreateJassTrigger"/>
@@ -91,6 +95,36 @@
    </property>
    <property name="toolTip">
     <string>Create a category</string>
+   </property>
+  </action>
+  <action name="actionNewLuaFile">
+   <property name="text">
+    <string>New Lua File</string>
+   </property>
+   <property name="toolTip">
+    <string>Create a new Lua script file</string>
+   </property>
+  </action>
+  <action name="actionRefreshLuaExplorer">
+   <property name="text">
+    <string>Refresh</string>
+   </property>
+   <property name="toolTip">
+    <string>Refresh the Lua script explorer</string>
+   </property>
+  </action>
+  <action name="actionScanOnlyScripts">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Scripts Only</string>
+   </property>
+   <property name="toolTip">
+    <string>Only scan script directories (root .lua files + _lua/)</string>
    </property>
   </action>
  </widget>

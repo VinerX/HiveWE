@@ -10,9 +10,12 @@
 #include <QPushButton>
 #include <QFileIconProvider>
 #include <QTreeWidget>
+#include <QInputDialog>
+#include <QFileInfo>
 
 #include "HiveWE.h"
 #include "jass_editor.h"
+#include "lua_editor.h"
 #include "search_window.h"
 #include "variable_editor.h"
 #include "trigger_model.h"
@@ -30,10 +33,6 @@ TriggerEditor::TriggerEditor(QWidget* parent) : QMainWindow(parent) {
 	ui.setupUi(this);
 	setAttribute(Qt::WA_DeleteOnClose);
 
-	model = new TreeModel(explorer);
-	explorer->setModel(model);
-	explorer->expandToDepth(1);
-
 	compile_output->setReadOnly(true);
 	dock_manager = new ads::CDockManager;
 	dock_manager->setStyleSheet("");
@@ -49,12 +48,6 @@ TriggerEditor::TriggerEditor(QWidget* parent) : QMainWindow(parent) {
 	centraldock_widget->setFeature(ads::CDockWidget::NoTab, true);
 	dock_area = dock_manager->setCentralWidget(centraldock_widget);
 
-	ads::CDockWidget* explorer_widget = new ads::CDockWidget(dock_manager, "Trigger Explorer");
-	explorer_widget->setObjectName("-1");
-	explorer_widget->setFeature(ads::CDockWidget::DockWidgetClosable, false);
-	explorer_widget->setWidget(explorer);
-	dock_manager->addDockWidget(ads::LeftDockWidgetArea, explorer_widget, dock_area);
-
 	ads::CDockWidget* output_widget = new ads::CDockWidget(dock_manager, "Output");
 	output_widget->setObjectName("-11");
 	output_widget->setFeature(ads::CDockWidget::DockWidgetClosable, false);
@@ -64,7 +57,16 @@ TriggerEditor::TriggerEditor(QWidget* parent) : QMainWindow(parent) {
 	show();
 
 	QFileIconProvider icons;
+
+	if (map && map->info.lua) {
+		lua_mode = true;
+		init_lua_mode();
+	} else {
+		init_jass_mode();
+	}
+
 	gui_icon = icons.icon(QFileIconProvider::File);
+	lua_icon = icons.icon(QFileIconProvider::File);
 	script_icon = texture_to_icon(world_edit_data.data("WorldEditArt", "SEIcon_TriggerScript") + ".dds");
 	script_icon_disabled = texture_to_icon(world_edit_data.data("WorldEditArt", "SEIcon_TriggerScriptDisable") + ".dds");
 	variable_icon = texture_to_icon(world_edit_data.data("WorldEditArt", "SEIcon_TriggerGlobalVariable") + ".dds");
@@ -95,6 +97,28 @@ TriggerEditor::TriggerEditor(QWidget* parent) : QMainWindow(parent) {
 			compile_output->setPlainText(QString::fromStdString(result.error()));
 		}
 	});
+	connect(new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), this), &QShortcut::activated, this, &TriggerEditor::focus_search_window);
+}
+
+TriggerEditor::~TriggerEditor() {
+	save_changes();
+}
+
+void TriggerEditor::init_jass_mode() {
+	ui.actionNewLuaFile->setVisible(false);
+	ui.actionRefreshLuaExplorer->setVisible(false);
+	ui.actionScanOnlyScripts->setVisible(false);
+
+	model = new TreeModel(explorer);
+	explorer->setModel(model);
+	explorer->expandToDepth(1);
+
+	ads::CDockWidget* explorer_widget = new ads::CDockWidget(dock_manager, "Trigger Explorer");
+	explorer_widget->setObjectName("-1");
+	explorer_widget->setFeature(ads::CDockWidget::DockWidgetClosable, false);
+	explorer_widget->setWidget(explorer);
+	dock_manager->addDockWidget(ads::LeftDockWidgetArea, explorer_widget, dock_area);
+
 	connect(ui.actionCreateCategory, &QAction::triggered, explorer, &TriggerExplorer::createCategory);
 	connect(ui.actionCreateGuiTrigger, &QAction::triggered, explorer, &TriggerExplorer::createGuiTrigger);
 	connect(ui.actionCreateJassTrigger, &QAction::triggered, explorer, &TriggerExplorer::createJassTrigger);
@@ -107,11 +131,123 @@ TriggerEditor::TriggerEditor(QWidget* parent) : QMainWindow(parent) {
 			found->closeDockWidget();
 		}
 	});
-	connect(new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_F), this), &QShortcut::activated, this, &TriggerEditor::focus_search_window);
 }
 
-TriggerEditor::~TriggerEditor() {
-	save_changes();
+void TriggerEditor::init_lua_mode() {
+	ui.actionCreateCategory->setVisible(false);
+	ui.actionCreateGuiTrigger->setVisible(false);
+	ui.actionCreateJassTrigger->setVisible(false);
+	ui.actionCreateVariable->setVisible(false);
+	ui.actionCreateComment->setVisible(false);
+
+	lua_explorer = new LuaExplorer;
+	ads::CDockWidget* explorer_widget = new ads::CDockWidget(dock_manager, "Lua Scripts");
+	explorer_widget->setObjectName("-1");
+	explorer_widget->setFeature(ads::CDockWidget::DockWidgetClosable, false);
+	explorer_widget->setWidget(lua_explorer);
+	dock_manager->addDockWidget(ads::LeftDockWidgetArea, explorer_widget, dock_area);
+
+	auto reload_explorer = [this]() {
+		if (map) {
+			bool script_only = ui.actionScanOnlyScripts->isChecked();
+			lua_explorer->loadForMap(map->filesystem_path.string(), script_only);
+		}
+	};
+
+	reload_explorer();
+
+	connect(lua_explorer, &LuaExplorer::fileDoubleClicked, this, &TriggerEditor::lua_item_clicked);
+
+	connect(ui.actionRefreshLuaExplorer, &QAction::triggered, reload_explorer);
+	connect(ui.actionScanOnlyScripts, &QAction::toggled, reload_explorer);
+
+	connect(ui.actionNewLuaFile, &QAction::triggered, [this, reload_explorer]() {
+		if (!map) return;
+		QString fileName = QInputDialog::getText(this, "New Lua File", "File name (without .lua):");
+		if (fileName.isEmpty()) return;
+		if (!fileName.endsWith(".lua")) {
+			fileName += ".lua";
+		}
+		QString filePath = QString::fromStdString(map->filesystem_path.string()) + "/" + fileName;
+		QFile file(filePath);
+		if (file.exists()) {
+			compile_output->setPlainText("File already exists: " + filePath);
+			return;
+		}
+		if (file.open(QIODevice::WriteOnly)) {
+			file.write("-- " + fileName.toUtf8() + "\n");
+			file.close();
+			reload_explorer();
+		}
+	});
+}
+
+void TriggerEditor::lua_item_clicked(const QString& path, bool read_only) {
+
+	if (auto found = dock_manager->findDockWidget(path); found) {
+		found->dockAreaWidget()->setCurrentDockWidget(found);
+		found->setFocus();
+		found->raise();
+		return;
+	}
+
+	QFile file(path);
+	if (!file.exists()) {
+		return;
+	}
+
+	ads::CDockWidget* dock_tab = new ads::CDockWidget(dock_manager, "");
+	dock_tab->setFeature(ads::CDockWidget::DockWidgetFeature::DockWidgetDeleteOnClose, true);
+
+	LuaEditor* edit = new LuaEditor;
+	edit->setObjectName("lua_editor");
+
+	if (file.open(QIODevice::ReadOnly)) {
+		edit->setText(file.readAll());
+		file.close();
+	}
+
+	if (read_only) {
+		edit->setReadOnly(true);
+	}
+
+	dock_tab->setWidget(edit);
+	QFileInfo file_info(path);
+	dock_tab->setWindowTitle(file_info.fileName());
+	dock_tab->setObjectName(path);
+	dock_tab->setIcon(lua_icon);
+
+	connect(dock_tab, &ads::CDockWidget::closeRequested, [&, dock_tab]() {
+		save_lua_tab(dock_tab);
+	});
+
+	dock_manager->addDockWidget(ads::CenterDockWidgetArea, dock_tab, dock_area);
+}
+
+void TriggerEditor::save_lua_tab(ads::CDockWidget* tab) {
+	auto editor = tab->findChild<LuaEditor*>("lua_editor");
+	if (!editor) {
+		return;
+	}
+
+	QString file_path = tab->objectName();
+	if (!file_path.isEmpty() && file_path.toInt() == 0) {
+		QFile file(file_path);
+		if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+			file.write(editor->text().toUtf8());
+			file.close();
+		}
+	}
+}
+
+void TriggerEditor::save_changes() {
+	for (const auto& tab : dock_manager->dockWidgetsMap()) {
+		if (lua_mode) {
+			save_lua_tab(tab);
+		} else {
+			save_tab(tab);
+		}
+	}
 }
 
 void TriggerEditor::focus_search_window() {
@@ -120,14 +256,21 @@ void TriggerEditor::focus_search_window() {
 
 	connect(search, &SearchWindow::text_changed, [&](QString text) {
 		for (const auto& tab : dock_manager->dockWidgetsMap()) {
-			int trigger_id = tab->objectName().toInt();
-			if (trigger_id < 0) {
-				continue;
-			}
+			if (lua_mode) {
+				auto editor = tab->findChild<LuaEditor*>("lua_editor");
+				if (editor) {
+					editor->highlight_text(text.toStdString());
+				}
+			} else {
+				int trigger_id = tab->objectName().toInt();
+				if (trigger_id < 0) {
+					continue;
+				}
 
-			auto editor = tab->findChild<JassEditor*>("jass_editor");
-			if (editor) {
-				editor->highlight_text(text.toStdString());
+				auto editor = tab->findChild<JassEditor*>("jass_editor");
+				if (editor) {
+					editor->highlight_text(text.toStdString());
+				}
 			}
 		}
 	});
@@ -473,10 +616,4 @@ std::string TriggerEditor::get_parameters_names(
 	}
 
 	return result;
-}
-
-void TriggerEditor::save_changes() {
-	for (const auto& tab : dock_manager->dockWidgetsMap()) {
-		save_tab(tab);
-	}
 }

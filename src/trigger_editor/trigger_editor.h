@@ -15,6 +15,7 @@
 #include "DockManager.h"
 #include "DockAreaWidget.h"
 #include "trigger_explorer.h"
+#include "lua_explorer.h"
 #include "global_search.h"
 
 import Triggers;
@@ -36,6 +37,8 @@ private:
 	TriggerExplorer* explorer = new TriggerExplorer;
 	TreeModel* model;
 
+	LuaExplorer* lua_explorer = nullptr;
+
 	QPlainTextEdit* compile_output = new QPlainTextEdit;
 
 	QIcon folder_icon;
@@ -45,6 +48,7 @@ private:
 	QIcon script_icon_disabled;
 	QIcon variable_icon;
 	QIcon comment_icon;
+	QIcon lua_icon;
 
 	QIcon event_icon;
 	QIcon condition_icon;
@@ -52,11 +56,18 @@ private:
 
 	std::unordered_map<std::string, QIcon> trigger_icons;
 
+	bool lua_mode = false;
+
 	void focus_search_window();
 	void save_tab(ads::CDockWidget* tab);
+	void save_lua_tab(ads::CDockWidget* tab);
 
 	void item_clicked(const QModelIndex& index);
+	void lua_item_clicked(const QString& file_path, bool read_only);
 	void show_gui_trigger(QTreeWidget* edit, const Trigger& trigger);
+
+	void init_jass_mode();
+	void init_lua_mode();
 
 	std::string get_parameters_names(const std::vector<std::string>& string_parameters, const std::vector<TriggerParameter>& parameters) const;
 

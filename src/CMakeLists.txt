@@ -165,6 +165,8 @@ target_sources(HiveWE_lib PRIVATE
 	"trigger_editor/trigger_explorer.cpp"
 	"trigger_editor/variable_editor.cpp"
 	"trigger_editor/trigger_model.cpp"
+	"trigger_editor/lua_editor.cpp"
+	"trigger_editor/lua_explorer.cpp"
 
 	"model_editor/model_editor_camera.cpp"
 	"model_editor/model_editor.cpp"
