@@ -11,10 +11,15 @@
 #include <QGraphicsTextItem>
 #include <QGraphicsLineItem>
 #include <QWheelEvent>
+#include <QIcon>
+#include <QScrollBar>
 
 import std;
 import Globals;
 import MapGlobal;
+import QIconResource;
+import ResourceManager;
+import Hierarchy;
 
 namespace {
 
@@ -45,6 +50,22 @@ std::string resolve_name(const std::string& id) {
 	return name;
 }
 
+QIcon get_unit_icon(const std::string& id) {
+	if (!units_slk.row_headers.contains(id)) return {};
+	std::string art = units_slk.data<std::string>("art", id);
+	if (art.empty()) return {};
+	std::string path = art;
+	if (!hierarchy.file_exists(path)) path = art + ".dds";
+	if (!hierarchy.file_exists(path)) {
+		std::string alt = art + ".blp";
+		if (hierarchy.file_exists(alt)) path = alt;
+		else return {};
+	}
+	auto res = resource_manager.load<QIconResource>(path);
+	if (res) return res.value()->icon;
+	return {};
+}
+
 QColor node_color(bool is_building, bool is_worker) {
 	if (is_building) return QColor(255, 180, 100);
 	if (is_worker)   return QColor(140, 220, 140);
@@ -62,44 +83,93 @@ QColor edge_color(const std::string& relation) {
 	return QColor(160, 160, 160);
 }
 
+QString edge_label(const std::string& relation) {
+	if (relation == "trains")       return "Trains";
+	if (relation == "builds")       return "Builds";
+	if (relation == "upgrades to")   return "Upgr. to";
+	if (relation == "researches")   return "Research";
+	if (relation == "trained by")   return "Trnd by";
+	if (relation == "built by")      return "Blt by";
+	if (relation == "upgraded from") return "Upgr. from";
+	return QString::fromStdString(relation);
+}
+
 } // namespace
 
 TechTreeViewer::TechTreeViewer(QWidget* parent)
 	: QMainWindow(parent) {
 	setWindowTitle("Tech Tree Viewer");
-	resize(1000, 680);
+	resize(1100, 700);
 
 	QWidget* central = new QWidget;
 	setCentralWidget(central);
 	QVBoxLayout* main_layout = new QVBoxLayout(central);
+	main_layout->setSpacing(4);
+	main_layout->setContentsMargins(6, 6, 6, 6);
 
+	// --- Top row: search + depth + go ---
 	QHBoxLayout* top_row = new QHBoxLayout;
+	top_row->setSpacing(6);
 	search_ = new QLineEdit;
-	search_->setPlaceholderText("Enter unit rawcode (e.g. hfoo)");
+	search_->setPlaceholderText("Unit rawcode (e.g. hfoo)");
 	search_->setMaxLength(4);
 	search_->setMaximumWidth(100);
-	QLabel* depth_label = new QLabel("Depth:");
 	depth_spin_ = new QSpinBox;
 	depth_spin_->setRange(1, 10);
 	depth_spin_->setValue(3);
+	depth_spin_->setPrefix("Depth: ");
+	depth_spin_->setMaximumWidth(80);
 	go_btn_ = new QPushButton("Go");
 	top_row->addWidget(search_);
-	top_row->addWidget(depth_label);
 	top_row->addWidget(depth_spin_);
 	top_row->addWidget(go_btn_);
 	top_row->addStretch();
+
+	// relation filter checkboxes
+	chk_trains_ = new QCheckBox("Trains");
+	chk_trains_->setChecked(true);
+	chk_builds_ = new QCheckBox("Builds");
+	chk_builds_->setChecked(true);
+	chk_upgrades_ = new QCheckBox("Upgr.To");
+	chk_upgrades_->setChecked(true);
+	chk_researches_ = new QCheckBox("Research");
+	chk_researches_->setChecked(true);
+	chk_trained_by_ = new QCheckBox("TrndBy");
+	chk_trained_by_->setChecked(true);
+	chk_built_by_ = new QCheckBox("BltBy");
+	chk_built_by_->setChecked(true);
+	chk_upgraded_from_ = new QCheckBox("UpgrFr");
+	chk_upgraded_from_->setChecked(true);
+	chk_recursive_ = new QCheckBox("Recursive");
+	chk_recursive_->setChecked(true);
+
+	auto conn = [this](QCheckBox* cb) { connect(cb, &QCheckBox::toggled, this, [this]() { rebuildTree(); }); };
+	conn(chk_trains_); conn(chk_builds_); conn(chk_upgrades_); conn(chk_researches_);
+	conn(chk_trained_by_); conn(chk_built_by_); conn(chk_upgraded_from_);
+	conn(chk_recursive_);
+
+	for (auto* cb : {chk_trains_, chk_builds_, chk_upgrades_, chk_researches_,
+	                 chk_trained_by_, chk_built_by_, chk_upgraded_from_, chk_recursive_}) {
+		top_row->addWidget(cb);
+	}
+
 	main_layout->addLayout(top_row);
 
+	// --- info label ---
 	info_label_ = new QLabel;
+	info_label_->setWordWrap(true);
 	main_layout->addWidget(info_label_);
 
+	// --- splitter: tree | graph ---
 	QSplitter* splitter = new QSplitter(Qt::Horizontal);
 
 	tree_ = new QTreeWidget;
 	tree_->setHeaderLabels({"Unit", "Relation"});
 	tree_->setRootIsDecorated(true);
 	tree_->setAlternatingRowColors(true);
+	tree_->setIconSize(QSize(20, 20));
 	tree_->header()->setStretchLastSection(true);
+	tree_->setColumnWidth(0, 280);
 	splitter->addWidget(tree_);
 
 	graph_scene_ = new QGraphicsScene(this);
@@ -110,14 +180,34 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 	graph_view_->setResizeAnchor(QGraphicsView::AnchorUnderMouse);
 	splitter->addWidget(graph_view_);
 
-	splitter->setStretchFactor(0, 1);
-	splitter->setStretchFactor(1, 2);
+	splitter->setStretchFactor(0, 3);
+	splitter->setStretchFactor(1, 5);
 	main_layout->addWidget(splitter);
 
-	QLabel* legend = new QLabel("Double-click tree node to re-root. Scroll to zoom graph, drag to pan.");
-	legend->setWordWrap(true);
-	main_layout->addWidget(legend);
+	// --- bottom: zoom buttons ---
+	QHBoxLayout* zoom_row = new QHBoxLayout;
+	QPushButton* zoom_in = new QPushButton("+");
+	QPushButton* zoom_out = new QPushButton("-");
+	QPushButton* zoom_fit = new QPushButton("Fit");
+	zoom_in->setFixedWidth(28);
+	zoom_out->setFixedWidth(28);
+	zoom_fit->setFixedWidth(36);
+	connect(zoom_in, &QPushButton::clicked, this, [this]() { zoomGraph(1.25); });
+	connect(zoom_out, &QPushButton::clicked, this, [this]() { zoomGraph(0.8); });
+	connect(zoom_fit, &QPushButton::clicked, this, [this]() {
+		graph_view_->fitInView(graph_scene_->sceneRect(), Qt::KeepAspectRatio);
+	});
 
+	QLabel* legend = new QLabel("Scroll = zoom  |  Drag = pan  |  Dbl-click tree node = re-root");
+	legend->setStyleSheet("color: gray; font-size: 10px;");
+	zoom_row->addWidget(legend);
+	zoom_row->addStretch();
+	zoom_row->addWidget(zoom_out);
+	zoom_row->addWidget(zoom_in);
+	zoom_row->addWidget(zoom_fit);
+	main_layout->addLayout(zoom_row);
+
+	// tree double-click → re-root
 	connect(tree_, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item, int) {
 		QString id = item->text(0).section(' ', 0, 0);
 		if (id.length() == 4) {
@@ -135,6 +225,10 @@ TechTreeViewer::TechTreeViewer(QWidget* parent)
 	show();
 }
 
+void TechTreeViewer::zoomGraph(double factor) {
+	graph_view_->scale(factor, factor);
+}
+
 void TechTreeViewer::setUnit(const std::string& rawcode) {
 	current_id_ = QString::fromStdString(rawcode);
 	search_->setText(current_id_);
@@ -144,21 +238,27 @@ void TechTreeViewer::setUnit(const std::string& rawcode) {
 std::vector<std::pair<std::string, std::string>> TechTreeViewer::getChildren(const std::string& id) {
 	std::vector<std::pair<std::string, std::string>> children;
 
-	for (const auto& t : split_rcx(units_slk.data<std::string>("trains", id)))
-		if (units_slk.row_headers.contains(t))
-			children.push_back({t, "trains"});
-	for (const auto& b : split_rcx(units_slk.data<std::string>("builds", id)))
-		if (units_slk.row_headers.contains(b))
-			children.push_back({b, "builds"});
-	for (const char* f : {"upgrade", "upgrades", "revive"}) {
-		for (const auto& u : split_rcx(units_slk.data<std::string>(f, id)))
-			if (units_slk.row_headers.contains(u))
-				children.push_back({u, "upgrades to"});
-	}
-	for (const auto& r : split_rcx(units_slk.data<std::string>("researches", id)))
-		children.push_back({r, "researches"});
+	std::set<std::string> enabled;
+	if (chk_trains_->isChecked())         enabled.insert("trains");
+	if (chk_builds_->isChecked())          enabled.insert("builds");
+	if (chk_upgrades_->isChecked())        enabled.insert("upgrades to");
+	if (chk_researches_->isChecked())      enabled.insert("researches");
+	if (chk_trained_by_->isChecked())      enabled.insert("trained by");
+	if (chk_built_by_->isChecked())        enabled.insert("built by");
+	if (chk_upgraded_from_->isChecked())   enabled.insert("upgraded from");
 
-	// Reverse lookups
+	auto add = [&](const std::string& rel, const std::string& child_id) {
+		if (enabled.contains(rel) && units_slk.row_headers.contains(child_id))
+			children.push_back({child_id, rel});
+	};
+
+	for (const auto& t : split_rcx(units_slk.data<std::string>("trains", id)))   add("trains", t);
+	for (const auto& b : split_rcx(units_slk.data<std::string>("builds", id)))   add("builds", b);
+	for (const char* f : {"upgrade", "upgrades", "revive"})
+		for (const auto& u : split_rcx(units_slk.data<std::string>(f, id)))      add("upgrades to", u);
+	for (const auto& r : split_rcx(units_slk.data<std::string>("researches", id))) add("researches", r);
+
+	// Reverse lookups (cached once)
 	static std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> reverse_cache;
 	static bool reverse_built = false;
 	if (!reverse_built) {
@@ -167,15 +267,16 @@ std::vector<std::pair<std::string, std::string>> TechTreeViewer::getChildren(con
 				reverse_cache[t].push_back({row_id, "trained by"});
 			for (const auto& b : split_rcx(units_slk.data<std::string>("builds", row_id)))
 				reverse_cache[b].push_back({row_id, "built by"});
-			for (const char* f : {"upgrade", "upgrades", "revive"}) {
+			for (const char* f : {"upgrade", "upgrades", "revive"})
 				for (const auto& u : split_rcx(units_slk.data<std::string>(f, row_id)))
 					reverse_cache[u].push_back({row_id, "upgraded from"});
-			}
 		}
 		reverse_built = true;
 	}
 	if (auto it = reverse_cache.find(id); it != reverse_cache.end())
-		children.insert(children.end(), it->second.begin(), it->second.end());
+		for (const auto& [rid, rel] : it->second)
+			if (enabled.contains(rel))
+				children.push_back({rid, rel});
 
 	std::sort(children.begin(), children.end(),
 		[](const auto& a, const auto& b) {
@@ -200,11 +301,12 @@ void TechTreeViewer::rebuildTree() {
 
 	const std::string root_name = resolve_name(root_id);
 	const bool is_bldg = units_slk.data<std::string>("isbldg", root_id) == "1";
-	const std::string type_str = is_bldg ? " [building]" : " [unit]";
-	info_label_->setText(QString("Tracing: %1 (%2)%3")
+	const std::string type_str = is_bldg ? "building" : "unit";
+	info_label_->setText(QString("Tracing: %1  %2  [%3]")
 		.arg(current_id_, QString::fromStdString(root_name), QString::fromStdString(type_str)));
 
 	const int max_depth = depth_spin_->value();
+	const bool recursive = chk_recursive_->isChecked();
 	std::unordered_set<std::string> visited;
 
 	// ---- tree ----
@@ -215,19 +317,24 @@ void TechTreeViewer::rebuildTree() {
 
 		for (const auto& [child_id, relation] : getChildren(id)) {
 			const std::string name = resolve_name(child_id);
-			QString label = QString("%1 (%2)").arg(QString::fromStdString(child_id),
-				QString::fromStdString(name));
-			QTreeWidgetItem* item = new QTreeWidgetItem(parent_item, {label, QString::fromStdString(relation)});
+			QString label = QString::fromStdString(child_id + "  " + name);
+			QTreeWidgetItem* item = new QTreeWidgetItem(parent_item,
+				{label, edge_label(relation)});
+			QIcon icon = get_unit_icon(child_id);
+			if (!icon.isNull()) item->setIcon(0, icon);
 			QFont f = item->font(0);
 			f.setBold(true);
 			item->setFont(0, f);
-			if (depth + 1 < max_depth)
+
+			if (recursive && depth + 1 < max_depth)
 				build_tree(item, child_id, depth + 1);
 		}
 	};
 
-	QString root_label = QString("%1 (%2)").arg(current_id_, QString::fromStdString(root_name));
+	QString root_label = QString::fromStdString(root_id + "  " + root_name);
 	QTreeWidgetItem* root_item = new QTreeWidgetItem(tree_, {root_label, "ROOT"});
+	QIcon root_icon = get_unit_icon(root_id);
+	if (!root_icon.isNull()) root_item->setIcon(0, root_icon);
 	QFont rf = root_item->font(0);
 	rf.setBold(true);
 	rf.setPointSize(rf.pointSize() + 1);
@@ -243,10 +350,11 @@ void TechTreeViewer::rebuildTree() {
 void TechTreeViewer::rebuildGraph() {
 	const std::string root_id = current_id_.toStdString();
 	const int max_depth = depth_spin_->value();
+	const bool recursive = chk_recursive_->isChecked();
 
 	std::unordered_set<std::string> visited;
 	std::vector<NodeInfo> nodes;
-	std::vector<std::tuple<std::string, std::string, std::string>> edges; // from, to, relation
+	std::vector<std::tuple<std::string, std::string, std::string>> edges;
 	std::unordered_map<std::string, int> depth_map;
 
 	std::function<void(const std::string&, int)> collect;
@@ -263,9 +371,14 @@ void TechTreeViewer::rebuildGraph() {
 		nodes.push_back(ni);
 		depth_map[id] = depth;
 
-		for (const auto& [child_id, rel] : ni.children) {
-			edges.push_back({id, child_id, rel});
-			collect(child_id, depth + 1);
+		if (recursive) {
+			for (const auto& [child_id, rel] : ni.children) {
+				edges.push_back({id, child_id, rel});
+				collect(child_id, depth + 1);
+			}
+		} else {
+			for (const auto& [child_id, rel] : ni.children)
+				edges.push_back({id, child_id, rel});
 		}
 	};
 
@@ -273,19 +386,18 @@ void TechTreeViewer::rebuildGraph() {
 
 	// Layout: group nodes by depth, spread vertically
 	std::unordered_map<int, std::vector<NodeInfo*>> depth_groups;
-	for (auto& n : nodes) {
+	for (auto& n : nodes)
 		depth_groups[depth_map[n.id]].push_back(&n);
-	}
 
-	const float col_width = 220;
-	const float row_height = 70;
-	const float box_w = 180;
-	const float box_h = 48;
+	const float col_width = 250;
+	const float row_height = 90;
+	const float box_w = 210;
+	const float box_h = 62;
 
 	for (int d = 0; d < max_depth && depth_groups.count(d); ++d) {
 		auto& group = depth_groups[d];
-		const float total_height = static_cast<float>(group.size()) * row_height;
-		const float start_y = -total_height / 2.0f;
+		const float total_h = static_cast<float>(group.size()) * row_height;
+		const float start_y = -total_h / 2.0f;
 
 		for (size_t i = 0; i < group.size(); ++i) {
 			auto* n = group[i];
@@ -294,38 +406,44 @@ void TechTreeViewer::rebuildGraph() {
 
 			QColor color = node_color(n->is_building, n->is_worker);
 			QGraphicsRectItem* rect = graph_scene_->addRect(QRectF(x, y, box_w, box_h),
-				QPen(color.darker(120), 2), QBrush(color.lighter(130)));
+				QPen(color.darker(130), 2), QBrush(color.lighter(130)));
 			rect->setFlag(QGraphicsItem::ItemIsSelectable);
 
-			QGraphicsTextItem* label = graph_scene_->addText(
-				QString("%1\n%2").arg(QString::fromStdString(n->id),
-					QString::fromStdString(n->name)));
-			label->setPos(x + 6, y + 4);
-			label->setDefaultTextColor(Qt::black);
-			QFont f = label->font();
+			QString label = QString::fromStdString(n->id + "\n" + n->name);
+			QGraphicsTextItem* txt = graph_scene_->addText(label);
+			txt->setPos(x + 6, y + 4);
+			txt->setDefaultTextColor(Qt::black);
+			QFont f = txt->font();
 			f.setPointSize(8);
 			if (n->name.size() > 20) f.setPointSize(7);
-			label->setFont(f);
+			txt->setFont(f);
+
+			QIcon icon = get_unit_icon(n->id);
+			if (!icon.isNull()) {
+				QPixmap pm = icon.pixmap(24, 24);
+				graph_scene_->addPixmap(pm)->setPos(x + box_w - 30, y + 10);
+			}
 		}
 	}
 
 	for (const auto& [from, to, rel] : edges) {
 		if (!depth_map.contains(from) || !depth_map.contains(to)) continue;
-		const float from_x = static_cast<float>(depth_map[from]) * col_width + box_w;
-		const float to_x = static_cast<float>(depth_map[to]) * col_width;
+
 		const auto& from_group = depth_groups[depth_map[from]];
 		const auto& to_group = depth_groups[depth_map[to]];
 		const float total_h_from = static_cast<float>(from_group.size()) * row_height;
 		const float total_h_to = static_cast<float>(to_group.size()) * row_height;
 
-		float from_y = 0, to_y = 0;
+		float from_x = 0, from_y = 0, to_x = 0, to_y = 0;
 		for (size_t i = 0; i < from_group.size(); ++i)
 			if (from_group[i]->id == from) {
+				from_x = static_cast<float>(depth_map[from]) * col_width + box_w;
 				from_y = -total_h_from / 2.0f + static_cast<float>(i) * row_height + box_h / 2.0f;
 				break;
 			}
 		for (size_t i = 0; i < to_group.size(); ++i)
 			if (to_group[i]->id == to) {
+				to_x = static_cast<float>(depth_map[to]) * col_width;
 				to_y = -total_h_to / 2.0f + static_cast<float>(i) * row_height + box_h / 2.0f;
 				break;
 			}
@@ -333,23 +451,19 @@ void TechTreeViewer::rebuildGraph() {
 		QColor ec = edge_color(rel);
 		QPen pen(ec, 1.5);
 		if (rel == "trains" || rel == "builds") pen.setWidth(2);
-		QGraphicsLineItem* line = graph_scene_->addLine(QLineF(from_x, from_y, to_x, to_y), pen);
+		graph_scene_->addLine(QLineF(from_x, from_y, to_x, to_y), pen);
 
 		// Arrowhead
-		const float arrow_len = 8;
+		const float alen = 8;
 		const float angle = std::atan2(to_y - from_y, to_x - from_x);
 		const float a1 = angle + 0.4f;
 		const float a2 = angle - 0.4f;
 		graph_scene_->addLine(QLineF(to_x, to_y,
-			to_x - arrow_len * std::cos(a1), to_y - arrow_len * std::sin(a1)), pen);
+			to_x - alen * std::cos(a1), to_y - alen * std::sin(a1)), pen);
 		graph_scene_->addLine(QLineF(to_x, to_y,
-			to_x - arrow_len * std::cos(a2), to_y - arrow_len * std::sin(a2)), pen);
+			to_x - alen * std::cos(a2), to_y - alen * std::sin(a2)), pen);
 	}
 
-	graph_scene_->setSceneRect(graph_scene_->itemsBoundingRect().adjusted(-20, -20, 20, 20));
+	graph_scene_->setSceneRect(graph_scene_->itemsBoundingRect().adjusted(-30, -30, 30, 30));
 	graph_view_->fitInView(graph_scene_->sceneRect(), Qt::KeepAspectRatio);
-
-	// Zoom with mouse wheel
-	graph_view_->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
-	graph_view_->setRenderHint(QPainter::Antialiasing);
 }

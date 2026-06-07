@@ -9,11 +9,13 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QLabel>
+#include <QCheckBox>
 
 #include <string>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+#include <set>
 
 class TechTreeViewer : public QMainWindow {
 	Q_OBJECT
@@ -26,13 +28,14 @@ public:
 private:
 	void rebuildTree();
 	void rebuildGraph();
+	void zoomGraph(double factor);
 
 	struct NodeInfo {
 		std::string id;
 		std::string name;
 		bool is_building = false;
 		bool is_worker = false;
-		std::vector<std::pair<std::string, std::string>> children; // {id, relation}
+		std::vector<std::pair<std::string, std::string>> children;
 	};
 
 	std::vector<std::pair<std::string, std::string>> getChildren(const std::string& id);
@@ -44,5 +47,15 @@ private:
 	QTreeWidget* tree_ = nullptr;
 	QGraphicsView* graph_view_ = nullptr;
 	QGraphicsScene* graph_scene_ = nullptr;
+
+	QCheckBox* chk_trains_ = nullptr;
+	QCheckBox* chk_builds_ = nullptr;
+	QCheckBox* chk_upgrades_ = nullptr;
+	QCheckBox* chk_researches_ = nullptr;
+	QCheckBox* chk_trained_by_ = nullptr;
+	QCheckBox* chk_built_by_ = nullptr;
+	QCheckBox* chk_upgraded_from_ = nullptr;
+	QCheckBox* chk_recursive_ = nullptr;
+
 	QString current_id_;
 };
