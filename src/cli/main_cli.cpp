@@ -1340,7 +1340,7 @@ int main(int argc, char* argv[]) {
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
-				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--chat-after 20 --chat-text -ai2] [--chat-script \"20:-ai2|35:-raceselect1\"] [--bridge-script \"90:create_ai:2|105:race_select:1\"] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>]"},
+				   {"probe-map", "--map <dir|.w3x> --warcraft <dir> [--wait 12] [--click-after 6] [--chat-after 20 --chat-text -ai2] [--chat-script \"20:-ai2|35:-raceselect1\"] [--bridge-script \"90:create_ai:2|105:race_select:1\"] [--tail 120] [--keep-open] [--log <War3Log.txt>] [--probe-log <relative-file>] [--args \"...\"]"},
 				   {"read-war3-log", "[--map <dir|.w3x>] [--tail 120] [--log <War3Log.txt>]"},
 				   {"read-custom-map-data-log", "--file <relative-or-absolute-file> [--tail 120]"},
 				   {"validate-script", "--map <dir> [--tools <dir>]"},
