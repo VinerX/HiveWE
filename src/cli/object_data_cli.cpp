@@ -453,6 +453,52 @@ std::string editor_suffix(const slk::SLK& slk, const std::string& id, const Trig
 	return {};
 }
 
+// ---- baked name fallback --------------------------------------------------
+
+// Last-resort original WC3 names, shipped in the editor repo so the map-only
+// command paths can still show names when live Warcraft III data (CASC) is
+// unavailable. Generated via `dump-objects ... --fields name`. Format:
+// tab-separated `type<TAB>id<TAB>name`, '#' comment lines skipped. Parsed by hand
+// because this module is `import std` only (no nlohmann/json). Loaded once,
+// relative to the project root (main_cli sets cwd there before dispatch).
+const std::unordered_map<std::string, std::unordered_map<std::string, std::string>>& name_fallback_table() {
+	static const std::unordered_map<std::string, std::unordered_map<std::string, std::string>> table = [] {
+		std::unordered_map<std::string, std::unordered_map<std::string, std::string>> t;
+		std::ifstream in("data/wc3_name_fallback.tsv", std::ios::binary);
+		if (!in) {
+			return t;
+		}
+		std::string line;
+		while (std::getline(in, line)) {
+			if (!line.empty() && line.back() == '\r') line.pop_back();
+			if (line.empty() || line[0] == '#') continue;
+			const auto p1 = line.find('\t');
+			if (p1 == std::string::npos) continue;
+			const auto p2 = line.find('\t', p1 + 1);
+			if (p2 == std::string::npos) continue;
+			std::string id = line.substr(p1 + 1, p2 - p1 - 1);
+			std::string name = line.substr(p2 + 1);
+			if (!id.empty() && !name.empty()) {
+				t[line.substr(0, p1)][id] = std::move(name);
+			}
+		}
+		return t;
+	}();
+	return table;
+}
+
+// Returns the baked original name for a type+rawcode, or "" if not present.
+// Names are already UTF-8 (dumped via to_utf8), so no conversion is needed.
+std::string fallback_name(const std::string& type, const std::string& id) {
+	const auto& table = name_fallback_table();
+	if (const auto it = table.find(type); it != table.end()) {
+		if (const auto jt = it->second.find(id); jt != it->second.end()) {
+			return jt->second;
+		}
+	}
+	return {};
+}
+
 // ---- bootstrap ------------------------------------------------------------
 
 // Opens CASC, loads the WorldEdit strings, points the hierarchy at the map and
@@ -869,7 +915,8 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				return error("building not found in war3map.w3u: " + building_id);
 			}
 
-			std::string name = name_map.contains(building_id) ? name_map.at(building_id) : "";
+			std::string name = name_map.contains(building_id) && !name_map.at(building_id).empty()
+				? name_map.at(building_id) : fallback_name("unit", building_id);
 			std::string base_id = oldid_map.contains(building_id) ? oldid_map.at(building_id) : "";
 			std::string category = isbldg_map.contains(building_id) && isbldg_map.at(building_id) == "1" ? "building" : "unit";
 
@@ -890,7 +937,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				first_a = false;
 				JsonObject ro;
 				ro.str("id", aid);
-				ro.str("name", "");
+				ro.str("name", fallback_name("ability", aid));
 				ability_arr += ro.dump();
 			}
 			ability_arr += "]";
@@ -902,7 +949,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				first_r = false;
 				JsonObject ro;
 				ro.str("id", rid);
-				ro.str("name", "");
+				ro.str("name", fallback_name("upgrade", rid));
 				research_arr += ro.dump();
 			}
 			research_arr += "]";
@@ -914,7 +961,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				first_u = false;
 				JsonObject uo;
 				uo.str("id", uid);
-				uo.str("name", "");
+				uo.str("name", fallback_name("unit", uid));
 				upgrade_arr += uo.dump();
 			}
 			upgrade_arr += "]";
@@ -1056,7 +1103,9 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				std::string cat = is_building ? "building" : (is_hero ? "hero" : "unit");
 				if (type_filter != "all" && cat != type_filter) continue;
 
-				std::string display = std::format("{}  {:8}  {}", id, cat, unit_names.contains(id) ? unit_names.at(id) : "");
+				std::string resolved_name = unit_names.contains(id) && !unit_names.at(id).empty()
+					? unit_names.at(id) : fallback_name("unit", id);
+				std::string display = std::format("{}  {:8}  {}", id, cat, resolved_name);
 
 				if (is_building) {
 					if (unit_trains.contains(id) && !unit_trains.at(id).empty()) {
@@ -1235,7 +1284,9 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 					} else {
 						unit_count++;
 						if (has_builds) {
-							workers.push_back(unit_name.contains(uid) ? std::format("{} {}", uid, unit_name.at(uid)) : uid);
+							std::string wn = unit_name.contains(uid) && !unit_name.at(uid).empty()
+								? unit_name.at(uid) : fallback_name("unit", uid);
+							workers.push_back(wn.empty() ? uid : std::format("{} {}", uid, wn));
 						}
 					}
 				}

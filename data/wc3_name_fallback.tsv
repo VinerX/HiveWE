@@ -1,0 +1,3204 @@
+# Original Warcraft III object names (RU locale), dumped from CASC via HiveWE_cli dump-objects.
+# Last-resort name fallback for the map-only CLI paths when live WC3 data is unavailable.
+# Regenerate: HiveWE_cli dump-objects --map "data/test map" --type <t> --fields name --max 100000
+# Columns: type<TAB>id<TAB>name
+unit	Hamg	Верховный маг
+unit	Hblm	Маг крови
+unit	Hmkg	Горный король
+unit	Hpal	Паладин
+unit	hbot	Транспорт Альянса
+unit	hbsh	Линкор Альянса
+unit	hdes	Фрегат Альянса
+unit	hdhw	Наездник на дракондоре
+unit	hfoo	Пехотинец
+unit	hgry	Наездник на грифоне
+unit	hgyr	Ветролет
+unit	hkni	Рыцарь
+unit	hmil	Ополченец
+unit	hmpr	Жрец
+unit	hmtm	Мортирный расчет
+unit	hmtt	Осадная машина
+unit	hpea	Работник
+unit	hphx	Феникс
+unit	hpxe	Яйцо феникса
+unit	hrif	Стрелок
+unit	hrtt	Осадная машина
+unit	hsor	Волшебница
+unit	hspt	Разрушитель чар
+unit	hwat	Элементаль воды
+unit	hwt2	Элементаль воды
+unit	hwt3	Элементаль воды
+unit	nlv1	Порождение лавы
+unit	nlv2	Порождение лавы
+unit	nlv3	Порождение лавы
+unit	halt	Алтарь королей
+unit	harm	Мастерская
+unit	hars	Волшебное святилище
+unit	hatw	Магическая башня
+unit	hbar	Казармы
+unit	hbla	Кузница
+unit	hcas	Замок
+unit	hctw	Орудийная башня
+unit	hgra	Авиарий
+unit	hgtw	Сторожевая башня
+unit	hhou	Ферма
+unit	hkee	Форт
+unit	hlum	Лесопилка
+unit	hshy	Верфь Альянса
+unit	htow	Ратуша
+unit	hvlt	Волшебное хранилище
+unit	hwtw	Дозорная башня
+unit	Obla	Мастер клинка
+unit	Ofar	Предсказатель
+unit	Oshd	Темный охотник
+unit	Otch	Вождь тауренов
+unit	ncat	Дренейский разрушитель
+unit	nsw1	Малый призрачный зверь
+unit	nsw2	Призрачный зверь
+unit	nsw3	Большой призрачный зверь
+unit	nwad	Сторожевой оберег
+unit	obot	Транспорт Орды
+unit	ocat	Разрушитель
+unit	odes	Фрегат Орды
+unit	odoc	Знахарь
+unit	oeye	Сторожевой идол
+unit	ogru	Рубака
+unit	ohun	Охотник за головами
+unit	ohwd	Исцеляющий идол
+unit	okod	Кодо
+unit	opeo	Батрак
+unit	orai	Налетчик
+unit	oshm	Шаман
+unit	osp1	Змеиный идол
+unit	osp2	Змеиный идол
+unit	osp3	Змеиный идол
+unit	osp4	Змеиный идол
+unit	ospm	Духостранник
+unit	ospw	Духостранник
+unit	osw1	Призрачный волк
+unit	osw2	Лютый волк
+unit	osw3	Темный волк
+unit	otau	Таурен
+unit	otbk	Берсерк
+unit	otbr	Наездник на нетопыре
+unit	otot	Стазисная ловушка
+unit	owyv	Наездник на ветрокрыле
+unit	oalt	Алтарь бури
+unit	obar	Казармы
+unit	obea	Зверинец
+unit	ofor	Лесопилка
+unit	ofrt	Цитадель
+unit	ogre	Дом вождей
+unit	oshy	Верфь Орды
+unit	osld	Обитель духов
+unit	ostr	Крепость
+unit	otrb	Землянка
+unit	otto	Тауренский тотем
+unit	ovln	Лавка вуду
+unit	owtw	Сторожевая башня
+unit	Edem	Охотник на демонов
+unit	Edmm	Охотник на демонов
+unit	Ekee	Хранитель рощи
+unit	Emoo	Жрица Луны
+unit	Ewar	Страж
+unit	earc	Лучница
+unit	ebal	Глефомет
+unit	ebsh	Линкор ночных эльфов
+unit	echm	Химера
+unit	edcm	Друид-хищник
+unit	edes	Фрегат ночных эльфов
+unit	edoc	Друид-хищник
+unit	edot	Друид-ворон
+unit	edry	Дриада
+unit	edtm	Друид-ворон
+unit	efdr	Чудесный дракончик
+unit	efon	Древень
+unit	ehip	Гиппогриф
+unit	ehpr	Наездница на гиппогрифе
+unit	emtg	Горный великан
+unit	esen	Охотница
+unit	espv	Аватара возмездия
+unit	even	Дух возмездия
+unit	ewsp	Огонек
+unit	eaoe	Древо мудрости
+unit	eaom	Древо войны
+unit	eaow	Древо ветров
+unit	eate	Алтарь старейшин
+unit	eden	Древо чудес
+unit	edob	Дом охотников
+unit	edos	Гнездо химер
+unit	egol	Оплетенный рудник
+unit	emow	Лунный колодец
+unit	eshy	Верфь ночных эльфов
+unit	etoa	Древо столетий
+unit	etoe	Древо вечности
+unit	etol	Древо жизни
+unit	etrp	Сторожевое древо
+unit	Ucrl	Владыка склепа
+unit	Udea	Рыцарь смерти
+unit	Udre	Повелитель ужаса
+unit	Ulic	Лич
+unit	uabo	Поганище
+unit	uaco	Послушник
+unit	uban	Банши
+unit	ubsp	Сфинкс
+unit	ucrm	Некроарахнид под землей
+unit	ucry	Некроарахнид
+unit	ucs1	Жук-падальщик
+unit	ucs2	Жук-падальщик
+unit	ucs3	Жук-падальщик
+unit	ucsB	Жук-падальщик под землей
+unit	ucsC	Жук-падальщик под землей
+unit	ufro	Ледяной змей
+unit	ugar	Горгулья
+unit	ugho	Вурдалак
+unit	ugrm	Окаменевшая горгулья
+unit	uloc	Саранча
+unit	umtw	Мясной фургон
+unit	unec	Некромант
+unit	uobs	Обсидиановая статуя
+unit	uplg	Болезнетворное облако
+unit	ushd	Тень
+unit	uske	Скелет-воин
+unit	uskm	Скелет-маг
+unit	uubs	Линкор нежити
+unit	uaod	Алтарь тьмы
+unit	ubon	Костяной двор
+unit	ugol	Проклятый рудник
+unit	ugrv	Кладбище
+unit	unp1	Чертоги мертвых
+unit	unp2	Темная цитадель
+unit	unpl	Некрополь
+unit	usap	Жертвенная яма
+unit	usep	Склеп
+unit	ushp	Верфь нежити
+unit	uslh	Бойня
+unit	utod	Храм проклятых
+unit	utom	Реликварий
+unit	uzg1	Башня духов
+unit	uzg2	Нерубская башня
+unit	uzig	Зиккурат
+unit	Nal2	Алхимик
+unit	Nal3	Алхимик
+unit	Nalc	Алхимик
+unit	Nalm	Алхимик
+unit	Nbrn	Темный Следопыт
+unit	Nbst	Повелитель зверей
+unit	Nfir	Повелитель огня
+unit	Nngs	Морская ведьма
+unit	Npbm	Хмелевар
+unit	Nplh	Властитель преисподней
+unit	Nrob	Механик
+unit	Ntin	Механик
+unit	ncg1	Заводной гоблин
+unit	ncg2	Заводной гоблин
+unit	ncg3	Заводной гоблин
+unit	ncgb	Заводной гоблин
+unit	ndr1	Слабый темный прислужник
+unit	ndr2	Темный прислужник
+unit	ndr3	Сильный темный прислужник
+unit	nfa1	Портативная фабрика
+unit	nfa2	Портативная фабрика
+unit	nfac	Портативная фабрика
+unit	ngz1	Медведь
+unit	ngz2	Медведь-шатун
+unit	ngz3	Призрачный медведь
+unit	ngz4	Миша
+unit	ngzc	Миша
+unit	ngzd	Миша
+unit	npn1	Огонь
+unit	npn2	Буря
+unit	npn3	Земля
+unit	npn4	Огонь
+unit	npn5	Буря
+unit	npn6	Земля
+unit	nqb1	Вепрь
+unit	nqb2	Лютый вепрь
+unit	nqb3	Яростный вепрь
+unit	nqb4	Бешеный вепрь
+unit	nwe1	Ястреб
+unit	nwe2	Грозовой ястреб
+unit	nwe3	Призрачный ястреб
+unit	nadk	Синий дракон
+unit	nadr	Древний синий дракон
+unit	nadw	Синий дракончик
+unit	nahy	Древняя гидра
+unit	nanb	Шипастый арахнид
+unit	nanc	Кристаллический арахнид
+unit	nane	Арахнид-землекоп
+unit	nanm	Шипастый арахнид
+unit	nano	Вожак арахнидов
+unit	nanw	Арахнид-воин
+unit	narg	Боевой голем
+unit	nass	Убийца
+unit	nba2	Страж ужаса
+unit	nbal	Страж ужаса
+unit	nban	Бандит
+unit	nbda	Молодой синий драконид
+unit	nbdk	Черный дракон
+unit	nbdm	Синий драконид – разведчик
+unit	nbdo	Синий драконид – надзиратель
+unit	nbdr	Черный дракончик
+unit	nbds	Синий драконид – маг
+unit	nbdw	Синий драконид – воин
+unit	nbld	Атаман разбойников
+unit	nbnb	Шипастый арахнид под землей
+unit	nbot	Транспорт
+unit	nbrg	Грабитель
+unit	nbwm	Древний черный дракон
+unit	nbzd	Древний бронзовый дракон
+unit	nbzk	Бронзовый дракон
+unit	nbzw	Бронзовый дракончик
+unit	ncea	Кентавр-лучница
+unit	ncen	Кентавр-гонец
+unit	ncer	Кентавр-воин
+unit	ncfs	Водяной прислужник
+unit	nchp	Капеллан
+unit	ncim	Кентавр-охотница
+unit	ncks	Кентавр-чародейка
+unit	ncnk	Хан кентавров
+unit	ndqn	Суккуб
+unit	ndqp	Дева боли
+unit	ndqs	Королева Страданий
+unit	ndqt	Порочная искусительница
+unit	ndqv	Порочная мучительница
+unit	ndrv	Загробник глубин
+unit	ndtb	Темный тролль – берсерк
+unit	ndth	Темный тролль – старший жрец
+unit	ndtp	Темный тролль – жрец Тьмы
+unit	ndtr	Темный тролль
+unit	ndtt	Темный тролль – охотник
+unit	ndtw	Вождь темных троллей
+unit	nehy	Огромная гидра
+unit	nelb	Обезумевший элементаль
+unit	nele	Разъяренный элементаль
+unit	nenc	Порченый древень
+unit	nenf	Головорез
+unit	nenp	Ядовитый древень
+unit	nepl	Чумной древень
+unit	nerd	Эредар-демонолог
+unit	ners	Эредар-колдун
+unit	nerw	Эредар-чернокнижник
+unit	nfel	Ловчий Скверны
+unit	nfgb	Кровавое отродье
+unit	nfgo	Забытый
+unit	nfgt	Щупальце
+unit	nfgu	Страж Скверны
+unit	nfod	Безликий вестник смерти
+unit	nfor	Безликий насмешник
+unit	nfot	Безликий ужас
+unit	nfov	Властитель
+unit	nfpc	Белый фурболг – защитник
+unit	nfpe	Белый фурболг – старший шаман
+unit	nfpl	Белый фурболг
+unit	nfps	Белый фурболг – шаман
+unit	nfpt	Белый фурболг – следопыт
+unit	nfpu	Белый фурболг – воитель
+unit	nfra	Фурболг-воитель
+unit	nfrb	Фурболг-следопыт
+unit	nfre	Фурболг – старший шаман
+unit	nfrg	Фурболг-защитник
+unit	nfrl	Фурболг
+unit	nfrp	Стихийный пандарен
+unit	nfrs	Фурболг-шаман
+unit	nfsh	Лесной тролль – старший жрец
+unit	nfsp	Лесной тролль – жрец Тьмы
+unit	nftb	Лесной тролль – берсерк
+unit	nftk	Вождь лесных троллей
+unit	nftr	Лесной тролль
+unit	nftt	Лесной тролль – охотник
+unit	ngdk	Зеленый дракон
+unit	nggr	Гранитный голем
+unit	ngh1	Призрак
+unit	ngh2	Призрак
+unit	ngir	Крошшер
+unit	nglm	Гоблинская мина
+unit	ngna	Гнолл-браконьер
+unit	ngnb	Гнолл-громила
+unit	ngno	Гнолл
+unit	ngns	Гнолл-убийца
+unit	ngnv	Гнолл-надзиратель
+unit	ngnw	Гнолл-тюремщик
+unit	ngrd	Древний зеленый дракон
+unit	ngrk	Глиняный голем
+unit	ngrw	Зеленый дракончик
+unit	ngsp	Подрывной отряд
+unit	ngst	Каменный голем
+unit	ngza	Миша
+unit	nhar	Гарпия-разведчица
+unit	nhdc	Предатель
+unit	nhfp	Падший жрец
+unit	nhhr	Еретик
+unit	nhrh	Гарпия-буревестница
+unit	nhrq	Королева гарпий
+unit	nhrr	Гарпия-разбойница
+unit	nhrw	Гарпия-ведьма
+unit	nhyc	Драконья черепаха
+unit	nhyd	Гидра
+unit	nhyh	Детеныш гидры
+unit	nhym	Гидромант
+unit	nina	Инфернальный исполин
+unit	ninc	Адское устройство
+unit	ninf	Инфернал
+unit	ninm	Адская машина
+unit	nith	Ледяной тролль – старший жрец
+unit	nitp	Ледяной тролль – жрец
+unit	nitr	Ледяной тролль
+unit	nits	Ледяной тролль – берсерк
+unit	nitt	Ледяной тролль – охотник
+unit	nitw	Вождь ледяных троллей
+unit	njg1	Джунглевый хищник
+unit	njga	Матерый джунглевый хищник
+unit	njgb	Разъяренный джунглевый хищник
+unit	nkob	Кобольд
+unit	nkog	Кобольд-геомант
+unit	nkol	Кобольд-надсмотрщик
+unit	nkot	Кобольд-проходчик
+unit	nlds	Макрура-глубинник
+unit	nlkl	Макрура – владыка волн
+unit	nlpd	Макрура-прудовик
+unit	nlpr	Макрура-краб
+unit	nlps	Призванный краб
+unit	nlrv	Высший загробник глубин
+unit	nlsn	Макрура-хвататель
+unit	nltc	Макрура-волномут
+unit	nltl	Грозовой ящер
+unit	nlur	Приманка
+unit	nmam	Мамонт
+unit	nmbg	Мурлок-жаберник
+unit	nmcf	Мурлок-бегун
+unit	nmdr	Лютый мамонт
+unit	nmfs	Мурлок-трупоед
+unit	nmgd	Магнатавр-разрушитель
+unit	nmgr	Магнатавр-разоритель
+unit	nmgw	Магнатавр-воин
+unit	nmit	Ледяной мамонт
+unit	nmmu	Мурлок-мутант
+unit	nmpg	Чумной мурлок
+unit	nmrl	Мурлок-волноход
+unit	nmrm	Мурлок-следопыт
+unit	nmrr	Мурлок-охотник
+unit	nmrv	Мурлок-мародер
+unit	nmsc	Мурлок – темный маг
+unit	nmsn	Мурлок-ловец
+unit	nmtw	Мурлок – воин волн
+unit	nmyr	Мирмидон
+unit	nmys	Мирмидон под водой
+unit	nndk	Дракон Пустоты
+unit	nndr	Древний дракон Пустоты
+unit	nnht	Дракончик Пустоты
+unit	nnmg	Мурлок-разоритель
+unit	nnrg	Нага-гвардеец
+unit	nnrs	Нага-гвардеец под водой
+unit	nnsu	Призывательница
+unit	nnsw	Сирена
+unit	nnwa	Неруб-воин
+unit	nnwl	Неруб-тенетник
+unit	nnwq	Королева нерубов
+unit	nnwr	Неруб-провидец
+unit	nnws	Король пауков
+unit	noga	Вождь клана Каменного Молота
+unit	nogl	Командир огров
+unit	nogm	Огр-громила
+unit	nogn	Маг из клана Каменного Молота
+unit	nogo	Огр из клана Каменного Молота
+unit	nogr	Огр-воин
+unit	nomg	Огр-маг
+unit	nowb	Совух
+unit	nowe	Свирепый совух
+unit	nowk	Совух-берсерк
+unit	npfl	Зверь Скверны
+unit	npfm	Разоритель Скверны
+unit	nplb	Белый медведь
+unit	nplg	Огромный белый медведь
+unit	nqbh	Свинобраз-охотник
+unit	nrdk	Красный дракончик
+unit	nrdr	Красный дракон
+unit	nrel	Рифовый элементаль
+unit	nrog	Разбойник
+unit	nrvd	Загробник смерти
+unit	nrvf	Загробник пламени
+unit	nrvi	Загробник льда
+unit	nrvl	Загробник молний
+unit	nrvs	Загробник стужи
+unit	nrwm	Древний красный дракон
+unit	nrzb	Иглогрив-громила
+unit	nrzg	Вождь иглогривов
+unit	nrzm	Иглогрив-лекарь
+unit	nrzs	Иглогрив-разведчик
+unit	nrzt	Свинобраз
+unit	nsat	Сатир-проказник
+unit	nsbm	Мать стаи
+unit	nsbs	Морской варан под водой
+unit	nsc2	Краб-расчленитель
+unit	nsc3	Гигантский краб
+unit	nsca	Скелет-лучник
+unit	nscb	Береговой краб
+unit	nsce	Скелет-воин
+unit	nsel	Морской элементаль
+unit	nsgb	Морской исполин
+unit	nsgg	Осадный голем
+unit	nsgh	Морской охотник
+unit	nsgn	Морской великан
+unit	nsgt	Огромный паук
+unit	nska	Скелет-лучник
+unit	nske	Скелет-воин
+unit	nskf	Пылающий лучник
+unit	nskg	Огромный скелет-воин
+unit	nskm	Скелет-стрелок
+unit	nsko	Орк-скелет
+unit	nslf	Метатель слизи
+unit	nslh	Детеныш саламандры
+unit	nsll	Халиф саламандр
+unit	nslm	Болотный гад
+unit	nsln	Болотное чудище
+unit	nslr	Саламандра
+unit	nslv	Визирь саламандр
+unit	nsnp	Морской варан
+unit	nsns	Водяной прислужник
+unit	nsoc	Скелет орка-защитника
+unit	nsog	Скелет-рубака
+unit	nspb	Черный паук
+unit	nspd	Паучок
+unit	nspg	Лесной паук
+unit	nspp	Призрачный вепрь
+unit	nspr	Паук
+unit	nsqa	Древний йети
+unit	nsqe	Йети-старейшина
+unit	nsqo	Йети-предсказатель
+unit	nsqt	Йети
+unit	nsra	Ученик из клана Бушующего Шторма
+unit	nsrh	Отшельник из клана Бушующего Шторма
+unit	nsrn	Некролит из клана Бушующего Шторма
+unit	nsrv	Загробник морей
+unit	nsrw	Чернокнижник из клана Бушующего Шторма
+unit	nssp	Паук-плевак
+unit	nsth	Адский сатир
+unit	nstl	Сатир-душекрад
+unit	nsts	Сатир-тенепляс
+unit	nstw	Штормовой ящер
+unit	nsty	Сатир
+unit	nthl	Громовой ящер
+unit	ntka	Клыкарр-копейщик
+unit	ntkc	Вождь клыкарров
+unit	ntkf	Клыкарр-солдат
+unit	ntkh	Клыкарр-лекарь
+unit	ntks	Клыкарр-маг
+unit	ntkt	Клыкарр-охотник
+unit	ntkw	Клыкарр-воин
+unit	ntor	Торнадо
+unit	ntrd	Драконья черепаха
+unit	ntrg	Исполинская черепаха
+unit	ntrh	Детеныш черепахи
+unit	ntrs	Черепаха
+unit	ntrt	Гигантская черепаха
+unit	ntrv	Загробник волн
+unit	ntws	Водяной прислужник
+unit	nubk	Вечный темный охотник
+unit	nubr	Вечный душегуб
+unit	nubw	Вечный темный маг
+unit	nvde	Старший демон Бездны
+unit	nvdg	Древний демон Бездны
+unit	nvdl	Младший демон Бездны
+unit	nvdw	Демон Бездны
+unit	nwen	Вендиго
+unit	nwgs	Коатль
+unit	nwiz	Ученик волшебника
+unit	nwld	Лютый волк
+unit	nwlg	Огромный волк
+unit	nwlt	Лесной волк
+unit	nwna	Древний вендиго
+unit	nwnr	Вендиго-старейшина
+unit	nwns	Вендиго-шаман
+unit	nwrg	Военный голем
+unit	nws1	Дракондор
+unit	nwwd	Лютый северный волк
+unit	nwwf	Северный волк
+unit	nwwg	Огромный северный волк
+unit	nwzd	Темный маг
+unit	nwzg	Маг-отступник
+unit	nwzr	Непокорный маг
+unit	nzep	Дирижабль
+unit	nzom	Зомби
+unit	nzof	Зомби
+unit	nalb	Альбатрос
+unit	ncrb	Краб
+unit	nder	Олень
+unit	ndog	Пес
+unit	ndwm	Песчаный червь
+unit	nech	Курица
+unit	necr	Кролик
+unit	nfbr	Скверносвин
+unit	nfro	Лягушка
+unit	nhmc	Краб-отшельник
+unit	now2	Сова-разведчица
+unit	now3	Сова-разведчица
+unit	nowl	Сова-разведчица
+unit	npig	Свинья
+unit	npng	Пингвин
+unit	npnw	Пингвин
+unit	nrac	Енот
+unit	nrat	Крыса
+unit	nsea	Тюлень
+unit	nsha	Овца
+unit	nshe	Овца
+unit	nshf	Летающая овца
+unit	nshw	Овца
+unit	nskk	Сцинк
+unit	nsno	Полярная сова
+unit	nvil	Мирный житель
+unit	nvk2	Ребенок
+unit	nvl2	Мирный житель
+unit	nvlk	Ребенок
+unit	nvlw	Мирная жительница
+unit	nvul	Стервятник
+unit	ncb0	Дом
+unit	ncb1	Дом
+unit	ncb2	Дом
+unit	ncb3	Дом
+unit	ncb4	Дом
+unit	ncb5	Дом
+unit	ncb6	Дом
+unit	ncb7	Дом
+unit	ncb8	Дом
+unit	ncb9	Дом
+unit	ncba	Дом
+unit	ncbb	Дом
+unit	ncbc	Дом
+unit	ncbd	Дом
+unit	ncbe	Дом
+unit	ncbf	Дом
+unit	ncnt	Шатер кентавров
+unit	ncop	Магический круг
+unit	ncp2	Магический круг
+unit	ncp3	Магический круг
+unit	nct1	Шатер кентавров
+unit	nct2	Шатер кентавров
+unit	ndch	Хижина вождя дренеев
+unit	ndh0	Дренейская хижина
+unit	ndh1	Дренейская хижина
+unit	ndh2	Дренейское убежище
+unit	ndh3	Дренейские казармы
+unit	ndh4	Хижина провидца
+unit	ndrg	Гнездо зеленых драконов
+unit	ndrk	Гнездо черных драконов
+unit	ndro	Гнездо драконов Пустоты
+unit	ndrr	Гнездо красных драконов
+unit	ndru	Гнездо синих драконов
+unit	ndrz	Гнездо бронзовых драконов
+unit	nfh0	Хижина лесных троллей
+unit	nfh1	Хижина лесных троллей
+unit	nfoh	Источник здоровья
+unit	nfr1	Хижина фурболгов
+unit	nfr2	Хижина фурболгов
+unit	ngad	Гоблинская лаборатория
+unit	ngme	Гоблинская лавка
+unit	ngnh	Хижина гноллов
+unit	ngni	Зараженный амбар
+unit	ngol	Рудник
+unit	ngt2	Хижина гноллов
+unit	ngwr	Амбар
+unit	nhns	Гнездо гарпий
+unit	nmer	Лагерь наемников
+unit	nmg0	Хижина мурлоков
+unit	nmg1	Хижина мурлоков
+unit	nmh0	Мурлочья хижина
+unit	nmh1	Мурлочья хижина
+unit	nmoo	Источник маны
+unit	nmr0	Лагерь наемников
+unit	nmr2	Лагерь наемников
+unit	nmr3	Лагерь наемников
+unit	nmr4	Лагерь наемников
+unit	nmr5	Лагерь наемников
+unit	nmr6	Лагерь наемников
+unit	nmr7	Лагерь наемников
+unit	nmr8	Лагерь наемников
+unit	nmr9	Лагерь наемников
+unit	nmra	Лагерь наемников
+unit	nmrb	Лагерь наемников
+unit	nmrc	Лагерь наемников
+unit	nmrd	Лагерь наемников
+unit	nmre	Лагерь наемников
+unit	nmrf	Лагерь наемников
+unit	nmrk	Рынок
+unit	nnzg	Нерубский зиккурат
+unit	nshp	Гоблинская верфь
+unit	ntav	Таверна
+unit	nten	Палатка
+unit	nth0	Хижина ледяных троллей
+unit	nth1	Хижина ледяных троллей
+unit	ntn2	Палатка
+unit	ntnt	Тауренский вигвам
+unit	ntt2	Тауренский вигвам
+unit	nwgt	Портал
+unit	Ecen	Полубог
+unit	Eevi	Охотник на демонов
+unit	Eevm	Охотник на демонов
+unit	Efur	Хранитель рощи
+unit	Eidm	Охотник на демонов
+unit	Eill	Охотник на демонов
+unit	Eilm	Охотник на демонов
+unit	Ekgg	Хранитель рощи
+unit	Emfr	Хранитель рощи
+unit	Emns	Хранитель рощи
+unit	Etyr	Жрица Луны
+unit	Ewrd	Страж
+unit	Hant	Верховный маг
+unit	Hapm	Паладин
+unit	Harf	Паладин
+unit	Hart	Паладин
+unit	Hdgo	Паладин
+unit	Hgam	Призрак верховного мага
+unit	Hhkl	Паладин
+unit	Hjai	Верховный маг
+unit	Hkal	Маг крови
+unit	Hlgr	Темный рыцарь
+unit	Hmbr	Горный король
+unit	Hmgd	Паладин
+unit	Hpb1	Паладин
+unit	Hpb2	Паладин
+unit	Huth	Паладин
+unit	Hvsh	Морская ведьма
+unit	Hvwd	Следопыт
+unit	Naka	Старейшина
+unit	Nbbc	Мастер клинка
+unit	Nkjx	Чернокнижник
+unit	Nklj	Чернокнижник
+unit	Nmag	Властитель преисподней
+unit	Nman	Властитель преисподней
+unit	Npld	Властитель преисподней
+unit	Nsjs	Хмелевар
+unit	Ocb2	Вождь тауренов
+unit	Ocbh	Вождь тауренов
+unit	Odrt	Предсказатель
+unit	Ogld	Чернокнижник
+unit	Ogrh	Мастер клинка
+unit	Opgh	Мастер клинка
+unit	Orex	Повелитель зверей
+unit	Orkn	Темный охотник
+unit	Osam	Мастер клинка
+unit	Otcc	Вождь тауренов
+unit	Othr	Предсказатель
+unit	Oths	Предсказатель
+unit	Uanb	Владыка склепа
+unit	Ubal	Повелитель ужаса
+unit	Uclc	Лич
+unit	Udth	Повелитель ужаса
+unit	Uear	Рыцарь смерти
+unit	Uktl	Лич
+unit	Umal	Повелитель ужаса
+unit	Usyl	Темный Следопыт
+unit	Utic	Повелитель ужаса
+unit	Uvar	Повелитель ужаса
+unit	Uvng	Повелитель ужаса
+unit	Uwar	Чернокнижник
+unit	eilw	Тюремная клетка
+unit	enec	Гонец
+unit	ensh	Наиша
+unit	eshd	Шандриса
+unit	etrs	Транспорт ночных эльфов
+unit	hbew	Повозка
+unit	hcth	Капитан
+unit	hhdl	Конь без всадника
+unit	hhes	Мечник
+unit	hprt	Портал
+unit	hrdh	Вьючная лошадь
+unit	nbee	Инженер
+unit	nbel	Командир
+unit	nbsp	Корабль
+unit	nchg	Рубака Скверны
+unit	nchr	Налетчик Скверны
+unit	nchw	Чернокнижник Скверны
+unit	nckb	Кодо Скверны
+unit	ncpn	Батрак Скверны
+unit	ndmu	Даларанский мутант
+unit	ndrd	Дреней-убийца
+unit	ndrf	Дреней-страж
+unit	ndrh	Дреней-вестник
+unit	ndrj	Неудачный эксперимент
+unit	ndrl	Дреней-работник
+unit	ndrm	Дреней-посвященный
+unit	ndrn	Дреней-воздаятель
+unit	ndrp	Дреней-защитник
+unit	ndrs	Дреней-провидец
+unit	ndrt	Дреней-следопыт
+unit	ndrw	Дреней-дозорный
+unit	ndsa	Саламандра
+unit	negz	Инженер Газлоу
+unit	nemi	Эмиссар
+unit	nfgl	Мясной голем
+unit	ngbl	Гоблинский бластер
+unit	nhea	Лучница
+unit	nhef	Высшая эльфийка
+unit	nhem	Высший эльф
+unit	nhew	Работник
+unit	njks	Тюремщик Кассан
+unit	nmdm	Медив
+unit	nmed	Медив
+unit	nmpe	Мурлок-раб
+unit	nmsh	Миша
+unit	nser	Горинокс
+unit	nspc	Опорная балка
+unit	nssn	Страж
+unit	nthr	Тарифас
+unit	nw2w	Чернокнижник
+unit	nwat	Страж
+unit	nzlc	Король-лич
+unit	odkt	Драк'тул
+unit	ogrk	Гар'ток
+unit	ojgn	Дредноут Орды
+unit	omtg	Матогг
+unit	onzg	Назгрел
+unit	oosc	Кодо
+unit	oswy	Призрачный ветрокрыл
+unit	ovlj	Вол'джин
+unit	owar	Вождь орков
+unit	ownr	Наездник на ветрокрыле
+unit	uabc	Поганище
+unit	uarb	Воздушный корабль
+unit	ubdd	Сапфирон
+unit	ubdr	Сапфирон
+unit	ubot	Транспорт нежити
+unit	udes	Фрегат нежити
+unit	uktg	Кел'Тузад
+unit	uktn	Кел'Тузад
+unit	uswb	Сильвана Ветрокрылая
+unit	haro	Магическая обсерватория
+unit	nbfl	Кровавый источник
+unit	nbse	Камень воскрешения
+unit	nbsm	Пьедестал Книги Призыва
+unit	nbsw	Камень воскрешения
+unit	nbt1	Камнеметная башня
+unit	nbt2	Усиленная камнеметная башня
+unit	nbwd	Келья
+unit	ncap	Порченое сторожевое древо
+unit	ncaw	Порченое древо войны
+unit	ncmw	Порченый лунный колодец
+unit	ncta	Порченое древо столетий
+unit	ncte	Порченое древо вечности
+unit	nctl	Порченое древо жизни
+unit	ndfl	Оскверненный источник
+unit	ndgt	Даларанская сторожевая башня
+unit	ndke	Портал
+unit	ndkw	Портал
+unit	ndmg	Демонические врата
+unit	ndrb	Гнездо драконов
+unit	ndt1	Ледяная башня
+unit	ndt2	Усиленная ледяная башня
+unit	nef0	Эльфийская ферма
+unit	nef1	Эльфийская ферма
+unit	nef2	Эльфийская ферма
+unit	nef3	Эльфийская ферма
+unit	nef4	Эльфийская ферма
+unit	nef5	Эльфийская ферма
+unit	nef6	Эльфийская ферма
+unit	nef7	Эльфийская ферма
+unit	nefm	Эльфийская ферма
+unit	negf	Башня ярости земли
+unit	negm	Башня ярости неба
+unit	negt	Эльфийская сторожевая башня
+unit	net1	Башня молний
+unit	net2	Усиленная башня молний
+unit	nfnp	Источник силы
+unit	nfrm	Пьедестал Ледяной Скорби
+unit	nfrt	Лоток с фруктами
+unit	nft1	Огненная башня
+unit	nft2	Усиленная огненная башня
+unit	nfv0	Рыбацкий поселок
+unit	nfv1	Рыбацкий поселок
+unit	nfv2	Рыбацкий поселок
+unit	nfv3	Рыбацкий поселок
+unit	nfv4	Рыбацкий поселок
+unit	ngob	Магический обелиск
+unit	nhcn	Пьедестал Рога Кенария
+unit	nheb	Эльфийские казармы
+unit	nico	Обелиск Ледяной Короны
+unit	nitb	Ледяная сокровищница
+unit	nmgv	Магический сейф
+unit	nnad	Алтарь глубин
+unit	nnfm	Коралловый риф
+unit	nnsa	Святилище Азшары
+unit	nnsg	Нерестилище
+unit	nntg	Приливный страж
+unit	nntt	Храм пучины
+unit	npgf	Свиноферма
+unit	npgr	Генератор
+unit	nshr	Алтарь
+unit	ntt1	Башня смерти
+unit	ntx2	Усиленная башня смерти
+unit	nvr0	Рыбацкий поселок
+unit	nvr1	Рыбацкий поселок
+unit	nvr2	Рыбацкий поселок
+unit	nwc1	Клетка для ветрокрылов
+unit	nwc2	Клетка для ветрокрылов
+unit	nwc3	Клетка для ветрокрылов
+unit	nwc4	Клетка для ветрокрылов
+unit	nzin	Индикатор области
+unit	ocbw	Землянка орков Скверны
+unit	zcso	Орк-космодесантник
+unit	zhyd	Гидралиск
+unit	zjug	Дредноут Орды
+unit	zmar	Морпех
+unit	zshv	Кобольд-рудокоп
+unit	zsmc	Сэмми!
+unit	zzrg	Зерглинг
+unit	Nmsr	Мурлок-чародей
+unit	Nswt	Морская ведьма
+unit	ntn3	Палатка
+unit	nggm	Замшелый гранитный голем
+unit	nggg	Голем-страж
+unit	nggd	Голем-защитник
+unit	ngow	Вождь гноллов
+unit	nwzw	Чародей крови
+unit	ngos	Рычун Кровожадный
+unit	ngog	Сторожевой пес
+unit	nwar	Боевая повозка
+unit	nccd	Болид Диабло
+unit	ncco	Орочий болид
+unit	nccu	Болид нежити
+unit	nccr	Дворфийский болид
+unit	Hjnd	Следопыт
+unit	nmg2	Мурлочья хижина
+unit	nhn2	Гнездо гарпий
+unit	obai	Бейн
+unit	hrrh	Гонец
+unit	Haah	Верховный маг
+unit	Hssa	Верховный король
+unit	Hddt	Мастер-мечник
+unit	owad	Надсмотрщик
+item	ckng	Королевская корона +5
+item	modt	Маска смерти
+item	tkno	Фолиант мощи
+item	ratf	Боевые когти +15
+item	ofro	Сфера льда
+item	infs	Инфернальный камень
+item	desc	Кинжал побега Келена
+item	fgdg	Статуэтка демона
+item	engr	Чешуя с гравировкой
+item	shar	Осколок льда
+item	ccmd	Скипетр господства
+item	wild	Амулет леса
+item	scav	Скипетр алчности
+item	odef	Сфера тьмы
+item	rde4	Кольцо защиты +5
+item	pmna	Амулет маны
+item	rhth	Камень здоровья Кадгара
+item	ssil	Посох немоты
+item	spsh	Амулет антимагического щита
+item	sres	Свиток возрождения
+item	pdi2	Зелье божественности
+item	pres	Зелье возрождения
+item	iotw	Идол леса
+item	fgfh	Шипастый ошейник
+item	fgbd	Яйцо синего дракона
+item	fgrg	Каменный талисман
+item	hcun	Капюшон изворотливости
+item	hval	Шлем доблести
+item	mcou	Медальон храбрости
+item	ajen	Древний чангу выносливости
+item	clfm	Огненный плащ
+item	ratc	Боевые когти +12
+item	war2	Барабаны клана Песни Войны
+item	kpin	Трубка прозрения Кадгара
+item	lgdh	Рог Легиона
+item	ankh	Анх реинкарнации
+item	whwd	Исцеляющие идолы
+item	fgsk	Книга мертвых
+item	wcyc	Жезл ветров
+item	hlst	Камень здоровья
+item	mnst	Камень маны
+item	belv	Кель'таласские сапоги +6
+item	bgst	Пояс силы великана +6
+item	ciri	Одеяние мага +6
+item	lhst	Львиный рог Штормграда
+item	afac	Флейта меткости Аллерии
+item	sbch	Погремушка Плети
+item	brac	Рунные наручи
+item	rwiz	Маска Соби
+item	pghe	Мощное зелье исцеления
+item	pgma	Мощное зелье маны
+item	pnvu	Зелье неуязвимости
+item	sror	Свиток зверя
+item	woms	Жезл похищения маны
+item	crys	Хрустальный шар
+item	evtl	Талисман ускользания
+item	penr	Амулет энергии
+item	prvt	Талисман жизненной силы
+item	rat9	Боевые когти +8
+item	rde3	Кольцо защиты +4
+item	rlif	Кольцо регенерации
+item	bspd	Сапоги-скороходы
+item	rej3	Зелье восполнения
+item	will	Жезл иллюзий
+item	wlsd	Жезл щита молний
+item	wswd	Сторожевые идолы
+item	cnob	Венец благородства
+item	gcel	Перчатки скорости
+item	rat6	Боевые когти +4
+item	rde2	Кольцо защиты +3
+item	tdx2	Фолиант ловкости +2
+item	tin2	Фолиант интеллекта +2
+item	tpow	Фолиант знаний
+item	tst2	Фолиант силы +2
+item	pnvl	Слабое зелье неуязвимости
+item	clsd	Плащ теней
+item	rag1	Туфли ловкости +3
+item	rin1	Мантия интеллекта +3
+item	rst1	Перчатки огрской силы +3
+item	manh	Медицинский трактат
+item	tdex	Фолиант ловкости
+item	tint	Фолиант интеллекта
+item	tstr	Фолиант силы
+item	pomn	Зелье всевидения
+item	wshs	Жезл теневого зрения
+item	rej6	Мощный свиток восполнения
+item	rej5	Слабый свиток восполнения
+item	rej4	Мощное зелье восполнения
+item	ram4	Кольцо верховного мага
+item	dsum	Алмаз призыва
+item	ofir	Сфера огня
+item	ocor	Сфера порчи
+item	oli2	Сфера молний
+item	oven	Сфера яда
+item	ram3	Кольцо верховного мага
+item	tret	Фолиант забвения
+item	tgrh	Игрушечный дом вождей
+item	rej2	Слабое зелье восполнения
+item	gemt	Камень ясновидения
+item	ram2	Кольцо верховного мага
+item	stel	Посох телепортации
+item	stwp	Свиток возвращения
+item	wneg	Жезл отрицания
+item	sneg	Посох отрицания
+item	wneu	Жезл нейтрализации
+item	shea	Свиток исцеления
+item	sman	Свиток маны
+item	rej1	Разбавленное зелье восполнения
+item	pspd	Зелье скорости
+item	dust	Порошок обнаружения
+item	ram1	Кольцо верховного мага
+item	pinv	Зелье невидимости
+item	phea	Лечебное зелье
+item	pman	Зелье маны
+item	spro	Свиток защиты
+item	hslv	Лечебный бальзам
+item	moon	Лунный камень
+item	shas	Свиток скорости
+item	skul	Жертвенный череп
+item	mcri	Заводной зверек
+item	rnec	Жезл некромантии
+item	ritd	Ритуальный кинжал
+item	tsct	Башенка из слоновой кости
+item	azhr	Сердце Азсуны
+item	bzbe	Пустая фляга
+item	bzbf	Фляга с водой
+item	ches	Сыр
+item	cnhn	Рог Кенария
+item	glsk	Череп Гул'дана
+item	gopr	Знак очищения
+item	k3m1	Лунный кристалл
+item	k3m2	Фрагмент Ключа Трех Лун
+item	k3m3	Ключ Трех Лун
+item	ktrm	Урна короля Теренаса
+item	kybl	Кровавый ключ
+item	kygh	Призрачный ключ
+item	kymn	Лунный ключ
+item	kysn	Солнечный ключ
+item	ledg	Учетная книга Жерара
+item	phlt	Всякое разное
+item	sehr	Сердце Горинокса
+item	engs	Магический самоцвет
+item	sorf	Осколок Сферы Теней
+item	gmfr	Осколок самоцвета
+item	jpnt	Письмо Джайне Праудмур
+item	shwd	Звездолист
+item	skrt	Костяной артефакт
+item	thle	Яйцо громового ящера
+item	sclp	Секретная карта
+item	wtlg	Нога Вирта
+item	wolg	Вторая нога Вирта
+item	mgtk	Волшебные ключи
+item	mort	Донесение Могрина
+item	dphe	Яйцо грозового феникса
+item	dkfw	Бочонок грозовой воды
+item	dthb	Луковица грозоцвета
+item	fgun	Осветительное ружье
+item	lure	Приманка
+item	olig	Сфера молний
+item	amrc	Амулет вызова
+item	flag	Знамя Альянса
+item	gobm	Гоблинские мины
+item	gsou	Камень души
+item	nflg	Знамя ночных эльфов
+item	nspi	Ожерелье невосприимчивости к магии
+item	oflg	Знамя Орды
+item	pams	Антимагический эликсир
+item	pgin	Мощное зелье невидимости
+item	rat3	Боевые когти +3
+item	rde0	Кольцо защиты +1
+item	rde1	Кольцо защиты +2
+item	rnsp	Кольцо превосходства
+item	soul	Душа
+item	tels	Гоблинский никтоскоп
+item	tgxp	Фолиант богатого опыта
+item	uflg	Знамя нежити
+item	anfg	Древняя статуэтка
+item	brag	Наруч ловкости
+item	drph	Мешочек друида
+item	iwbr	Ветвь железного дерева
+item	jdrn	Нефритовое кольцо
+item	lnrn	Кольцо льва
+item	mlst	Молот силы
+item	oslo	Сфера замедления
+item	sbok	Книга заклинаний
+item	sksh	Щит-череп
+item	sprn	Паучье кольцо
+item	tmmt	Тотем силы
+item	vddl	Кукла вуду
+item	spre	Посох сохранения
+item	sfog	Рог туманов
+item	sor1	Сфера Теней +1
+item	sor2	Сфера Теней +2
+item	sor3	Сфера Теней +3
+item	sor4	Сфера Теней +4
+item	sor5	Сфера Теней +5
+item	sor6	Сфера Теней +6
+item	sor7	Сфера Теней +7
+item	sor8	Сфера Теней +8
+item	sor9	Сфера Теней +9
+item	sora	Сфера Теней +10
+item	fwss	Щит из черепа ледяного змея
+item	shtm	Шаманский тотем
+item	esaz	Сущность Азсуны
+item	btst	Боевой стяг
+item	tbsm	Игрушечная кузница
+item	tfar	Игрушечная ферма
+item	tlum	Игрушечная лесопилка
+item	tbar	Игрушечные казармы
+item	tbak	Игрушечный алтарь королей
+item	gldo	Сфера Кил'джедена
+item	stre	Посох оживления
+item	horl	Священная реликвия
+item	hbth	Шлем кровожадности
+item	blba	Доспехи-клинколомы
+item	rugt	Рунные перчатки
+item	frhg	Перчатки огненной руки
+item	gvsm	Перчатки искусности
+item	crdt	Корона владыки смерти
+item	arsc	Чародейский свиток
+item	scul	Свиток нечестивого легиона
+item	tmsc	Фолиант жертвенности
+item	dtsb	Гримуар Дрек'Тара
+item	grsl	Гримуар душ
+item	arsh	Арканитовый щит
+item	shdt	Щит владыки смерти
+item	shhn	Щит доблести
+item	shen	Зачарованный щит
+item	thdm	Громовой алмаз
+item	stpg	Заводной пингвин
+item	shrs	Зажаристое мясо
+item	bfhr	Сердце Кровавого Пера
+item	cosl	Небесная сфера душ
+item	shcw	Шаманские когти
+item	srbd	Пылающий меч
+item	frgd	Ледяной Страж
+item	envl	Волшебный сосуд
+item	rump	Ржавая кирка
+item	srtl	Сератил
+item	stwa	Крепкий боевой топор
+item	klmm	Калечитель
+item	rots	Скипетр морей
+item	axas	Посох предков
+item	mnsf	Посох мудрости
+item	schl	Скипетр исцеления
+item	asbl	Клинок убийцы
+item	kgal	Бочонок эля
+item	ward	Барабаны клана Песни Войны
+item	gold	Золотые монеты
+item	lmbr	Вязанка дров
+item	gfor	Знак укрепления
+item	guvi	Знак ночного зрения
+item	rspl	Руна духовной связи
+item	rre1	Слабая руна воскрешения
+item	rre2	Мощная руна воскрешения
+item	gomn	Знак всевидения
+item	rsps	Руна защиты
+item	rspd	Руна скорости
+item	rman	Руна маны
+item	rma2	Мощная руна маны
+item	rres	Руна возрождения
+item	rreb	Руна перерождения
+item	rhe1	Слабая руна исцеления
+item	rhe2	Руна исцеления
+item	rhe3	Мощная руна исцеления
+item	rdis	Руна рассеивания заклинаний
+item	texp	Фолиант опыта
+item	rwat	Руна стража
+item	pclr	Зелье ясности
+item	plcl	Слабое зелье ясности
+item	silk	Моток паутины
+item	vamp	Зелье вампиризма
+item	sreg	Свиток регенерации
+item	tcas	Игрушечный замок
+item	ssan	Посох спасения
+item	ofr2	Сфера огня
+item	sxpl	Семя изгнания
+item	vpur	Лоза очищения
+item	pdiv	Зелье божественности
+item	fgrd	Яйцо красного дракона
+item	totw	Талисман леса
+item	sand	Свиток оживления мертвых
+item	srrc	Свиток воскрешения
+ability	AHbz	Снежная буря
+ability	AHab	Аура гениальности
+ability	AHmt	Массовая телепортация
+ability	AHwe	Призыв элементаля воды
+ability	ANst	Дикий натиск
+ability	ANsg	Призыв медведя
+ability	ANsq	Призыв вепря
+ability	ANsw	Призыв ястреба
+ability	AOww	Вихрь клинков
+ability	AOcr	Критический удар
+ability	AOmi	Зеркальная копия
+ability	AOwk	Танец ветра
+ability	AHbn	Изгнание
+ability	AHfs	Огненный столб
+ability	AHdr	Похищение маны
+ability	AHpx	Феникс
+ability	AUcb	Жуки-падальщики
+ability	AUim	Пронзание
+ability	AUls	Рой саранчи
+ability	AUts	Шипастый панцирь
+ability	ANba	Черная стрела
+ability	ANch	Подчинение
+ability	ANdr	Похищение жизни
+ability	ANsi	Немота
+ability	AUan	Оживление мертвых
+ability	AUdc	Лик смерти
+ability	AUdp	Смертельный союз
+ability	AUau	Нечистая аура
+ability	AEev	Ускользание
+ability	AEim	Обжигающий жар
+ability	AEmb	Сожжение маны
+ability	AEme	Метаморфоза
+ability	AUsl	Сон
+ability	AUav	Вампирическая аура
+ability	AUcs	Темная стая
+ability	AUin	Инферно
+ability	AOcl	Цепная молния
+ability	AOeq	Землетрясение
+ability	AOfs	Дальнее зрение
+ability	AOsf	Дух волка
+ability	AEer	Гнев деревьев
+ability	AEfn	Сила природы
+ability	AEah	Аура шипов
+ability	AEtq	Спокойствие
+ability	AUdr	Темный ритуал
+ability	AUdd	Смерть и разложение
+ability	AUfa	Морозный доспех
+ability	AUfu	Морозный доспех
+ability	AUfn	Кольцо льда
+ability	AHav	Аватара
+ability	AHbh	Сильный удар
+ability	AHtb	Грозовой молот
+ability	AHtc	Раскат грома
+ability	ANfl	Раздвоенная молния
+ability	ANfa	Ледяные стрелы
+ability	ANto	Торнадо
+ability	ANms	Щит маны
+ability	AHad	Аура благочестия
+ability	AHds	Божественный щит
+ability	AHhb	Свет небес
+ability	AHre	Воскрешение
+ability	ANbf	Пламенное дыхание
+ability	ANdb	Пьяный мастер
+ability	ANdh	Хмельные пары
+ability	ANef	"Буря, земля и огонь"
+ability	ANdo	Рок
+ability	ANht	Ужасающий вой
+ability	ANca	Рассекающий удар
+ability	ANrf	Огненный ливень
+ability	AHfa	Огненные стрелы
+ability	AEst	Разведка
+ability	AEsf	Звездопад
+ability	AEar	Аура меткости
+ability	AOae	Аура выносливости
+ability	AOre	Реинкарнация
+ability	AOsh	Ударная волна
+ability	AOws	Громовая поступь
+ability	AOhw	Волна исцеления
+ability	AOhx	Сглаз
+ability	AOsw	Змеиный идол
+ability	AOvd	Страшное вуду
+ability	AEbl	Скачок
+ability	AEfk	Веер клинков
+ability	AEsh	Теневой удар
+ability	AEsv	Возмездие
+ability	ANab	Кислотная бомба
+ability	ANcr	Эликсир ярости
+ability	ANhs	Исцеляющий газ
+ability	ANtm	Трансмутация
+ability	ANeg	Улучшенная инженерия
+ability	ANcs	Кассетные ракеты
+ability	ANc1	Кассетные ракеты
+ability	ANc2	Кассетные ракеты
+ability	ANc3	Кассетные ракеты
+ability	ANrg	Робогоблин
+ability	ANg1	Робогоблин
+ability	ANg2	Робогоблин
+ability	ANg3	Робогоблин
+ability	ANsy	Портативная фабрика
+ability	ANs1	Портативная фабрика
+ability	ANs2	Портативная фабрика
+ability	ANs3	Портативная фабрика
+ability	ANde	Разгром
+ability	ANd1	Разгром
+ability	ANd2	Разгром
+ability	ANd3	Разгром
+ability	ANic	Испепеление
+ability	ANia	Испепеление
+ability	ANso	Сжигание души
+ability	ANlm	Призыв порождения лавы
+ability	ANvc	Вулкан
+ability	ANin	Инферно
+ability	SNin	Инферно
+ability	ANfb	Огненная стрела
+ability	ANfd	Перст смерти
+ability	ACfd	Перст боли
+ability	ACf3	Перст боли
+ability	ANdp	Темный портал
+ability	ANrc	Ливень Хаоса
+ability	ANr3	Ливень Хаоса
+ability	AEsb	Звездопад
+ability	ANrn	Реинкарнация
+ability	ANdc	Темное превращение
+ability	SNdc	Темное превращение
+ability	ANsl	Сохранение души
+ability	AEIl	Метаморфоза
+ability	AEvi	Метаморфоза
+ability	SNeq	Землетрясение
+ability	SNdd	Смерть и разложение
+ability	ANmo	Муссон
+ability	AEpa	Отравленные стрелы
+ability	ANwm	Водяной прислужник
+ability	AHca	Ледяные стрелы
+ability	ANbr	Боевой рев
+ability	Arsg	Призвать Мишу
+ability	Aamk	Повышение характеристик
+ability	Arsq	Призыв вепря
+ability	Arsp	Дикий натиск
+ability	ANsb	Грозовой молот
+ability	ANhw	Волна исцеления
+ability	Arsw	Змеиный идол
+ability	ANhx	Сглаз
+ability	AOls	Духи вуду
+ability	ANcf	Пламенное дыхание
+ability	Acdb	Пьяный мастер
+ability	Acdh	Хмельные пары
+ability	Acef	"Буря, земля и огонь"
+ability	AOr2	Аура выносливости
+ability	AOr3	Реинкарнация
+ability	AOs2	Ударная волна
+ability	AOw2	Громовая поступь
+ability	ANcl	Поддержание
+ability	Aadm	Рассеяние чар
+ability	Andm	Рассеяние чар
+ability	ACdm	Рассеяние чар
+ability	ACd2	Рассеяние чар
+ability	Aabs	Поглощение маны
+ability	Aaha	Добывать ресурсы
+ability	ANav	Аватара
+ability	Aalr	Тревога
+ability	Aall	"Общие магазины, союзные здания"
+ability	Aast	Дух предков
+ability	ACad	Оживление мертвых
+ability	Aams	Антимагический панцирь
+ability	Aam2	Антимагический панцирь
+ability	ACam	Антимагический панцирь
+ability	Aatk	Атака
+ability	ACba	Аура гениальности
+ability	ACac	Командирская аура
+ability	ACav	Аура благочестия
+ability	SCae	Аура выносливости
+ability	Aap1	Болезнетворное облако
+ability	Aap2	Болезнетворное облако
+ability	Aap3	Болезнетворное облако
+ability	Aap4	Болезнетворное облако
+ability	Aap5	Болезнетворное облако
+ability	Aoar	Аура исцеляющего идола
+ability	Aabr	Чумная аура
+ability	Aasl	Замедляющая аура
+ability	ACat	Аура меткости
+ability	Aakb	Боевые барабаны
+ability	Aave	Облик сфинкса
+ability	Aawa	Мгновенно воскресить героя
+ability	Abof	Горючая смесь
+ability	ACbn	Изгнание
+ability	ACbh	Сильный удар
+ability	ANbh	Сильный удар
+ability	ANb2	Трепка
+ability	Abtl	Боевая тревога
+ability	Sbtl	Боевая тревога
+ability	Abrf	Облик медведя
+ability	Absk	Берсерк
+ability	Sbsk	Улучшение до берсерка
+ability	ACbk	Черная стрела
+ability	Abds	Слабое рассеивание чумы
+ability	Abdl	Сильное рассеивание чумы
+ability	Abgs	Слабое распространение чумы
+ability	Abgl	Сильное распространение чумы
+ability	Abgm	Blighted Gold Mine Ability
+ability	ANbl	Скачок
+ability	ACbz	Снежная буря
+ability	Ablo	Жажда крови
+ability	ACbl	Жажда крови
+ability	ACbb	Жажда крови
+ability	ACbc	Пламенное дыхание
+ability	ACbf	Ледяное дыхание
+ability	ANbu	Построить здание (нейтральные)
+ability	AHbu	Построить здание (Альянс)
+ability	AObu	Построить здание (Орда)
+ability	AEbu	Построить здание (ночные эльфы)
+ability	AUbu	Построить здание (нежить)
+ability	AGbu	Построить здание (наги)
+ability	Abur	Закопаться
+ability	Abu2	Закопаться
+ability	Abu3	Закопаться
+ability	Abu5	Закопаться
+ability	Abdt	Обнаружение закопавшихся
+ability	Acan	Каннибализм
+ability	Acn2	Каннибализм
+ability	ACcn	Каннибализм
+ability	Abun	Cargo Hold (Orc Burrow)
+ability	Advc	Devour Cargo
+ability	Sch2	Cargo Hold
+ability	Sch5	Cargo Hold
+ability	Sch4	Cargo Hold
+ability	Sch3	Cargo Hold
+ability	Aenc	Добывать золото
+ability	Achd	Cargo Hold Death
+ability	ACca	Темная стая
+ability	ACcv	Сокрушительная волна
+ability	ACc2	Сокрушительная волна
+ability	ACc3	Сокрушительная волна
+ability	ACcl	Цепная молния
+ability	Ache	Дестабилизирующий луч
+ability	Achl	Chaos Cargo Load
+ability	ACch	Подчинение
+ability	ACce	Рассекающий удар
+ability	Aclf	Туман
+ability	ACcw	Ледяные стрелы
+ability	Acmg	Магический контроль
+ability	Acpf	Материальный облик
+ability	Acor	Едкое дыхание
+ability	Acoa	Оседлать гиппогрифа
+ability	Acoh	Взять на спину лучницу
+ability	Aco2	Оседлать гиппогрифа
+ability	Aco3	Взять на спину лучницу
+ability	ACsp	Сон
+ability	Acri	Увечье
+ability	Scri	Увечье
+ability	ACcr	Увечье
+ability	ACct	Критический удар
+ability	Acrs	Проклятие
+ability	ACcs	Проклятие
+ability	Acyc	Смерч
+ability	Acny	Смерч
+ability	ACcy	Смерч
+ability	SCc1	Смерч
+ability	ACdc	Лик смерти
+ability	Adda	Урон по области при смерти
+ability	Amnx	Урон по области при смерти
+ability	Amnz	Урон по области при смерти
+ability	Adec	Спешиться
+ability	Adef	Защита
+ability	Adt1	Детектор
+ability	Atru	Ясновидение
+ability	Adtg	Ясновидение
+ability	ANtr	Ясновидение
+ability	Agyv	Ясновидение
+ability	Adts	Магический страж
+ability	Adtn	Взорваться
+ability	Adev	Пожирание
+ability	ACdv	Пожирание
+ability	Advm	Пожирание магии
+ability	ACde	Пожирание магии
+ability	Adch	Освобождение от магии
+ability	Adcn	Освобождение от магии
+ability	Adis	Рассеивание заклинаний
+ability	Adsm	Рассеивание заклинаний
+ability	ACds	Божественный щит
+ability	ACdr	Похищение жизни
+ability	Adri	Выйти из рудника
+ability	Adro	Выгрузить
+ability	Sdro	Выгрузить
+ability	Atdp	Drop Pilot
+ability	Aeat	Съесть дерево
+ability	Aegr	Благословение Элуны
+ability	ANen	Опутывание
+ability	Aens	Опутывание
+ability	ACen	Опутывание
+ability	Aent	Оплести рудник
+ability	Aegm	Entangled Gold Mine Ability
+ability	Aenr	Гнев деревьев
+ability	Aenw	Гнев деревьев
+ability	Aetl	Астральный облик
+ability	Aetf	Астральный облик
+ability	ACev	Ускользание
+ability	ACes	Ускользание
+ability	Aexh	Эксгумация
+ability	ANfy	Фабрика
+ability	Afae	Волшебный огонь
+ability	Afa2	Волшебный огонь
+ability	ACff	Волшебный огонь
+ability	Afbk	Противодействие
+ability	Afbt	Противодействие
+ability	Afbb	Противодействие
+ability	ACsf	Дух волка
+ability	ACs9	Дух вепря
+ability	ACs8	Призрачный зверь
+ability	ACs7	Дух волка
+ability	Afod	Перст смерти
+ability	Awfb	Огненная стрела
+ability	ACfb	Огненная стрела
+ability	Aflk	Зенитные орудия
+ability	Afla	Осветительный заряд
+ability	ACfs	Огненный столб
+ability	ANfs	Огненный столб
+ability	ACfr	Сила природы
+ability	ACfl	Раздвоенная молния
+ability	Afsh	Шрапнель
+ability	Afrz	Леденящее дыхание
+ability	Afzy	Бешенство
+ability	ACfa	Морозный доспех
+ability	ACf2	Морозный доспех
+ability	ACfu	Морозный доспех
+ability	Afra	Ледяная атака
+ability	Afr2	Ледяная атака
+ability	Afrb	Морозное дыхание
+ability	Afrc	Ледяная атака
+ability	ACfn	Кольцо льда
+ability	ACcb	Ледяная стрела
+ability	Agho	Призрак
+ability	Aeth	Призрак
+ability	Agld	Gold Mine ability
+ability	Agra	Боевая дубинка
+ability	Agyd	Создать труп
+ability	Agyb	Авиабомбы
+ability	Assk	Каменная кожа
+ability	Ansk	Каменная кожа
+ability	Ahar	Добывать ресурсы
+ability	ANha	Добывать ресурсы
+ability	Ahrl	Добывать ресурсы
+ability	Ahr3	Добывать ресурсы
+ability	Ahr2	Добывать ресурсы
+ability	Ahea	Исцеление
+ability	Anhe	Исцеление
+ability	Anh1	Исцеление
+ability	Anh2	Исцеление
+ability	Ahwd	Исцеляющий идол
+ability	AChw	Исцеляющий идол
+ability	AChv	Волна исцеления
+ability	Ahnl	Ритуал призыва
+ability	AHer	Герой
+ability	AChx	Сглаз
+ability	Acht	Ужасающий вой
+ability	ACim	Обжигающий жар
+ability	ACmp	Пронзание
+ability	Ainf	Внутренний огонь
+ability	ACif	Внутренний огонь
+ability	Aivs	Невидимость
+ability	AInv	Инвентарь
+ability	Apak	Вьючный мул
+ability	Aion	Инвентарь
+ability	Aihn	Инвентарь
+ability	Aien	Инвентарь
+ability	Aiun	Инвентарь
+ability	Avul	Неуязвимость
+ability	Alit	Грозовая атака
+ability	Alsh	Щит молний
+ability	ACls	Щит молний
+ability	Aliq	Жидкий огонь
+ability	Aloa	Взять на борт
+ability	Sloa	Боевая тревога
+ability	Slo2	Добывать золото
+ability	Slo3	Взять на борт
+ability	Atlp	Погрузить пилота
+ability	Aloc	Саранча
+ability	Amdf	Защита от магии
+ability	Amim	Невосприимчивость к магии
+ability	ACmi	Невосприимчивость к магии
+ability	ACm2	Невосприимчивость к магии
+ability	ACm3	Невосприимчивость к магии
+ability	Amls	Огненное лассо
+ability	Ambt	Восполнить ману и здоровье
+ability	Amb2	Восполнение маны
+ability	Amnb	Сожжение маны
+ability	Ambd	Сожжение маны
+ability	Ambb	Сожжение маны
+ability	Amfl	Вспышка маны
+ability	ACmf	Щит маны
+ability	Amed	Выгрузить труп
+ability	Amel	Погрузить труп
+ability	Amil	Призыв к оружию
+ability	Amic	Призыв к оружию
+ability	ANmr	Гниение разума
+ability	Amin	Взрыв мины
+ability	ACmo	Муссон
+ability	Amgl	Лунная глефа
+ability	Amgr	Лунная глефа
+ability	Amov	Передвижение
+ability	Aneu	Выбрать героя
+ability	Ane2	Выбрать воина
+ability	Andt	Обнаружение
+ability	ANre	Регенерация маны
+ability	ACnr	Аура регенерации здоровья
+ability	AAns	Расход ресурсов
+ability	Afak	Сфера разрушения
+ability	ANak	Веер игл
+ability	Afir	Пожар
+ability	Afih	Пожар (Альянс)
+ability	Afio	Пожар (Орда)
+ability	Afin	Пожар (ночные эльфы)
+ability	Afiu	Пожар (нежить)
+ability	ANpa	Паразит
+ability	ACpa	Паразит
+ability	ANpi	Кольцо огня
+ability	Apmf	Пламя феникса
+ability	Apig	Кольцо огня
+ability	Apiv	Постоянная невидимость
+ability	Apsh	Фазовый сдвиг
+ability	Aphx	Рождение феникса (яйцо)
+ability	Apxf	Пламя феникса
+ability	Apts	Болезнетворное облако
+ability	Apoi	Ядовитое жало
+ability	Aply	Превращение
+ability	ACpy	Превращение
+ability	Apos	Одержимость
+ability	ACps	Одержимость
+ability	Aps2	Одержимость
+ability	Awar	Сокрушение
+ability	ACpv	Сокрушение
+ability	Apit	Купить предмет
+ability	Aprg	Развеивание магии
+ability	Apg2	Развеивание магии
+ability	ACpu	Развеивание магии
+ability	ACrf	Огненный ливень
+ability	ACrg	Огненный ливень
+ability	Arai	Воскрешение мертвых
+ability	ACrd	Воскрешение мертвых
+ability	ARal	Сбор
+ability	Arav	Облик буревестника
+ability	Amrf	Облик ворона
+ability	ACrn	Реинкарнация
+ability	ANr2	Реинкарнация
+ability	Arbr	Укрепленные землянки
+ability	Arej	Омоложение
+ability	ACrj	Омоложение
+ability	ACr2	Омоложение
+ability	Aren	Обновление
+ability	Ahrp	Ремонтировать
+ability	Arep	Ремонтировать
+ability	Arpb	Восстановление
+ability	Arpl	Чумная эссенция
+ability	Arpm	Призрачное касание
+ability	Arsk	Устойчивая кожа
+ability	ACrk	Устойчивая кожа
+ability	ACsk	Устойчивая кожа
+ability	Arst	Ремонт
+ability	Argd	Вернуть золото
+ability	Argl	Вернуть золото и древесину
+ability	Arlm	Вернуть древесину
+ability	AHta	Обнаружение
+ability	Arng	Месть
+ability	Arev	Воскресить героя
+ability	Aroa	Рев
+ability	Ara2	Рев
+ability	ACr1	Рев
+ability	ACro	Рев
+ability	Aroc	Залповый огонь
+ability	Aro1	Пустить корни
+ability	Aro2	Пустить корни
+ability	Asac	Жертвоприношение
+ability	Asal	Грабеж
+ability	Alam	Жертвоприношение
+ability	ACsa	Огненные стрелы
+ability	Asds	Ба-бах!
+ability	Asdg	Ба-бах!
+ability	Asd2	Ба-бах!
+ability	Asd3	Ба-бах!
+ability	Asid	Продать предметы
+ability	Asud	Продать войска
+ability	Aesn	Часовой
+ability	Aesr	Часовой
+ability	Aeye	Сторожевой идол
+ability	ACtn	Порождение щупальца
+ability	Ashm	Слияние с тенью
+ability	AIhm	Слияние с тенью
+ability	Sshm	Слияние с тенью
+ability	Ahid	Слияние с тенью
+ability	ACsh	Ударная волна
+ability	ACst	Ударная волна
+ability	ANsh	Ударная волна
+ability	ACsi	Немота
+ability	ACsm	Похищение маны
+ability	ACsl	Сон
+ability	Asla	Всегда спит
+ability	Aslo	Замедление
+ability	ACsw	Замедление
+ability	Aspo	Замедляющий яд
+ability	Asod	Создание скелетов
+ability	Assp	Порождение паучков
+ability	Aspd	Порождение пауков
+ability	Aspy	Порождение гидры
+ability	Aspt	Породить детеныша гидры
+ability	Asps	Похищение заклинаний
+ability	Asph	Сфера
+ability	Asp1	Сфера
+ability	Asp2	Сфера
+ability	Asp3	Сфера
+ability	Asp4	Сфера
+ability	Asp5	Сфера
+ability	Asp6	Сфера
+ability	Aspa	Атака пауков
+ability	Aspi	Шипастые укрепления
+ability	Aspl	Духовная связь
+ability	Astd	Отбой
+ability	Asta	Стазисная ловушка
+ability	Astn	Каменная форма
+ability	Asth	Грозовой молот
+ability	Asb1	Погружение
+ability	Asb2	Погружение
+ability	Asb3	Погружение
+ability	Aslp	Призыв крабов
+ability	ACwe	Призыв морского элементаля
+ability	Attu	Турель
+ability	Atau	Провокация
+ability	ANta	Провокация
+ability	ANth	Шипастый панцирь
+ability	ANt2	Шипастый панцирь
+ability	ACah	Аура шипов
+ability	ACtb	Бросок валуна
+ability	ACtc	Мощный удар
+ability	ACt2	Мощный удар
+ability	Atdg	Вредоносная аура зданий
+ability	Atsp	Вихрь торнадо
+ability	Atwa	Перемещение торнадо
+ability	Atol	Улучшение древа жизни
+ability	Ault	Ночное зрение
+ability	ACua	Нечистая аура
+ability	Auhf	Нечестивое бешенство
+ability	Suhf	Нечестивое бешенство
+ability	ACuf	Нечестивое бешенство
+ability	Auuf	Нечестивое бешенство
+ability	Auco	Взрывоопасная смесь
+ability	Auns	Развоплотить здание
+ability	SCva	Вытягивание жизни
+ability	ACvp	Вампирическая аура
+ability	Avng	Дух возмездия
+ability	Awan	Блуждание
+ability	Awrs	Громовая поступь
+ability	Awrg	Громовая поступь
+ability	Awrh	Громовая поступь
+ability	ANwk	Танец ветра
+ability	Awha	Добывать ресурсы
+ability	Awh2	Добывать ресурсы
+ability	Aven	Отравленные копья
+ability	ACvs	Отравленное оружие
+ability	Awrp	Перемещение через портал
+ability	Aweb	Паутина
+ability	ACwb	Паутина
+ability	AIa1	Бонус к характеристикам героя
+ability	AIa3	Бонус к характеристикам героя
+ability	AIa4	Бонус к характеристикам героя
+ability	AIa5	Бонус к характеристикам героя
+ability	AIa6	Бонус к характеристикам героя
+ability	AIx5	Бонус к характеристикам героя
+ability	AIx1	Бонус к характеристикам героя
+ability	AIx2	Бонус к характеристикам героя
+ability	AIs1	Бонус к характеристикам героя
+ability	AIs2	Бонус к скорости атаки
+ability	AIs3	Бонус к характеристикам героя
+ability	AIs4	Бонус к характеристикам героя
+ability	AIs5	Бонус к характеристикам героя
+ability	AIs6	Бонус к характеристикам героя
+ability	AIi1	Бонус к характеристикам героя
+ability	AIi3	Бонус к характеристикам героя
+ability	AIi4	Бонус к характеристикам героя
+ability	AIi5	Бонус к характеристикам героя
+ability	AIi6	Бонус к характеристикам героя
+ability	AIxm	"Бонус к интеллекту, ловкости и силе"
+ability	AIam	Бонус к ловкости
+ability	AIim	Бонус к интеллекту
+ability	AIsm	Бонус к силе
+ability	AIgm	Бонус к ловкости
+ability	AItm	Бонус к интеллекту
+ability	AInm	Бонус к силе
+ability	AIaa	Постоянный бонус к урону
+ability	AIat	Бонус к урону
+ability	AIt6	Бонус к урону
+ability	AIt9	Бонус к урону
+ability	AItc	Бонус к урону
+ability	AItf	Бонус к урону
+ability	AItg	Бонус к урону
+ability	AIth	Бонус к урону
+ability	AIti	Бонус к урону
+ability	AItj	Бонус к урону
+ability	AItk	Бонус к урону
+ability	AItl	Бонус к урону
+ability	AItn	Бонус к урону
+ability	AIva	Вытягивание жизни
+ability	AIbk	Скачок
+ability	AIbl	Построить игрушечный замок
+ability	AIbg	Построить игрушечный дом вождей
+ability	AIbt	Построить игрушечную дозорную башню
+ability	AIbb	Построить игрушечную кузницу
+ability	AIbf	Построить игрушечную ферму
+ability	AIbr	Построить игрушечную лесопилку
+ability	AIbs	Построить игрушечные казармы
+ability	AIbh	Построить игрушечный алтарь королей
+ability	AIcy	Смерч
+ability	AId1	Бонус к броне
+ability	AId2	Бонус к броне
+ability	AId3	Бонус к броне
+ability	AId4	Бонус к броне
+ability	AId5	Бонус к броне
+ability	AIgf	Знак укрепления
+ability	AIgu	Знак укрепления
+ability	AIem	Бонус к опыту
+ability	AIe2	Бонус к опыту
+ability	AIfd	Item Red Drake Summon
+ability	AIff	Item Furbolg Summon
+ability	AIfr	Призыв каменного голема
+ability	AIfu	Призыв стража ужаса
+ability	AIfh	Призыв ловчего Скверны
+ability	AIfs	Призыв скелета
+ability	AIir	Призыв загробника льда
+ability	AIuw	Призыв фурболга-воителя
+ability	AIfl	Захват знамени
+ability	AIfm	Захват знамени
+ability	AIfo	Захват знамени
+ability	AIfn	Захват знамени
+ability	AIfe	Захват знамени
+ability	AIfx	Боевой стяг Орды
+ability	AIfa	Осветительное ружье
+ability	AIlm	Повышение уровня
+ability	AIlp	Развеивание магии
+ability	AIlf	Бонус к здоровью
+ability	AIl1	Бонус к здоровью
+ability	AIl2	Бонус к здоровью
+ability	AIms	Бонус к скорости передвижения
+ability	ANbs	Черная стрела
+ability	AIdf	Бонус к урону от атак от «Черной стрелы»
+ability	AIcb	Бонус к урону от атак от порчи
+ability	AIdn	Свойство Сферы Теней
+ability	AIfb	Бонус к урону от атак от огня
+ability	AIgd	Бонус к урону от атак от огня
+ability	AIzb	Бонус к урону от холода
+ability	AIob	Бонус к урону от атак от льда
+ability	AIll	Бонус к урону от атак от молнии
+ability	AIlb	Бонус к урону от атак от молнии
+ability	AIsb	Замедление при атаках
+ability	AIpb	Бонус к урону от атак от яда
+ability	Apo2	Ядовитое жало
+ability	AInd	Оживление
+ability	Arel	Регенерация здоровья
+ability	Arll	Регенерация здоровья
+ability	AIsi	Бонус к радиусу обзора
+ability	AIos	Замедление
+ability	AIso	Похищение души
+ability	Asou	Пленение души
+ability	AIcf	Обжигающий жар
+ability	AIco	Боевой дух
+ability	AIdm	Урон по области по деревьям и стенам
+ability	AIda	Временный массовый бонус к броне
+ability	AIdb	Временный массовый бонус к броне
+ability	AIta	Массовое обнаружение
+ability	AIdi	Рассеивание
+ability	AIds	Рассеивание
+ability	APdi	Рассеивание заклинаний
+ability	AIh1	Исцеление
+ability	AIh2	Исцеление
+ability	AIh3	Слабое исцеление
+ability	AIha	Массовое исцеление
+ability	AIhb	Массовое исцеление
+ability	APh1	Массовое исцеление (малое)
+ability	APh2	Массовое исцеление
+ability	APh3	Массовое исцеление (мощное)
+ability	AIhw	Исцеляющий идол
+ability	AIsw	Сторожевой идол
+ability	AIil	Иллюзии
+ability	AIv1	Временная невидимость
+ability	AIv2	Временная невидимость
+ability	AIvu	Временная неуязвимость
+ability	AIvl	Временная неуязвимость
+ability	AIvg	Временная неуязвимость
+ability	AIm1	Восполнение маны
+ability	AIm2	Восполнение маны
+ability	AImr	Массовое восполнение маны
+ability	APmr	Руна массового восполнения маны
+ability	APmg	Большая руна массового восполнения маны
+ability	AIpm	Установка гоблинской мины
+ability	AIrt	Амулет вызова
+ability	AIrm	Регенерация маны
+ability	AIrc	Реинкарнация
+ability	AIre	Восполнение здоровья и маны
+ability	AIra	Массовое восполнение здоровья и маны
+ability	APra	Массовое восполнение здоровья и маны
+ability	AIsp	Временный бонус к скорости
+ability	AIsa	Свиток ускорения
+ability	APsa	Руна скорости
+ability	AItp	Свиток возвращения
+ability	AIuv	Ночное зрение
+ability	AIls	Щит молний
+ability	AIxs	Антимагический панцирь
+ability	AIan	Оживление мертвых
+ability	AIrs	Воскрешение
+ability	AIrr	Рев
+ability	AIev	Ускользание
+ability	AImx	Невосприимчивость к магии
+ability	AImh	Постоянный бонус к здоровью
+ability	AImb	Бонус к мане
+ability	AIbm	Бонус к мане
+ability	AIsx	Бонус к скорости атаки
+ability	AIrl	Лечебный бальзам
+ability	AIpr	Зелье ясности
+ability	AIsl	Свиток регенерации
+ability	AIpl	Слабое зелье ясности
+ability	AIp1	Generic Item-Rejuv Effect
+ability	AIp2	Generic Item-Rejuv Effect
+ability	AIp3	Generic Item-Rejuv Effect
+ability	AIp4	Generic Item-Rejuv Effect
+ability	AIp5	Generic Item-Rejuv Effect
+ability	AIp6	Generic Item-Rejuv Effect
+ability	AIgo	Сундук золота
+ability	AIlu	Вязанка дров
+ability	AIrv	Обзор всей карты
+ability	AIdc	Цепное рассеивание
+ability	AIwb	Паутина
+ability	AImo	Приманка
+ability	AIct	Сменить время
+ability	AIri	Случайный предмет
+ability	AIsr	Снижение урона от способностей
+ability	Ablp	Зачумление
+ability	AIpv	Зелье вампиризма
+ability	Aste	Похищение
+ability	Amec	Заводной зверек
+ability	Ashs	Жезл теневого зрения
+ability	ANpr	Посох сохранения
+ability	ANsa	Посох спасения
+ability	ANss	Антимагический щит
+ability	ANse	Антимагический щит
+ability	Aret	Фолиант забвения
+ability	AImt	Посох телепортации
+ability	Aspb	Книга заклинаний
+ability	AIrd	Воскрешение мертвых
+ability	AItb	Порошок обнаружения
+ability	AIdv	Божественный щит
+ability	AIse	Немота
+ability	AIpg	Развеивание магии
+ability	AIps	Развеивание магии
+ability	AIpw	Развеивание магии
+ability	AIfg	Облако тумана
+ability	APrl	Малая руна воскрешения
+ability	APrr	Большая руна воскрешения
+ability	AIrb	Перерождение
+ability	Aspp	Духовная связь
+ability	AUds	Темный призыв
+ability	APwt	Руна стража
+ability	AIuf	Нечестивое бешенство
+ability	AId0	Бонус к броне
+ability	AIcm	Магический контроль
+ability	AImz	Бонус к мане (100)
+ability	AIfz	Перст смерти
+ability	AIdp	Смертельный союз
+ability	AImv	Бонус к мане (75)
+ability	AIpx	Постоянный бонус к здоровью
+ability	AIdd	Защита
+ability	AId8	Бонус к броне
+ability	AId7	Бонус к броне
+ability	AIlz	Бонус к здоровью
+ability	AIhx	Исцеление
+ability	AIaz	Бонус к характеристикам героя
+ability	AIrx	Воскрешение
+ability	AIbx	Сильный удар
+ability	AItx	Бонус к урону
+ability	AIwm	Водяной прислужник
+ability	AIsh	Призвать охотника за головами
+ability	AI2m	Бонус к мане (200)
+ability	AIgx	Аура регенерации
+ability	AIhl	Свет небес
+ability	AIsz	Замедляющий яд
+ability	AIpz	Писк пингвина
+ability	AIfw	Ближний бой: бонус к урону от огня
+ability	AIft	Ближний бой: бонус к урону от льда
+ability	AIlx	Ближний бой: бонус к урону от молнии
+ability	AIcs	Критический удар
+ability	AIcl	Цепная молния
+ability	AIx3	Бонус к характеристикам героя
+ability	AIx4	Бонус к характеристикам героя
+ability	AIxk	Берсерк
+ability	AIdg	Ритуальный кинжал
+ability	AIg2	Ритуальный кинжал
+ability	AIf2	Бонус к ослаблению исцеления при атаке
+ability	Ahsb	Тяжелые клинки
+ability	Ahri	Длинноствольные мушкеты
+ability	Ahan	Дрессировка животных
+ability	Ahpe	Феникс
+ability	Ahlh	Улучшенные топоры
+ability	Aobs	Грубая сила
+ability	Aobk	Улучшение до берсерка
+ability	Aorb	Укрепленные стены
+ability	Aosp	Шипастые укрепления
+ability	Aotr	Регенерация троллей
+ability	Augf	Ярость вурдалака
+ability	Augh	Тень
+ability	Ausm	Искусное воскрешение
+ability	Aeib	Улучшенные луки
+ability	Aemk	Тренировка меткости
+ability	Aews	Лунный фонтан
+ability	AIut	Item Furbolg Tracker Summon
+ability	AIts	Item Transmute
+ability	Aatp	Приоритет
+ability	AIno	Замедление (Сфера замедления новый)
+ability	Amgi	Bouncing Missile Filter
+ability	AUa2	Оживление мертвых
+upgrade	Rhme	Железные мечи
+upgrade	Rhra	Черный порох
+upgrade	Rhhb	Грозовой молот
+upgrade	Rhar	Железная броня
+upgrade	Rhgb	Авиабомбы
+upgrade	Rhac	Улучшенная кладка
+upgrade	Rhde	Защита
+upgrade	Rhan	Дрессировка животных
+upgrade	Rhpt	Сделать жрецов адептами
+upgrade	Rhst	Сделать волшебниц адептами
+upgrade	Rhla	Доспехи из клепаной кожи
+upgrade	Rhri	Длинноствольные мушкеты
+upgrade	Rhlh	Улучшенные топоры
+upgrade	Rhse	Магический страж
+upgrade	Rhfl	Осветительный заряд
+upgrade	Rhss	Магический контроль
+upgrade	Rhrt	Залповый огонь
+upgrade	Rhpm	Рюкзак
+upgrade	Rhfc	Зенитные орудия
+upgrade	Rhfs	Шрапнель
+upgrade	Rhcd	Туман
+upgrade	Rhsb	Тяжелые клинки
+upgrade	Rome	Стальное оружие ближнего боя
+upgrade	Rora	Железное оружие дальнего боя
+upgrade	Roar	Стальная броня
+upgrade	Rwdm	Бонус к урону от «Боевых барабанов»
+upgrade	Ropg	Грабеж
+upgrade	Robs	Грубая сила
+upgrade	Rows	Увеличение урона от «Сокрушения»
+upgrade	Roen	Опутывание
+upgrade	Rovs	Отравленные копья
+upgrade	Rowd	Сделать знахарей адептами
+upgrade	Rost	Сделать шаманов адептами
+upgrade	Rosp	Шипастые укрепления
+upgrade	Rotr	Регенерация троллей
+upgrade	Rolf	Жидкий огонь
+upgrade	Roch	Хаос
+upgrade	Rowt	Сделать духостранников адептами
+upgrade	Rorb	Укрепленные стены
+upgrade	Robk	Улучшение до берсерка
+upgrade	Ropm	Рюкзак
+upgrade	Robf	Горючая смесь
+upgrade	Rume	Нечестивая сила
+upgrade	Rura	Атаки чудовищ
+upgrade	Ruar	Нечестивая броня
+upgrade	Ruac	Каннибализм
+upgrade	Rugf	Ярость вурдалака
+upgrade	Ruwb	Паутина
+upgrade	Rusf	Каменная форма
+upgrade	Rune	Сделать некромантов адептами
+upgrade	Ruba	Сделать банши адептами
+upgrade	Rufb	Леденящее дыхание
+upgrade	Rusl	Живучие скелеты
+upgrade	Rucr	Броня чудовищ
+upgrade	Rupc	Болезнетворное облако
+upgrade	Rusm	Искусное воскрешение
+upgrade	Rubu	Закопаться
+upgrade	Rusp	Облик сфинкса
+upgrade	Ruex	Эксгумация
+upgrade	Rupm	Рюкзак
+upgrade	Resm	Сила Луны
+upgrade	Resw	Сила леса
+upgrade	Rema	Лунные доспехи
+upgrade	Rerh	Прочные шкуры
+upgrade	Reuv	Ночное зрение
+upgrade	Renb	Благословение природы
+upgrade	Resc	Часовой
+upgrade	Remg	Улучшить лунные глефы
+upgrade	Reib	Улучшенные луки
+upgrade	Remk	Тренировка меткости
+upgrade	Redt	Сделать друидов-воронов адептами
+upgrade	Redc	Сделать друидов-хищников адептами
+upgrade	Resi	Рассеяние чар
+upgrade	Recb	Едкое дыхание
+upgrade	Reht	Дрессировка гиппогрифов
+upgrade	Repb	Стрижающие клинки
+upgrade	Rers	Устойчивая кожа
+upgrade	Rehs	Каменная кожа
+upgrade	Reeb	Знак хищника
+upgrade	Reec	Знак ворона
+upgrade	Rews	Лунный фонтан
+upgrade	Repm	Рюкзак
+upgrade	Rgfo	Знак укрепления
+upgrade	Rguv	Знак ночного зрения
+upgrade	Rnen	Опутывание
+upgrade	Rnsw	Сделать сирен адептами
+upgrade	Rnsi	Рассеяние чар
+upgrade	Rnat	Коралловые клинки
+upgrade	Rnam	Коралловая чешуя
+upgrade	Rnsb	Погружение
+doodad	APms	Mushrooms
+doodad	AOhs	Stump Hollow
+doodad	APtv	Vines Thorny
+doodad	APct	Cattail
+doodad	AObd	Birds
+doodad	AObr	Brazier Skull
+doodad	AWfs	Fish
+doodad	AOgs	Statue Guardian of Aszune
+doodad	AOks	Statue Keeper
+doodad	AOlg	Log Straight
+doodad	AOla	Log Angled
+doodad	AOob	Obelisk Glowing
+doodad	AOsk	Obelisk
+doodad	AObo	Obelisk Broken
+doodad	AOsr	Remains Scorched
+doodad	APbs	Bush
+doodad	AWlp	Lily Pads
+doodad	AWfl	Lily Pads Floating
+doodad	ARrk	Rocks
+doodad	ASbc	Broken Column
+doodad	ASbr	Rubble
+doodad	ASHB	Blocks Ruined
+doodad	ASra	Rock Archway
+doodad	ASr1	Rock Archway Diagonal
+doodad	ASwt	World Tree
+doodad	BPca	Cactus
+doodad	BObo	Bones
+doodad	BOct	Totem Centaur
+doodad	BOth	Throne
+doodad	BOtt	Totem Tauren
+doodad	BRcr	Crater
+doodad	BRfs	Fissure
+doodad	BRrk	Rocks
+doodad	BRrp	Rock Pillar
+doodad	BRrs	Rock Spires
+doodad	BRrc	Rock Spires (Cinematic)
+doodad	BRsp	Rock Spires Small
+doodad	BRgs	Geyser
+doodad	BSar	Ruined Arch
+doodad	BSra	Rock Archway
+doodad	BSr1	Rock Archway Diagonal
+doodad	BSrc	Ruined Chunk
+doodad	BSrv	Ruined Curved Wall
+doodad	BSrw	Ruined Wall
+doodad	CObl	Blighted Mist
+doodad	COhs	Stump Hollow
+doodad	COlg	Log Straight
+doodad	COla	Log Angled
+doodad	COob	Obelisk
+doodad	CObo	Obelisk Broken
+doodad	CPbs	Bush
+doodad	CPct	Cattail
+doodad	CPms	Mushrooms
+doodad	CPlp	Lily Pad
+doodad	CRfs	Fissure
+doodad	CRrs	Rock Spires
+doodad	CSbc	Broken Column
+doodad	CSbr	Rubble
+doodad	CSbl	Blocks Ruined
+doodad	CSra	Archway
+doodad	CSr1	Archway Angled
+doodad	LPcr	Corn
+doodad	LPfp	Lily Pads Floating
+doodad	LPlp	Lily Pad
+doodad	LPrs	River Rushes
+doodad	LPwb	Wheat Bunch
+doodad	LPwh	Wheat
+doodad	LPcw	Grain Scorched
+doodad	LOar	Archery Target
+doodad	LOam	Rack Armor
+doodad	LOh1	Banner Human
+doodad	LOo1	Banner Orc
+doodad	LOo2	Banner Tutorial Orc
+doodad	LObr	Brazier
+doodad	LObz	Brazier Glowing
+doodad	LOce	Cage Empty
+doodad	LOca	Cauldron with heads
+doodad	LOct	Cage Trashed
+doodad	LOfl	Flies
+doodad	LOgr	Grave
+doodad	LOhb	Hay
+doodad	LOch	Hay Cart
+doodad	LOcb	Hay Cart Broken
+doodad	LOrc	Hay Cart (Infected)
+doodad	LOxx	Hay Cart Broken (Infected)
+doodad	LOhc	Hay Clump
+doodad	LOsh	Head on Spear
+doodad	LOhp	Post Hitching
+doodad	LOic	Corpse Impaled
+doodad	LOlp	Post Lantern
+doodad	LOpg	Grave Peasant
+doodad	LOrb	Bones Rib
+doodad	LOrh	Hay (Infected)
+doodad	LOsp	Post Sign
+doodad	LOsc	Corpse Sitting
+doodad	LOss	Skulls on Sticks
+doodad	LOsk	Skull Pile
+doodad	LOsm	Smoke Smudge
+doodad	LOsw	Wall Stone
+doodad	LOth	Torch
+doodad	LOtz	Torch Glowing
+doodad	LOt1	Trash
+doodad	LOtr	Trough
+doodad	LOwb	Wheelbarrow
+doodad	LOwr	Wheelbarrow Broken
+doodad	LOwp	Rack Weapon
+doodad	LRrk	Rocks
+doodad	LSba	Barn
+doodad	LSeb	Elven Building
+doodad	LSsb	Barn Scorched
+doodad	LSsf	Farm Scorched
+doodad	LSgr	Granary
+doodad	LSgs	Granary Scorched
+doodad	LSin	Inn
+doodad	LSra	Rock Archway
+doodad	LSr1	Rock Archway Diagonal
+doodad	LSsi	Inn Scorched
+doodad	LSst	Tower Scorched
+doodad	LSwl	Well
+doodad	LSwb	Windmill Burned
+doodad	LSwm	Windmill
+doodad	NObc	Column Broken
+doodad	NObk	Obelisk Broken
+doodad	NObo	Bones
+doodad	NOfl	Fence
+doodad	NOal	Fence Angled
+doodad	NOgv	Grave Stone
+doodad	NOok	Obelisk
+doodad	NOtb	Tombstone
+doodad	NWfb	Floating Box
+doodad	NWfp	Floating Plank
+doodad	NWf1	Плавучая льдина
+doodad	NWf2	Плавучая льдина
+doodad	NWf3	Плавучая льдина
+doodad	NWf4	Плавучая льдина
+doodad	NWi1	Iceberg
+doodad	NWi2	Iceberg
+doodad	NWi3	Iceberg
+doodad	NWi4	Iceberg
+doodad	NWpa	Floating Panel
+doodad	NOfp	Fire Pit
+doodad	NOfg	Fire Pit with Pig
+doodad	NOft	Fire Pit Trashed
+doodad	NObt	Bats
+doodad	NWrw	Rowboat
+doodad	NWrd	Rowboat Destroyed
+doodad	NWsp	Корабль
+doodad	NWsd	Ship Destroyed
+doodad	NWwh	Whale
+doodad	NPth	Vines Thorny
+doodad	NRfs	Fissure
+doodad	NRic	Ice Claws
+doodad	NRrk	Rocks
+doodad	NRwr	Rocks Webbed
+doodad	NSct	Crypt
+doodad	NSra	Archway
+doodad	NSr1	Archway Angled
+doodad	NSrb	Rubble
+doodad	VOfl	Fence Long
+doodad	VOal	Fence Angled Long
+doodad	VOfs	Fence Short
+doodad	VOas	Fence Angled Short
+doodad	VSvb	Building
+doodad	YObb	Banner Long Blue
+doodad	YOwb	Banner Long White
+doodad	YObs	Bench Stone
+doodad	YOsa	Bench Angled Stone
+doodad	YOsb	Alonsus Chapel
+doodad	YOmb	City Tower
+doodad	YOms	Market Stall (Large)
+doodad	YOm1	Market Stall (Small)
+doodad	YOm2	Market Item Baubles
+doodad	YOm3	Market Item Baubles (Alt)
+doodad	YOm4	Market Item Produce
+doodad	YOm5	Market Item Produce (Alt)
+doodad	YOm6	Market Item Textiles
+doodad	YOm7	Market Item Textiles (Alt)
+doodad	YObw	Bench Wood
+doodad	YOwa	Bench Angled Wood
+doodad	YOfn	Fountain
+doodad	YOgr	Grave (Cityscape)
+doodad	YOob	Obelisk
+doodad	YOlp	Post Lantern
+doodad	YOst	Statue
+doodad	YOks	Statue Shieldless
+doodad	XOcs	Power Generator
+doodad	XOcl	Magical Lantern
+doodad	XOmr	Magical Runes
+doodad	YOts	Sign Tavern
+doodad	YObg	Sign Bob's Guns
+doodad	YOta	Sign Tracey's Armory
+doodad	YOec	Crates Empty
+doodad	YOth	Throne
+doodad	YOws	Statue White
+doodad	YOss	King Terenas Statue
+doodad	YOig	Iron Gate (A)
+doodad	YOi1	Iron Gate (B)
+doodad	YPbs	Bush
+doodad	YPtp	Tree Planter
+doodad	YPfs	Flower Bed Straight
+doodad	YPfa	Flower Bed Angled
+doodad	YPpp	Potted Plant
+doodad	YSaw	Archway
+doodad	YSa1	Archway Angled
+doodad	YSa2	Archway Entrance
+doodad	YSa3	Archway Entrance (Angled)
+doodad	YSca	Cathedral
+doodad	YSco	Column Single
+doodad	YScd	Column Double
+doodad	YSc5	Column Angled Double
+doodad	YScs	Column Semi Circle
+doodad	YSc2	Column Semi Circle
+doodad	YSc3	Column Semi Circle
+doodad	YSc4	Column Semi Circle
+doodad	YSls	Wall End Short
+doodad	YSw0	Wall Low (Horizontal)
+doodad	YSw1	Wall Low (Diagonal 1)
+doodad	YSw2	Wall Low (Vertical)
+doodad	YSw3	Wall Low (Diagonal 2)
+doodad	YSw4	Wall Corner
+doodad	YSw5	Wall Endcap
+doodad	YSw6	Wall Straight
+doodad	YSw7	Wall Corner (Alt)
+doodad	YSw8	Wall Straight (Long)
+doodad	YSw9	Wall Straight (Short)
+doodad	YSwA	Wall Straight (Tee)
+doodad	YSwB	Wall Straight (Tee Alt)
+doodad	YSwC	Wall Endcap (Entrance)
+doodad	YSwD	Wall Door
+doodad	YSwE	Wall Door (Short)
+doodad	YSlt	Wall End Tall
+doodad	YSll	Wall End Lantern
+doodad	YSta	Tavern
+doodad	COdf	Fish Dead
+doodad	CRrk	Rocks
+doodad	DRrk	Rocks
+doodad	YOlb	Lightning Bolt
+doodad	YOtf	Fire
+doodad	YOfb	Fire Blue
+doodad	YOfs	Fire Small
+doodad	YOf1	Trap Side Fire
+doodad	YOf2	Trap Fire
+doodad	YOf3	Fire Gust
+doodad	YOr1	Trap Side Frost
+doodad	YOr2	Trap Frost
+doodad	DSar	Archway
+doodad	DSa1	Archway Angled
+doodad	DSah	Archway Stone
+doodad	DSa2	Archway Angled Stone
+doodad	DOtp	Pile of Treasure
+doodad	DOjp	Pile of Junk
+doodad	DOch	Chains
+doodad	DOcp	Chain Post
+doodad	DRfc	Crater Fiery
+doodad	DRst	Stalagmite
+doodad	DOlc	Lava Cracks
+doodad	DOcr	Chair
+doodad	DObh	Bench
+doodad	DObk	Bookshelf
+doodad	DOkb	Bookshelf Large
+doodad	DObw	Bookshelf Long
+doodad	DOab	Bookshelf Angled
+doodad	DOob	Obelisk
+doodad	DOtb	Table
+doodad	DOtc	Table and Chair
+doodad	DOim	Iron Maiden
+doodad	DOtt	Table Torture
+doodad	DOmc	Mine Cart
+doodad	DOme	Mine Cart Empty
+doodad	DSp0	Wall Barred Small
+doodad	DSp9	Wall Barred Large
+doodad	GPsh	Mushroom Blue
+doodad	GRrk	Rocks
+doodad	GRfc	Crater Fiery
+doodad	GRst	Stalagmite
+doodad	GOob	Obelisk
+doodad	GSah	Archway Stone
+doodad	GSa2	Archway Angled Stone
+doodad	GSar	Archway
+doodad	GSa1	Archway Angled
+doodad	GSp0	Wall Barred Small
+doodad	GSp9	Wall Barred Large
+doodad	GOlc	Lava Cracks
+doodad	LWw0	Waterfall
+doodad	LCc0	WESTRING_DOOD_LCc0
+doodad	LCc2	WESTRING_DOOD_LCc2
+doodad	YOsw	Sun Well
+doodad	YOcp	Camera Prop
+doodad	YS00	"City Building (Diagonal 1, Red)"
+doodad	YS01	"City Building (Diagonal 1, Green)"
+doodad	YS02	"City Building (Diagonal 1, Purple)"
+doodad	YS03	"City Building (Horizontal, Blue)"
+doodad	YS04	"City Building (Horizontal, Green)"
+doodad	YS05	"City Building (Horizontal, Red)"
+doodad	YS06	"City Building (Diagonal 2, Purple)"
+doodad	YS07	"City Building (Diagonal 2, Green)"
+doodad	YS08	"City Building (Diagonal 2, Blue)"
+doodad	YS09	"City Building (Vertical, Green)"
+doodad	YS10	"City Building (Vertical, Red)"
+doodad	YS11	"City Building (Vertical, Blue)"
+doodad	YS12	"City Building Large (Vertical, Purple)"
+doodad	YS13	"City Building Large (Diagonal 1, Red)"
+doodad	YS14	"City Building Large (Horizontal, Green)"
+doodad	YS15	"City Building Large (Diagonal 2, Blue)"
+doodad	YZef	Energy Field
+doodad	LZth	Thrall's Hut
+doodad	ZObz	Ruins Brazier
+doodad	ZOst	Ruins Statue
+doodad	ZOsb	Ruins Broken Statue
+doodad	ZOss	Ruins Stones
+doodad	ZSar	Archway Natural
+doodad	ZSa1	Archway Angled Natural
+doodad	ZSas	Archway
+doodad	ZSs1	Archway Angled
+doodad	ZSab	Archway
+doodad	ZSb1	Archway Angled
+doodad	ZWfs	Fish Green
+doodad	ZWsf	Fish School
+doodad	ZSrb	Ruins
+doodad	ZOfo	Ruins Fountain
+doodad	ZOob	Ruins Obelisk
+doodad	ZOrt	Ruins Throne
+doodad	IRrk	Rocks
+doodad	ZOrp	Ruins Pillars
+doodad	ZOsh	Shells
+doodad	YCc1	Cave City Cliff (North Right)
+doodad	YCc2	Cave City Cliff (North Left)
+doodad	YCc3	Cave City Cliff (West)
+doodad	YCc4	Cave City Cliff (East)
+doodad	YCd1	Ruined City Cliff (North)
+doodad	YCd2	Ruined City Cliff (East)
+doodad	YCd3	Ruined City Cliff (South)
+doodad	YCd4	Ruined City Cliff (West)
+doodad	ZOrc	Ruined Crystal Tower
+doodad	ZOdt	Ruined Tower
+doodad	ZOd2	Ruined Tower
+doodad	ZOrb	Ruined Tower Base
+doodad	ZOtb	Ruined Double Base
+doodad	ZOt2	Ruined Double Base
+doodad	ZOvr	Dalaran Violet Citadel Ruined
+doodad	ZOfp	Ruins Firepot
+doodad	ZRrk	Rocks
+doodad	ZCv1	Vines Cliffside
+doodad	ZCv2	Vines Cliffside
+doodad	ZWsw	Seaweed
+doodad	ZWbg	Bubbles
+doodad	IWbg	Bubbles Steam
+doodad	IWie	Ice Floating
+doodad	IWw0	Icy Waterfall
+doodad	ZPfw	Flowers
+doodad	ZPsh	Shrub
+doodad	ZPlp	Lily Pad
+doodad	ZPru	Cattail
+doodad	ZWcl	Coral
+doodad	ZWca	Coral Arch
+doodad	ZZdt	Footprints Demonic
+doodad	IOst	Skull Torch
+doodad	ISar	Archway Icy
+doodad	ISa1	Archway Angled Icy
+doodad	IOob	Obelisk
+doodad	IOpr	Pillar
+doodad	IRic	Ice Block
+doodad	DOas	Statue of Azshara
+doodad	IOsm	Snowman
+doodad	ZRrs	Rock Spires
+doodad	ZRsp	Rock Spires Small
+doodad	ORrk	Rocks
+doodad	ORrs	Rock Spires
+doodad	IOss	Ice Spider on Pedestal
+doodad	IOsl	Statue Ice Spider
+doodad	AZrf	Ruined Ship
+doodad	OPop	Outland Plants
+doodad	IRgc	Glacier
+doodad	ORmk	Rock Magma
+doodad	YCx1	Ruined Ground (2x2)
+doodad	YCx2	Ruined Ground (2x2)
+doodad	YCx3	Ruined Ground (2x2)
+doodad	YCx4	Ruined Ground (2x2)
+doodad	YCx5	Ruined Ground (4x4)
+doodad	YCx6	Ruined Ground (4x4)
+doodad	YCx7	Ruined Ground (4x2)
+doodad	YCx8	Ruined Ground (4x2)
+doodad	YCr1	Cave Natural Cliff (North Right)
+doodad	YCr2	Cave Natural Cliff (North Left)
+doodad	YCr3	Cave Natural Cliff (West)
+doodad	YCr4	Cave Natural Cliff (East)
+doodad	YCp1	Ruined Natural Cliff (North)
+doodad	YCp2	Ruined Natural Cliff (East)
+doodad	YCp3	Ruined Natural Cliff (South)
+doodad	YCp4	Ruined Natural Cliff (West)
+doodad	YCs1	Slide City Cliff (North)
+doodad	YCs2	Slide City Cliff (East)
+doodad	YCs3	Slide City Cliff (South)
+doodad	YCs4	Slide City Cliff (West)
+doodad	YCt1	Ruined City Cliff Short (North)
+doodad	YCt2	Ruined City Cliff Short (East)
+doodad	YCt3	Ruined City Cliff Short (South)
+doodad	YCt4	Ruined City Cliff Short (West)
+doodad	YCo1	Slide City Cliff Short (North)
+doodad	YCo2	Slide City Cliff Short (East)
+doodad	YCo3	Slide City Cliff Short (South)
+doodad	YCo4	Slide City Cliff Short (West)
+doodad	YCg1	Slide Natural Cliff (North)
+doodad	YCg2	Slide Natural Cliff (East)
+doodad	YCg3	Slide Natural Cliff (South)
+doodad	YCg4	Slide Natural Cliff (West)
+doodad	YCu1	Slide Natural Cliff Short (North)
+doodad	YCu2	Slide Natural Cliff Short (East)
+doodad	YCu3	Slide Natural Cliff Short (South)
+doodad	YCu4	Slide Natural Cliff Short (West)
+doodad	YCl1	Ruined Natural Cliff Short (North)
+doodad	YCl2	Ruined Natural Cliff Short (East)
+doodad	YCl3	Ruined Natural Cliff Short (South)
+doodad	YCl4	Ruined Natural Cliff Short (West)
+doodad	ZRbs	Rubble Small
+doodad	ZRbd	Rubble Large
+doodad	ORfk	Rocks Floating
+doodad	OZfc	Rocks Cluster Floating
+doodad	ASpr	Pier
+doodad	ASpt	Pier Ruined
+doodad	ZPms	Mushrooms
+doodad	ZPvp	Viny Plant
+doodad	ZOls	Ruins Library Shelf
+doodad	YScr	Cathedral Ruined
+doodad	YOfr	Fountain Ruined
+doodad	ZZgr	Gul'dan's Runes
+doodad	JZif	Invulnerability Field
+doodad	YSr0	"City Building Ruined (Diagonal 1, Red)"
+doodad	YSr1	"City Building Ruined (Diagonal 1, Green)"
+doodad	YSr2	"City Building Ruined (Diagonal 1, Purple)"
+doodad	YSr3	"City Building Ruined (Horizontal, Blue)"
+doodad	YSr4	"City Building Ruined (Horizontal, Green)"
+doodad	YSr5	"City Building Ruined (Horizontal, Red)"
+doodad	YSr6	"City Building Ruined (Diagonal 2, Purple)"
+doodad	YSr7	"City Building Ruined (Diagonal 2, Green)"
+doodad	YSr8	"City Building Ruined (Diagonal 2, Blue)"
+doodad	YSr9	"City Building Ruined (Vertical, Green)"
+doodad	YSra	"City Building Ruined (Vertical, Red)"
+doodad	YSrb	"City Building Ruined (Vertical, Blue)"
+doodad	YSrc	"City Building Large Ruined (Vertical, Purple)"
+doodad	YSrd	"City Building Large Ruined (Diagonal 1, Red)"
+doodad	YSre	"City Building Large Ruined (Horizontal, Green)"
+doodad	YSrf	"City Building Large Ruined (Diagonal 2, Blue)"
+doodad	YSbr	City Building Row (Group 1)
+doodad	YSb1	City Building Row (Group 2)
+doodad	YSb2	City Building Row (Group 3)
+doodad	ZZys	Eye of Sargeras
+doodad	JScs	Column Semi Circle Ruined
+doodad	JSc2	Column Semi Circle Ruined
+doodad	JSc3	Column Semi Circle Ruined
+doodad	JSc4	Column Semi Circle Ruined
+doodad	JSco	Column Ruined
+doodad	JScx	Column Ruined with Cap
+doodad	JSrc	City Building Large Base Ruined
+doodad	JSr6	City Building Base Ruined
+doodad	JSar	Archway Ruined
+doodad	JSax	Archway Ruined
+doodad	ZZcd	Dust
+doodad	LSrg	Ruined Goblin Shipyard
+doodad	AOnt	Totem Lantern
+doodad	DOsv	Sewer Vents
+doodad	DOsw	Sewer Wallpipes
+doodad	LOwf	Wall Fountain
+doodad	KOdr	Runes
+doodad	OZsp	Портал
+doodad	ASv0	Night Elf Fishing Village
+doodad	ASv1	Night Elf Fishing Village
+doodad	ASv2	Night Elf Fishing Village
+doodad	ASv3	Night Elf Fishing Village
+doodad	ASv4	Night Elf Fishing Village
+doodad	ASx0	Night Elf Fishing Village Ruined
+doodad	ASx1	Night Elf Fishing Village Ruined
+doodad	ASx2	Night Elf Fishing Village Ruined
+doodad	ZOtr	Ruins Trash
+doodad	ZOba	Ruins Bloody Altar
+doodad	IZrw	Rising Water
+doodad	KOst	Statue Black Citadel
+doodad	IZft	The Frozen Throne
+doodad	IOic	Chair Icey
+doodad	IRcy	Crystal
+doodad	ISsr	Archway Icecrown Stone
+doodad	ISs1	Archway Angled Icecrown Stone
+doodad	IOch	Chair
+doodad	OOal	Altar
+doodad	OOgr	Flame Grate
+doodad	OOob	Obstacle
+doodad	OOsk	Skull
+doodad	OOst	Stake
+doodad	ORrr	Rubble
+doodad	JZud	Underground Dome
+doodad	OOsd	Standard
+doodad	IRrs	Snowy Rock
+doodad	ISrb	Rubble
+doodad	JOgr	Glowing Runes
+doodad	BPtw	Barrens Tree (Indestructible)
+doodad	ZPtw	Sunken Ruins Tree (Indestructible)
+doodad	IZww	Rising Water Wide
+doodad	YSlx	Wall End Lantern No Light
+doodad	OSar	Archway Outland
+doodad	OSa1	Archway Angled Outland
+doodad	SCt0	Strahnbrad Clock Tower
+doodad	SLt0	Strahnbrad Large Tree
+doodad	BCt0	Brill Clock Tower
+doodad	ACt0	Androhal Clock Tower
+doodad	ACtd	Androhal Clock Tower (Destroyed)
+doodad	HA00	Hearthglen Abbey
+doodad	PVct	Pyrewood Village Clock Tower (Destroyed)
+doodad	HEcs	High Elf Crest Standing Banners
+doodad	HEch	High Elf Crest Hanging Banners
+doodad	SRbc	Silvermoon Buildings (Diagonal 1)
+doodad	SRbe	Silvermoon Buildings (Diagonal 2)
+doodad	SRbv	Silvermoon Buildings (Vertical)
+doodad	SRbh	Silvermoon Buildings (Horizontal)
+doodad	SSmt	Sunfury Spire Main Tower
+doodad	SSst	Sunfury Spire Side Tower
+doodad	STdl	Silvermoon Tower (Large)
+doodad	STdm	Silvermoon Tower (Medium)
+doodad	STds	Silvermoon Tower (Small)
+doodad	SWss	Silvermoon Wall (Short)
+doodad	SWs0	Silvermoon Wall
+doodad	SWsl	Silvermoon Wall (Long)
+doodad	SWt0	Silvermoon Wall_T
+doodad	SWsd	Silvermoon Wall Door
+doodad	SWse	Silvermoon Wall Door (Short)
+doodad	SWc0	Silvermoon Wall Corner
+doodad	SWe0	Silvermoon Wall Endcap
+doodad	SAe0	Silvermoon Archway Entrance
+doodad	SAe1	Silvermoon Archway Entrance (45)
+doodad	SA00	Silvermoon Archway
+doodad	SA01	Silvermoon Archway (45)
+doodad	LSt0	Silvermoon Tower (X-Large)
+doodad	EMt0	Exterior Main Tower
+doodad	ET00	Exterior Tower
+doodad	EW00	Exterior Wall
+doodad	EG00	Exterior Gate
+doodad	ASd0	Archway (Standard Dimension)
+doodad	SA02	Statue of Azshara
+doodad	CGd0	Corpse of Gul’Dan
+doodad	VHms	VioletHoldMainStructure
+doodad	VHs0	Violet Hold Spire
+doodad	VHss	Violet Hold Spire (Small)
+doodad	VHae	Violet Hold Archway Endpiece
+doodad	MT00	Magus Turret
+doodad	MH00	Magus Highrise
+doodad	MC00	Magus Conservatory
+doodad	SA03	Sunreaver Archway
+doodad	SD00	Sunreaver Dome
+doodad	SDs0	Sunreaver Dome (Small)
+doodad	SS00	Sunreaver Spire
+doodad	EMs0	Enclave Main Structure
+doodad	ES00	Enclave Spire
+doodad	EH00	Enclave House
+doodad	EHb0	Enclave House B
+doodad	ET01	Enclave Turret
+doodad	RSf0	Runeweaver Square Fountain
+doodad	BA00	Building A
+doodad	BB00	Building B
+doodad	BC00	Building C
+doodad	WSs0	Wall Straight Short
+doodad	WS00	Wall Straight
+doodad	WSl0	Wall Straight Long
+doodad	WT00	Wall T
+doodad	WTa0	Wall T Alt
+doodad	WS01	Wall Spire
+doodad	WSa0	Wall Spire Alt
+doodad	WD00	Wall 90 Degree
+doodad	WE00	Wall Endcap
+doodad	ZPf0	WESTRING_DOOD_ZPf0
+doodad	D000	geoset_animation_color_animation
+doodad	D001	material_no_texture
+doodad	D002	geoset_dynamic_alpha
+doodad	D003	geoset_dynamic_color
+doodad	D004	geoset_layer_dynamic_alpha
+doodad	D005	layer_dynamic_alpha
+doodad	D006	alpha_plane_blue
+doodad	D007	material_no_layer
+destructible	ATtr	Деревья
+destructible	BTtw	Деревья
+destructible	CTtr	Деревья
+destructible	FTtw	Деревья
+destructible	LOcg	Клетка
+destructible	LTba	Баррикада
+destructible	LTcr	Ящики
+destructible	LTbr	Бочка
+destructible	LTbx	Бочка
+destructible	LTbs	Бочка
+destructible	LTex	Бочка со взрывчаткой
+destructible	LTg1	Ворота
+destructible	LTg2	Ворота
+destructible	LTg3	Ворота
+destructible	LTg4	Ворота
+destructible	LTe1	Эльфийские врата
+destructible	LTe2	Эльфийские врата
+destructible	LTe3	Эльфийские врата
+destructible	LTe4	Эльфийские врата
+destructible	ATg1	Демонические ворота
+destructible	ATg2	Демонические ворота
+destructible	ATg3	Демонические ворота
+destructible	ATg4	Демонические ворота
+destructible	DTg5	Железные ворота
+destructible	DTg6	Железные ворота
+destructible	DTg7	Железные ворота
+destructible	DTg8	Железные ворота
+destructible	DTg1	Ворота
+destructible	DTg2	Ворота
+destructible	DTg3	Ворота
+destructible	DTg4	Ворота
+destructible	LTlt	Деревья
+destructible	NTtw	Деревья
+destructible	WTtw	Деревья
+destructible	WTst	Деревья
+destructible	YTct	Деревья
+destructible	YTwt	Деревья
+destructible	YTst	Деревья
+destructible	YTft	Деревья
+destructible	VTlt	Деревья
+destructible	LTw0	Каменная стена
+destructible	LTw1	Каменная стена
+destructible	LTw2	Каменная стена
+destructible	LTw3	Каменная стена
+destructible	YT00	Короткий естественный мост
+destructible	YT01	Короткий естественный мост
+destructible	YT02	Короткий естественный мост
+destructible	YT03	Короткий естественный мост
+destructible	YT04	Длинный естественный мост
+destructible	YT05	Длинный естественный мост
+destructible	YT06	Длинный естественный мост
+destructible	YT07	Длинный естественный мост
+destructible	YT08	Широкий естественный мост
+destructible	YT09	Широкий естественный мост
+destructible	YT10	Широкий естественный мост
+destructible	YT11	Широкий естественный мост
+destructible	YT12	Короткий каменный мост
+destructible	YT13	Короткий каменный мост
+destructible	YT14	Короткий каменный мост
+destructible	YT15	Короткий каменный мост
+destructible	YT16	Длинный каменный мост
+destructible	YT17	Длинный каменный мост
+destructible	YT18	Длинный каменный мост
+destructible	YT19	Длинный каменный мост
+destructible	YT20	Широкий каменный мост
+destructible	YT21	Широкий каменный мост
+destructible	YT22	Широкий каменный мост
+destructible	YT23	Широкий каменный мост
+destructible	LT00	Короткий деревянный мост
+destructible	LT01	Короткий деревянный мост
+destructible	LT02	Короткий деревянный мост
+destructible	LT03	Короткий деревянный мост
+destructible	LT04	Длинный деревянный мост
+destructible	LT05	Длинный деревянный мост
+destructible	LT06	Длинный деревянный мост
+destructible	LT07	Длинный деревянный мост
+destructible	LT08	Широкий деревянный мост
+destructible	LT09	Широкий деревянный мост
+destructible	LT10	Широкий деревянный мост
+destructible	LT11	Широкий деревянный мост
+destructible	XTbd	Даларанское здание
+destructible	XTvt	Аметистовая цитадель
+destructible	LTr1	Каменный подъем
+destructible	LTr2	Каменный подъем
+destructible	LTr3	Каменный подъем
+destructible	LTr4	Каменный подъем
+destructible	LTr5	Каменный подъем
+destructible	LTr6	Каменный подъем
+destructible	LTr7	Каменный подъем
+destructible	LTr8	Каменный подъем
+destructible	NTbd	Корабль
+destructible	DTes	Кладка
+destructible	DTsh	Деревья
+destructible	YSdb	Разрушенный мост
+destructible	YSdc	Разрушенный мост
+destructible	XOkt	WESTRING_DOOD_XOkt
+destructible	XOk1	WESTRING_DOOD_XOk1
+destructible	XOk2	WESTRING_DOOD_XOk2
+destructible	DTc1	Ворота
+destructible	DTc2	Ворота
+destructible	DTsp	Колья
+destructible	DTrc	Каменные завалы
+destructible	DTs0	Энергетический мост
+destructible	DTs1	Энергетический мост
+destructible	DTs2	Энергетический мост
+destructible	DTs3	Энергетический мост
+destructible	Dofw	Энергетическая стена
+destructible	Dofv	Энергетическая стена
+destructible	YT24	Короткий естественный мост
+destructible	YT25	Короткий естественный мост
+destructible	YT26	Короткий естественный мост
+destructible	YT27	Короткий естественный мост
+destructible	YT28	Длинный естественный мост
+destructible	YT29	Длинный естественный мост
+destructible	YT30	Длинный естественный мост
+destructible	YT31	Длинный естественный мост
+destructible	YT32	Широкий естественный мост
+destructible	YT33	Широкий естественный мост
+destructible	YT34	Широкий естественный мост
+destructible	YT35	Широкий естественный мост
+destructible	YT36	Короткий каменный мост
+destructible	YT37	Короткий каменный мост
+destructible	YT38	Короткий каменный мост
+destructible	YT39	Короткий каменный мост
+destructible	YT40	Длинный каменный мост
+destructible	YT41	Длинный каменный мост
+destructible	YT42	Длинный каменный мост
+destructible	YT43	Длинный каменный мост
+destructible	YT44	Широкий каменный мост
+destructible	YT45	Широкий каменный мост
+destructible	YT46	Широкий каменный мост
+destructible	YT47	Широкий каменный мост
+destructible	ZTr0	Подъем
+destructible	ZTr1	Подъем
+destructible	ZTr2	Подъем
+destructible	ZTr3	Подъем
+destructible	ZTtw	Деревья
+destructible	ZTw0	Каменная стена
+destructible	ZTw1	Каменная стена
+destructible	ZTw2	Каменная стена
+destructible	ZTw3	Каменная стена
+destructible	ZTg1	Ворота
+destructible	ZTg2	Ворота
+destructible	ZTg3	Ворота
+destructible	ZTg4	Ворота
+destructible	ITtw	Деревья
+destructible	ZTd1	Каменная дверь
+destructible	ZTd2	Каменная дверь
+destructible	ZTd3	Каменная дверь
+destructible	ZTd4	Каменная дверь
+destructible	ZTd5	Каменная дверь
+destructible	ZTd6	Каменная дверь
+destructible	ZTd7	Каменная дверь
+destructible	ZTd8	Каменная дверь
+destructible	ITib	Ледяной мост
+destructible	ITi2	Ледяной мост
+destructible	ITi3	Ледяной мост
+destructible	ITi4	Ледяной мост
+destructible	ITg1	Ледяные ворота
+destructible	ITg2	Ледяные ворота
+destructible	ITg3	Ледяные ворота
+destructible	ITg4	Ледяные ворота
+destructible	ITw0	Каменная стена
+destructible	ITw1	Каменная стена
+destructible	ITw2	Каменная стена
+destructible	ITw3	Каменная стена
+destructible	LTt0	Древесный мост
+destructible	LTt1	Древесный мост
+destructible	LTt2	Древесный мост
+destructible	LTt3	Древесный мост
+destructible	LTt4	Древесный мост
+destructible	ATt0	Древесный мост
+destructible	ATt1	Древесный мост
+destructible	LTt5	Древесный мост
+destructible	ZTnc	Круг наг
+destructible	ITf1	Плавучая льдина
+destructible	ITf2	Плавучая льдина
+destructible	ITf3	Плавучая льдина
+destructible	ITf4	Плавучая льдина
+destructible	ITx1	Ледяные ворота
+destructible	ITx2	Ледяные ворота
+destructible	ITx3	Ледяные ворота
+destructible	ITx4	Ледяные ворота
+destructible	ATtc	Дерево
+destructible	OTtw	Деревья
+destructible	KTtw	Деревья
+destructible	ITig	Иглу
+destructible	DTrf	Подъемник
+destructible	DTrx	Подъемник
+destructible	XTmp	Магическая клетка
+destructible	XTm5	Магическая клетка
+destructible	XTmx	Стена магической клетки
+destructible	XTx5	Стена магической клетки
+destructible	ITcr	Ледяная скала
+destructible	DTep	Стена подъемника
+destructible	ATwf	Верфь
+destructible	YTfb	Препятствие
+destructible	YTfc	Препятствие
+destructible	YTlb	Препятствие
+destructible	Ytlc	Препятствие
+destructible	YTpb	Препятствие
+destructible	YTpc	Препятствие
+destructible	YTab	Препятствие
+destructible	YTac	Препятствие
+destructible	ZTsg	Ворота
+destructible	ZTsx	Ворота
+destructible	DTfp	Плита
+destructible	DTfx	Плита
+destructible	DTlv	Рычаг
+destructible	YTce	Вход в город
+destructible	YTcx	Вход в город
+destructible	LTtc	Мост Последней Надежды
+destructible	LTtx	Мост Последней Надежды
+destructible	JTct	Деревья
+destructible	JTtw	Деревья
+destructible	ITtg	Ворота
+destructible	GTsh	Деревья
+destructible	BTrs	Камень воскрешения
+destructible	BTrx	Камень воскрешения
+destructible	OTsp	Портал
+destructible	OTip	Невидимая платформа
+destructible	OTis	Невидимая платформа
+destructible	BTtc	Дерево
+destructible	CTtc	Дерево
+destructible	NTtc	Дерево
+destructible	ZTtc	Дерево
+destructible	ITtc	Дерево
+destructible	IOt0	Ледяной Трон
+destructible	IOt1	Ледяной Трон
+destructible	IOt2	Ледяной Трон
+destructible	LTrc	Каменные завалы
+destructible	LTrt	Каменные завалы
+destructible	YT48	Естественный мост
+destructible	YT49	Естественный мост
+destructible	YT50	Естественный мост
+destructible	YT51	Естественный мост
+destructible	OTds	Демоническая буря
+destructible	ITag	Артас
+destructible	BTsc	Опорная балка
+destructible	LTs1	Каменный подъем
+destructible	LTs2	Каменный подъем
+destructible	LTs3	Каменный подъем
+destructible	LTs4	Каменный подъем
+destructible	LTs5	Каменный подъем
+destructible	LTs6	Каменный подъем
+destructible	LTs7	Каменный подъем
+destructible	LTs8	Каменный подъем
+destructible	Volc	Вулкан
+destructible	Yts1	Луносветское дерево
+destructible	YTc1	Вход в цитадель Ледяной Короны
+destructible	YTc2	Главные ворота
+destructible	BTsk	Колонна
+destructible	YTc4	Разрушенные главные ворота
+destructible	BTs1	Разрушенная колонна
+destructible	BTs2	Статуя льва
+destructible	BTs3	Разрушенная статуя льва
+destructible	BTs4	Шпиль
+destructible	BTs5	Разрушенный шпиль
+destructible	XTv1	Купол
+destructible	XTv2	Разрушенный купол
+destructible	XTv3	Главное здание
+destructible	XTv4	Разрушенное главное здание
+destructible	XTv5	Участок оргриммарской стены
+destructible	XTv6	Участок оргриммарской стены
+destructible	XTv7	Оргриммарская башня
+destructible	XTv8	Оргриммарская башня
+destructible	YTcn	Ворота Оргриммара
+destructible	YT66	Ледяной мост
+destructible	YT67	Эльфийский мост
+destructible	YY12	Short Stratholme Bridge
+destructible	YY13	Short Stratholme Bridge
+destructible	YY14	Short Stratholme Bridge
+destructible	YY15	Short Stratholme Bridge
+destructible	YY16	Long Stratholme Bridge
+destructible	YY17	Long Stratholme Bridge
+destructible	YY18	Long Stratholme Bridge
+destructible	YY19	Long Stratholme Bridge
+destructible	YY20	Wide Stratholme Bridge
+destructible	YY21	Wide Stratholme Bridge
+destructible	YY22	Wide Stratholme Bridge
+destructible	YY23	Wide Stratholme Bridge
+destructible	OG00	Short Overgrowth Bridge
+destructible	OG01	Short Overgrowth Bridge
+destructible	OG02	Short Overgrowth Bridge
+destructible	OG03	Short Overgrowth Bridge
+destructible	OG04	Long Overgrowth Bridge
+destructible	OG05	Long Overgrowth Bridge
+destructible	OG06	Long Overgrowth Bridge
+destructible	OG07	Long Overgrowth Bridge
+destructible	OG08	Wide Overgrowth Bridge
+destructible	OG09	Wide Overgrowth Bridge
+destructible	OG10	Wide Overgrowth Bridge
+destructible	OG11	Wide Overgrowth Bridge
+destructible	RW00	Short Rickety Wooden Bridge
+destructible	RW01	Short Rickety Wooden Bridge
+destructible	RW02	Short Rickety Wooden Bridge
+destructible	RW03	Short Rickety Wooden Bridge
+destructible	RW04	Long Rickety Wooden Bridge
+destructible	RW05	Long Rickety Wooden Bridge
+destructible	RW06	Long Rickety Wooden Bridge
+destructible	RW07	Long Rickety Wooden Bridge
+destructible	RW08	Wide Rickety Wooden Bridge
+destructible	RW09	Wide Rickety Wooden Bridge
+destructible	RW10	Wide Rickety Wooden Bridge
+destructible	RW11	Wide Rickety Wooden Bridge
+destructible	EB00	Short Elven Bridge
+destructible	EB01	Short Elven Bridge
+destructible	EB02	Short Elven Bridge
+destructible	EB03	Short Elven Bridge
+destructible	EB04	Long Elven Bridge
+destructible	EB05	Long Elven Bridge
+destructible	EB06	Long Elven Bridge
+destructible	EB07	Long Elven Bridge
+destructible	EB08	Wide Elven Bridge
+destructible	EB09	Wide Elven Bridge
+destructible	EB10	Wide Elven Bridge
+destructible	EB11	Wide Elven Bridge
+destructible	NB00	Short Night Elven Wooden Bridge
+destructible	NB01	Short Night Elven Wooden Bridge
+destructible	NB02	Short Night Elven Wooden Bridge
+destructible	NB03	Short Night Elven Wooden Bridge
+destructible	NB04	Long Night Elven Wooden Bridge
+destructible	NB05	Long Night Elven Wooden Bridge
+destructible	NB06	Long Night Elven Wooden Bridge
+destructible	NB07	Long Night Elven Wooden Bridge
+destructible	NB08	Wide Night Elven Wooden Bridge
+destructible	NB09	Wide Night Elven Wooden Bridge
+destructible	NB10	Wide Night Elven Wooden Bridge
+destructible	NB11	Wide Night Elven Wooden Bridge
+destructible	Ytsc	Scorched Tree Wall
+destructible	ITd1	Каменная дверь
+destructible	ITd2	Каменная дверь
+destructible	ITd3	Каменная дверь
+destructible	ITd4	Каменная дверь
+destructible	WGTR	Waygate Ramp
+destructible	NTiw	Northrend Icy Tree Wall
+buff	BPSE	Оглушение
+buff	BSTN	Оглушение
+buff	Bchd	Головокружение
+buff	Bdef	Свиток защиты
+buff	Bdet	Обнаружение
+buff	Bfre	Freeze
+buff	Bfro	Замедление
+buff	Bvul	Неуязвимость
+buff	Bpoi	Яд
+buff	Bpsd	Яд
+buff	Bpsi	Poison (Info)
+buff	Bsha	Shared Vision
+buff	Bspe	Ускорение
+buff	Btrv	Teleport Reveal
+buff	Bclf	Туман
+buff	Bcmg	Магический контроль
+buff	Bhea	Исцеление
+buff	Binf	Внутренний огонь
+buff	Binv	Невидимость
+buff	Bmlc	Aerial Shackles (Caster)
+buff	Bmlt	Огненное лассо
+buff	Bmil	Ополчение
+buff	Bpxf	Пламя феникса
+buff	Bphx	Феникс
+buff	Bply	Превращение
+buff	Bslo	Замедление
+buff	BHab	Аура гениальности
+buff	BHad	Аура благочестия
+buff	BHav	Аватара
+buff	BHbn	Изгнание
+buff	BHbd	Снежная буря
+buff	BHbz	Blizzard (Caster)
+buff	BHds	Божественный щит
+buff	Bdcb	Drain Life & Mana (Caster)
+buff	Bdcl	Drain Life (Caster)
+buff	Bdcm	Drain Mana (Caster)
+buff	Bdtb	Drain Life & Mana (Target)
+buff	Bdtl	Drain Life (Target)
+buff	Bdtm	Drain Mana (Target)
+buff	BHfs	Огненный столб
+buff	BHtc	Раскат грома
+buff	BHwe	Элементаль воды
+buff	Bakb	Боевые барабаны
+buff	Boar	Аура исцеляющего идола
+buff	Barm	Аура регенерации маны
+buff	Bbof	Горючая смесь
+buff	Bbsk	Берсерк
+buff	Bblo	Жажда крови
+buff	Bdvv	Пожирание
+buff	Bdig	Devour (Caster)
+buff	Bens	Ensnare (General)
+buff	Bena	Опутывание
+buff	Beng	Опутывание
+buff	Beye	Сторожевой идол
+buff	Bhwd	Исцеляющий идол
+buff	Blsh	Щит молний
+buff	Blsa	Lightning Shield (Caster)
+buff	Bliq	Liquid Fire
+buff	Bprg	Развеивание магии
+buff	Bspl	Духовная связь
+buff	Bstt	Стазисная ловушка
+buff	BOae	Аура выносливости
+buff	BOeq	Землетрясение
+buff	BOea	Earthquake (Caster)
+buff	BOhx	Сглаз
+buff	BOmi	Зеркальная копия
+buff	BOsh	Shockwave (Caster)
+buff	BOsf	Дух волка
+buff	BOvd	Страшное вуду
+buff	BOvc	Big Bad Voodoo (Caster)
+buff	BOwd	Идол
+buff	BOww	Bladestorm (Caster)
+buff	BOwk	Танец ветра
+buff	Bbar	Дубовая кожа
+buff	Bcor	Едкое дыхание
+buff	Bcyc	Смерч
+buff	Bcy2	Смерч
+buff	Beat	Eat Tree
+buff	Bfae	Волшебный огонь
+buff	Bgra	War Club
+buff	Bmfl	Вспышка маны
+buff	Bmfa	Вспышка маны
+buff	Bpsh	Фазовый сдвиг
+buff	Brej	Омоложение
+buff	Broa	Рев
+buff	Bspo	Замедляющий яд
+buff	Bssd	Замедляющий яд
+buff	Bssi	Slow Poison (Info)
+buff	Bvng	Дух возмездия
+buff	BEah	Аура шипов
+buff	BEar	Аура меткости
+buff	BEer	Гнев деревьев
+buff	BEfn	Сила природы
+buff	BEim	Обжигающий жар
+buff	BEia	Immolation (Caster)
+buff	BEme	Метаморфоза
+buff	BEst	Разведка
+buff	BEsh	Теневой удар
+buff	BEsv	Возмездие
+buff	Bams	Антимагический панцирь
+buff	Bam2	Антимагический панцирь
+buff	Babr	Чумная аура
+buff	Bapl	Болезнь
+buff	Bcri	Увечье
+buff	Bcrs	Проклятие
+buff	Bfrz	Леденящее дыхание
+buff	Bplg	Disease Cloud
+buff	Bpoc	Possession (Caster)
+buff	Bpos	Одержимость
+buff	Brai	Скелет-прислужник
+buff	Brpb	Восстановление
+buff	Brpl	Чумная эссенция
+buff	Brpm	Призрачное касание
+buff	Bspa	Паучок
+buff	Buhf	Нечестивое бешенство
+buff	Buns	Развоплотить
+buff	Bweb	Паутина
+buff	Bwea	Паутина
+buff	BUan	Оживление мертвых
+buff	BUau	Нечистая аура
+buff	BUav	Вампирическая аура
+buff	BUcb	Жуки-падальщики
+buff	BUcs	Carrion Swarm (Caster)
+buff	BUdd	Смерть и разложение
+buff	BUfa	Морозный доспех
+buff	BUim	Пронзание
+buff	BUsl	Сон
+buff	BUsp	Sleep (Pause)
+buff	BUst	Sleep (Stun)
+buff	BUts	Spiked Carapace
+buff	Basl	Торнадо
+buff	BCbf	Ледяное дыхание
+buff	BCtc	Мощный удар
+buff	Bfzy	Бешенство
+buff	Bmec	Заводной зверек
+buff	BNmr	Гниение разума
+buff	Bpig	Кольцо огня
+buff	BNpi	Кольцо огня
+buff	BNsa	Спасение
+buff	Bshs	Жезл теневого зрения
+buff	BNss	Антимагический щит
+buff	Btdg	Tornado Damage
+buff	Btsp	Вихрь торнадо
+buff	Btsa	Tornado Spin (Area)
+buff	BNba	Черная стрела
+buff	BNbf	Пламенное дыхание
+buff	BHca	Ледяные стрелы
+buff	Bcsd	Ледяные стрелы
+buff	Bcsi	Cold Arrows
+buff	BNdm	Темный прислужник
+buff	BNdo	Рок
+buff	BNdi	Рок
+buff	BNdh	Хмельные пары
+buff	BNef	Пандарен-элементаль
+buff	BNht	Ужасающий вой
+buff	BNms	Щит маны
+buff	BNsi	Немота
+buff	BNst	Stampede
+buff	BNsg	Медведь
+buff	BNsq	Вепрь
+buff	BNsw	Ястреб
+buff	BNto	Торнадо
+buff	BNwm	Водяной прислужник
+buff	BNbr	Боевой рев
+buff	BNdc	Темное превращение
+buff	BNin	Инфернал
+buff	BNpa	"Паразит"
+buff	BNpm	"Паразит"
+buff	BNrd	Огненный ливень
+buff	BNrf	Rain of Fire (Area)
+buff	BNsl	Soul Preservation
+buff	BIcb	Порча
+buff	BFig	Призванное существо
+buff	BIcf	Огненный плащ
+buff	BIil	Иллюзия
+buff	BIrb	Перерождение
+buff	BIrg	Омоложение
+buff	BIrl	Регенерация
+buff	BIrm	Зелье ясности
+buff	BIsv	Похищение души
+buff	BIsh	Дух охотника за головами
+buff	BIwb	Паутина
+buff	BImo	Приманка
+buff	BIpv	Зелье вампиризма
+buff	Xclf	Cloud (Effect)
+buff	Xfla	Flare (Effect)
+buff	XHbz	Blizzard (Effect)
+buff	XHfs	Flame Strike (Effect)
+buff	Xbof	Burning Oil (Effect)
+buff	XOeq	Earthquake (Effect)
+buff	XOre	Reincarnation (Effect)
+buff	XEsf	Starfall (Effect)
+buff	XEtq	Tranquility (Effect)
+buff	XUdd	Death And Decay (Effect)
+buff	XNmo	Monsoon (Effect)
+buff	XErc	Rain of Chaos (Effect)
+buff	XErf	Rain of Fire (Effect)
+buff	XIct	Смена времени
+buff	AEsd	Starfall (Target)
+buff	AEtr	Tranquility (Target)
+buff	ANmd	Monsoon
+buff	Bivs	Invisibility (Extra)
+buff	BUad	Animate Dead (Extra)
+buff	Bult	Ultravision
+buff	BNab	Кислотная бомба
+buff	BNcr	Эликсир ярости
+buff	BNhs	Исцеляющий газ
+buff	XNhs	Healing Spray (Effect)
+buff	BNtm	Трансмутация
+buff	BNeg	Улучшенная инженерия
+buff	BNcs	Кассетные ракеты
+buff	XNcs	Cluster Rockets (Effect)
+buff	BNfy	Портативная фабрика
+buff	BNcg	Заводной гоблин
+buff	BNic	Испепеление
+buff	BNso	Сжигание души
+buff	BNlm	Порождение лавы
+buff	BNvc	Вулкан
+buff	BNva	Volcano (Area)
+buff	XNvc	Volcano (Effect)
+buff	Xbdt	Reveal (Effect)
+buff	Xbli	Blight (Effect)
+buff	Xdis	Hero Dissipate (Effect)
+buff	Xfhs	Building Damage - Human Small
+buff	Xfhm	Building Damage - Human Medium
+buff	Xfhl	Building Damage - Human Large
+buff	Xfos	Building Damage - Orc Small
+buff	Xfom	Building Damage - Orc Medium
+buff	Xfol	Building Damage - Orc Large
+buff	Xfns	Building Damage - Night Elf Small
+buff	Xfnm	Building Damage - Night Elf Medium
+buff	Xfnl	Building Damage - Night Elf Large
+buff	Xfus	Building Damage - Undead Small
+buff	Xfum	Building Damage - Undead Medium
+buff	Xful	Building Damage - Undead Large
+buff	BIhm	Ослабление исцеления
+buff	Bson	Сфера замедления
