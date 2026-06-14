@@ -24,6 +24,7 @@ import Sounds;
 import SafeMove;
 import Utilities;
 import BinaryReader;
+import BinaryWriter;
 import PathingAnalysis;
 
 namespace {
@@ -260,6 +261,100 @@ std::optional<std::pair<int, int>> to_cell(const pathing::Grid& grid, std::strin
 		return std::nullopt;
 	}
 	return std::pair{ grid.world_to_cell_x(static_cast<float>(x)), grid.world_to_cell_y(static_cast<float>(y)) };
+}
+
+// ---- regions (war3map.w3r) ------------------------------------------------
+// Data-only codec for the regions file: raw world coordinates as stored (no
+// terrain-offset conversion), so it round-trips and matches the coordinates used
+// by triggers/units. Format version 5.
+
+struct RegionRecord {
+	float left = 0, bottom = 0, right = 0, top = 0; // world units
+	std::string name;
+	int32_t creation_number = 0;
+	std::string weather_id;  // 4-char code, empty when none
+	std::string ambient_id;  // ambient sound, optional
+	uint8_t color[3] = { 255, 255, 255 };
+	uint8_t end_byte = 0xff; // trailing marker after the colour, preserved verbatim
+};
+
+std::optional<std::vector<RegionRecord>> read_regions(std::string& err) {
+	auto result = hierarchy.map_file_read("war3map.w3r");
+	if (!result.has_value()) {
+		err = "could not read war3map.w3r: " + result.error();
+		return std::nullopt;
+	}
+	try {
+		BinaryReader reader = std::move(result.value());
+		const uint32_t version = reader.read<uint32_t>();
+		if (version != 5) {
+			err = std::format("unexpected war3map.w3r version {} (expected 5)", version);
+			return std::nullopt;
+		}
+		std::vector<RegionRecord> out;
+		out.resize(reader.read<uint32_t>());
+		for (auto& r : out) {
+			r.left = reader.read<float>();
+			r.bottom = reader.read<float>();
+			r.right = reader.read<float>();
+			r.top = reader.read<float>();
+			r.name = reader.read_c_string();
+			r.creation_number = reader.read<int32_t>();
+			r.weather_id = reader.read_string(4);
+			r.ambient_id = reader.read_c_string();
+			r.color[0] = reader.read<uint8_t>();
+			r.color[1] = reader.read<uint8_t>();
+			r.color[2] = reader.read<uint8_t>();
+			r.end_byte = reader.read<uint8_t>();
+		}
+		return out;
+	} catch (const std::exception& e) {
+		err = std::string("failed parsing war3map.w3r: ") + e.what();
+		return std::nullopt;
+	}
+}
+
+bool write_regions(const std::vector<RegionRecord>& regions, std::string& err) {
+	try {
+		BinaryWriter writer;
+		writer.write<uint32_t>(5);
+		writer.write<uint32_t>(static_cast<uint32_t>(regions.size()));
+		for (const auto& r : regions) {
+			writer.write<float>(r.left);
+			writer.write<float>(r.bottom);
+			writer.write<float>(r.right);
+			writer.write<float>(r.top);
+			writer.write_c_string(r.name);
+			writer.write<int32_t>(r.creation_number);
+			// weather is exactly 4 bytes; pad/truncate, zero when empty.
+			char weather[4] = { 0, 0, 0, 0 };
+			for (std::size_t i = 0; i < 4 && i < r.weather_id.size(); ++i) weather[i] = r.weather_id[i];
+			writer.buffer.insert(writer.buffer.end(), weather, weather + 4);
+			writer.write_c_string(r.ambient_id);
+			writer.write<uint8_t>(r.color[0]);
+			writer.write<uint8_t>(r.color[1]);
+			writer.write<uint8_t>(r.color[2]);
+			writer.write<uint8_t>(r.end_byte);
+		}
+		hierarchy.map_file_write("war3map.w3r", writer.buffer);
+		return true;
+	} catch (const std::exception& e) {
+		err = std::string("failed writing war3map.w3r: ") + e.what();
+		return false;
+	}
+}
+
+std::string region_to_json(const RegionRecord& r, std::size_t index) {
+	JsonObject o;
+	o.number("index", index);
+	o.str("name", r.name);
+	o.raw("creation_number", std::to_string(r.creation_number));
+	o.raw("rect_world", std::format("[{},{},{},{}]", r.left, r.bottom, r.right, r.top));
+	o.raw("center_world", std::format("[{},{}]", (r.left + r.right) / 2.f, (r.bottom + r.top) / 2.f));
+	o.str("weather_id", r.weather_id);
+	o.str("ambient_id", r.ambient_id);
+	o.raw("color", std::format("[{},{},{}]", r.color[0], r.color[1], r.color[2]));
+	return o.dump();
 }
 
 std::string changelog_ts() {
@@ -798,6 +893,152 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		o.raw("length_world", std::to_string(path.cost * 32.0));
 		o.number("waypoint_count", path.cells.size());
 		o.raw("waypoints", waypoints);
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- regions (war3map.w3r), no CASC / object data needed ------------------
+	if (args.command == "list-regions" || args.command == "add-region" ||
+		args.command == "remove-region" || args.command == "set-region") {
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+
+		std::string err;
+		auto regions_opt = read_regions(err);
+		// add-region can create the file if it is missing; others require it.
+		std::vector<RegionRecord> regions;
+		if (regions_opt) {
+			regions = std::move(*regions_opt);
+		} else if (args.command != "add-region") {
+			return error(err);
+		}
+
+		auto find_index = [&](std::size_t& out_index) -> std::optional<std::string> {
+			if (const auto idx = args.get("index")) {
+				try {
+					const std::size_t i = static_cast<std::size_t>(std::stoul(*idx));
+					if (i >= regions.size()) return "region index out of range: " + *idx;
+					out_index = i;
+					return std::nullopt;
+				} catch (...) { return "invalid --index: " + *idx; }
+			}
+			if (const auto name = args.get("name")) {
+				for (std::size_t i = 0; i < regions.size(); ++i) {
+					if (regions[i].name == *name) { out_index = i; return std::nullopt; }
+				}
+				return "no region named: " + *name;
+			}
+			return "specify --index N or --name <region name>";
+		};
+
+		auto parse_rect = [&](const std::string& s, RegionRecord& r) -> std::optional<std::string> {
+			const auto parts = split_csv(s);
+			if (parts.size() != 4) return "--rect must be \"left,bottom,right,top\" (world units)";
+			try {
+				float v[4];
+				for (int i = 0; i < 4; ++i) v[i] = std::stof(parts[i]);
+				// Normalise so left<=right and bottom<=top.
+				r.left = std::min(v[0], v[2]);
+				r.right = std::max(v[0], v[2]);
+				r.bottom = std::min(v[1], v[3]);
+				r.top = std::max(v[1], v[3]);
+				return std::nullopt;
+			} catch (...) { return "--rect values must be numbers"; }
+		};
+
+		auto apply_color = [&](const std::string& s, RegionRecord& r) -> std::optional<std::string> {
+			const auto parts = split_csv(s);
+			if (parts.size() != 3) return "--color must be \"r,g,b\" (0-255)";
+			try {
+				for (int i = 0; i < 3; ++i) r.color[i] = static_cast<uint8_t>(std::clamp(std::stoi(parts[i]), 0, 255));
+				return std::nullopt;
+			} catch (...) { return "--color values must be integers"; }
+		};
+
+		if (args.command == "list-regions") {
+			std::string arr = "[";
+			for (std::size_t i = 0; i < regions.size(); ++i) {
+				if (i) arr += ",";
+				arr += region_to_json(regions[i], i);
+			}
+			arr += "]";
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.number("region_count", regions.size());
+			o.raw("regions", arr);
+			ok = true;
+			return o.dump();
+		}
+
+		if (args.command == "add-region") {
+			const auto name = args.get("name");
+			const auto rect = args.get("rect");
+			if (!name) return error("add-region needs --name <name>");
+			if (!rect) return error("add-region needs --rect \"left,bottom,right,top\" (world units)");
+			RegionRecord r;
+			r.name = *name;
+			if (const auto e = parse_rect(*rect, r)) return error(*e);
+			if (const auto w = args.get("weather")) r.weather_id = *w;
+			if (const auto a = args.get("ambient")) r.ambient_id = *a;
+			if (const auto c = args.get("color")) { if (const auto e = apply_color(*c, r)) return error(*e); }
+			int32_t max_cn = 0;
+			for (const auto& existing : regions) max_cn = std::max(max_cn, existing.creation_number);
+			r.creation_number = max_cn + 1;
+			const std::size_t new_index = regions.size();
+			regions.push_back(r);
+
+			if (!args.has_flag("dry-run")) {
+				if (!write_regions(regions, err)) return error(err);
+			}
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.boolean("dry_run", args.has_flag("dry-run"));
+			o.number("region_count", regions.size());
+			o.raw("added", region_to_json(r, new_index));
+			ok = true;
+			return o.dump();
+		}
+
+		// remove-region / set-region both target an existing region.
+		std::size_t target = 0;
+		if (const auto e = find_index(target)) return error(*e);
+
+		if (args.command == "remove-region") {
+			const RegionRecord removed = regions[target];
+			regions.erase(regions.begin() + target);
+			if (!args.has_flag("dry-run")) {
+				if (!write_regions(regions, err)) return error(err);
+			}
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.boolean("dry_run", args.has_flag("dry-run"));
+			o.number("region_count", regions.size());
+			o.raw("removed", region_to_json(removed, target));
+			ok = true;
+			return o.dump();
+		}
+
+		// set-region
+		RegionRecord& r = regions[target];
+		if (const auto rect = args.get("rect")) { if (const auto e = parse_rect(*rect, r)) return error(*e); }
+		if (const auto rename = args.get("rename")) r.name = *rename;
+		if (const auto w = args.get("weather")) r.weather_id = *w;
+		if (const auto a = args.get("ambient")) r.ambient_id = *a;
+		if (const auto c = args.get("color")) { if (const auto e = apply_color(*c, r)) return error(*e); }
+		if (!args.has_flag("dry-run")) {
+			if (!write_regions(regions, err)) return error(err);
+		}
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.boolean("dry_run", args.has_flag("dry-run"));
+		o.raw("region", region_to_json(r, target));
 		ok = true;
 		return o.dump();
 	}
