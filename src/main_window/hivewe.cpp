@@ -219,6 +219,33 @@ HiveWE::HiveWE(QWidget* parent)
 		window_handler.create_or_raise<AssetManager>(nullptr, created);
 	});
 
+	connect(ui.ribbon->reload_from_disk, &QRibbonButton::clicked, [this]() {
+		if (!map || map->filesystem_path.empty() || !fs::exists(map->filesystem_path / "war3map.w3i")) {
+			QMessageBox::information(this, "Reload from disk", "No map is currently open in folder mode.");
+			return;
+		}
+
+		const fs::path directory = map->filesystem_path;
+		const auto answer = QMessageBox::warning(this, "Reload from disk",
+			"This will re-read the map from:\n" + QString::fromStdString(directory.string()) +
+			"\n\nAny unsaved changes in HiveWE (object editor, terrain, triggers, etc.) will be lost. "
+			"Open editor windows will be closed.\n\nReload now?",
+			QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+
+		if (answer != QMessageBox::Yes) {
+			return;
+		}
+
+		QMessageBox* loading_box = new QMessageBox(QMessageBox::Icon::Information, "Loading Map",
+			"Reloading " + QString::fromStdString(map->name));
+		loading_box->show();
+
+		load_map(directory);
+
+		loading_box->close();
+		delete loading_box;
+	});
+
 	restore_window_state();
 	update_recent_menu();
 

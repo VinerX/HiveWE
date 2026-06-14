@@ -47,6 +47,7 @@ public:
 	QRibbonButton* techtree_viewer = new QRibbonButton;
 	QRibbonButton* model_editor = new QRibbonButton;
 	QRibbonButton* asset_manager = new QRibbonButton;
+	QRibbonButton* reload_from_disk = new QRibbonButton;
 
 	QRibbonButton* terrain_palette = new QRibbonButton;
 	QRibbonButton* doodad_palette = new QRibbonButton;

@@ -44,6 +44,11 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	asset_manager->setText("Asset\nManager");
 	editor_section->addWidget(asset_manager);
 
+	// Rightmost: reload the currently open map from disk (e.g. after the CLI/agent edited the files).
+	reload_from_disk->setIcon(QIcon("data/icons/ribbon/reset.png"));
+	reload_from_disk->setText("Reload\nfrom disk");
+	editor_section->addWidget(reload_from_disk);
+
 	QRibbonSection* palette_section = new QRibbonSection;
 	palette_section->setText("Palette");
 
