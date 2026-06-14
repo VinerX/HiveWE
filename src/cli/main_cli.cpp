@@ -1359,6 +1359,11 @@ int main(int argc, char* argv[]) {
 				   {"list-race-objects", "--map <dir> --suffix <text> [--type all|building|unit|hero] [--warcraft <dir>]"},
 				   {"list-all-races", "--map <dir> [--warcraft <dir>]"},
 				   {"trace-unit", "--map <dir> --id <rawcode> [--depth N] [--format tree|flat|json] [--warcraft <dir>] [--hd]"},
+			   })},
+			  {"notes", json::array({
+				   "Quote any path containing spaces, e.g. --warcraft \"F:/Games/Warcraft III\" and --map \"data/test map\"; otherwise the shell splits it and only the part before the space is used.",
+				   "--warcraft is optional: when omitted it falls back to the HiveWE registry setting (HKCU\\Software\\HiveWE\\HiveWE\\warcraftDirectory).",
+				   "When Warcraft III data (CASC) is unavailable, the map-only paths of show-building / list-race-objects / list-all-races resolve base-object names from data/wc3_name_fallback.tsv.",
 			   })}});
 	}
 
