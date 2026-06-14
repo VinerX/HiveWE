@@ -7,6 +7,26 @@ export module UnitListModel;
 
 import BaseListModel;
 import Globals;
+import TableModel;
+
+namespace {
+	// Editor suffixes on localized (e.g. Russian) maps are stored as "TRIGSTR_xxx"
+	// references rather than literal text, so reading the raw SLK value never matches
+	// what the user sees. Resolve through units_table (EditRole resolves the TRIGSTR and
+	// decodes cp1251/UTF-8) — the same path the Object Editor uses — for both display and
+	// filtering. See [[localized-strings-trigstr]].
+	QString resolved_editor_suffix(const size_t row) {
+		const std::string_view raw = units_slk.data<std::string_view>("editorsuffix", row);
+		if (raw.empty()) {
+			return {};
+		}
+		if (raw.starts_with("TRIGSTR") && units_slk.column_headers.contains("editorsuffix")) {
+			const int col = static_cast<int>(units_slk.column_headers.at("editorsuffix"));
+			return units_table->data(units_table->index(static_cast<int>(row), col), Qt::EditRole).toString();
+		}
+		return QString::fromUtf8(raw);
+	}
+}
 
 export class UnitListModel: public BaseListModel {
 	Q_OBJECT
@@ -30,8 +50,11 @@ export class UnitListModel: public BaseListModel {
 		}
 
 		switch (role) {
-			case Qt::DisplayRole:
-				return mapToSource(index).data(role).toString() + " " + QString::fromUtf8(units_slk.data<std::string_view>("editorsuffix", index.row()));
+			case Qt::DisplayRole: {
+				const QString name = mapToSource(index).data(role).toString();
+				const QString suffix = resolved_editor_suffix(index.row());
+				return suffix.isEmpty() ? name : name + " " + suffix;
+			}
 			case Qt::UserRole:
 				return QString::fromStdString("units/" + units_slk.data("race", index.row()) + "/" + units_slk.index_to_row.at(index.row()));
 			case Qt::DecorationRole:
@@ -58,6 +81,12 @@ export class UnitListFilter: public QSortFilterProxyModel {
 
 		if (filterRace) {
 			if (units_slk.data<std::string_view>("race", sourceRow) != filterRace->toStdString()) {
+				return false;
+			}
+		}
+
+		if (filterSuffix) {
+			if (!resolved_editor_suffix(sourceRow).contains(*filterSuffix, Qt::CaseInsensitive)) {
 				return false;
 			}
 		}
@@ -105,6 +134,7 @@ export class UnitListFilter: public QSortFilterProxyModel {
 	}
 
 	std::optional<QString> filterRace;
+	std::optional<QString> filterSuffix;
 
   public:
 	using QSortFilterProxyModel::QSortFilterProxyModel;
@@ -115,6 +145,13 @@ export class UnitListFilter: public QSortFilterProxyModel {
   		beginFilterChange();
 		filterRace = race;
   		endFilterChange(Direction::Rows);
+	}
+
+	// Case-insensitive "contains" match on the editor suffix; an empty string disables it.
+	void setFilterSuffix(const QString& suffix) {
+		beginFilterChange();
+		filterSuffix = suffix.isEmpty() ? std::nullopt : std::optional<QString>(suffix);
+		endFilterChange(Direction::Rows);
 	}
 };
 

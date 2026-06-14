@@ -29,8 +29,12 @@ export class UnitSelector : public QWidget {
 		filter_model->setFilterRace("human");
 
 		race = new QComboBox(this);
+		suffix = new QLineEdit(this);
 		search = new QLineEdit(this);
 		units = new QListView(this);
+
+		suffix->setPlaceholderText("Editor suffix");
+		suffix->setClearButtonEnabled(true);
 
 		search->setPlaceholderText("Search");
 		search->setClearButtonEnabled(true);
@@ -42,6 +46,7 @@ export class UnitSelector : public QWidget {
 		QVBoxLayout* layout = new QVBoxLayout;
 		layout->setContentsMargins(0, 0, 0, 0);
 		layout->addWidget(race);
+		layout->addWidget(suffix);
 		layout->addWidget(search);
 		layout->addWidget(units);
 		setLayout(layout);
@@ -56,6 +61,8 @@ export class UnitSelector : public QWidget {
 		connect(race, QOverload<int>::of(&QComboBox::currentIndexChanged), [&]() {
 			filter_model->setFilterRace(race->currentData().toString());
 		});
+
+		connect(suffix, &QLineEdit::textChanged, filter_model, &UnitListFilter::setFilterSuffix);
 
 		connect(search, &QLineEdit::textEdited, filter_model, &QSortFilterProxyModel::setFilterFixedString);
 		connect(search, &QLineEdit::returnPressed, [&]() {
@@ -77,6 +84,7 @@ export class UnitSelector : public QWidget {
 	UnitListFilter* filter_model;
 
 	QComboBox* race;
+	QLineEdit* suffix;
 	QLineEdit* search;
 	QListView* units;
 
