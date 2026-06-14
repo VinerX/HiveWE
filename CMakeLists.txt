@@ -156,6 +156,7 @@ target_sources(HiveWE_core PUBLIC FILE_SET core_modules TYPE CXX_MODULES FILES
 	"src/base/imports.ixx"
 	"src/base/safe_move.ixx"
 	"src/base/pathing_analysis.ixx"
+	"src/base/placed_units.ixx"
 )
 target_include_directories(HiveWE_core PUBLIC
 	"src"
@@ -246,3 +247,24 @@ endif()
 file(COPY "${QT_VCPKG_PATH}/Qt6/plugins/platforms/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/platforms")
 file(COPY "${QT_VCPKG_PATH}/Qt6/plugins/styles/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/styles")
 file(COPY "${QT_VCPKG_PATH}/Qt6/plugins/imageformats/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}/imageformats")
+
+if(WIN32)
+	# Ship as a GUI application so end users don't get a console window flashing
+	# alongside the editor. Diagnostics still land in hivewe.log next to the exe.
+	set_target_properties(HiveWE PROPERTIES WIN32_EXECUTABLE TRUE)
+
+	# Bundle the MSVC C++ runtime (vcruntime140*.dll, msvcp140*.dll) next to the
+	# exe. Without it the release only runs on machines that already have the
+	# "Visual C++ 2015-2022 Redistributable" installed (i.e. dev machines with VS);
+	# on a clean machine the loader fails before main() runs and nothing is logged.
+	set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP TRUE)
+	include(InstallRequiredSystemLibraries)
+	if(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS)
+		add_custom_command(TARGET HiveWE POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
+				"$<TARGET_FILE_DIR:HiveWE>"
+			COMMAND_EXPAND_LISTS
+		)
+	endif()
+endif()

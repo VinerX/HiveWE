@@ -1337,7 +1337,8 @@ int main(int argc, char* argv[]) {
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
 									   "list-object-types", "search-objects", "get-object", "get-objects-bulk", "set-field", "copy-object", "batch-edit", "safe-move", "describe-race",
 									   "show-building", "list-race-objects", "list-all-races", "dump-objects", "list-fields", "trace-unit", "pathing-islands", "pathing-path",
-									   "list-regions", "add-region", "remove-region", "set-region"})},
+									   "list-regions", "add-region", "remove-region", "set-region",
+								   "list-units", "add-unit", "remove-unit", "set-unit"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -1366,6 +1367,10 @@ int main(int argc, char* argv[]) {
 				   {"add-region", "--map <dir> --name <name> --rect \"left,bottom,right,top\" (world units) [--weather <id>] [--ambient <id>] [--color r,g,b] [--dry-run]"},
 				   {"remove-region", "--map <dir> (--index N | --name <name>) [--dry-run]"},
 				   {"set-region", "--map <dir> (--index N | --name <name>) [--rect \"l,b,r,t\"] [--rename <new>] [--weather <id>] [--ambient <id>] [--color r,g,b] [--dry-run]"},
+				   {"list-units", "--map <dir> [--player N] [--id <rawcode>] [--rect \"l,b,r,t\"] [--limit N]"},
+				   {"add-unit", "--map <dir> --id <rawcode> --x <world> --y <world> [--z] [--player N] [--angle deg] [--scale m] [--health] [--mana] [--level] [--dry-run]"},
+				   {"remove-unit", "--map <dir> --creation-number N [--dry-run]"},
+				   {"set-unit", "--map <dir> --creation-number N [--player N] [--x] [--y] [--z] [--angle deg] [--scale m] [--health] [--mana] [--level] [--gold] [--dry-run]"},
 			   })},
 			  {"notes", json::array({
 				   "Quote any path containing spaces, e.g. --warcraft \"F:/Games/Warcraft III\" and --map \"data/test map\"; otherwise the shell splits it and only the part before the space is used.",
@@ -1392,7 +1397,9 @@ int main(int argc, char* argv[]) {
 			   args.command == "dump-objects" || args.command == "list-fields" || args.command == "trace-unit" ||
 			   args.command == "pathing-islands" || args.command == "pathing-path" ||
 			   args.command == "list-regions" || args.command == "add-region" ||
-			   args.command == "remove-region" || args.command == "set-region") {
+			   args.command == "remove-region" || args.command == "set-region" ||
+			   args.command == "list-units" || args.command == "add-unit" ||
+			   args.command == "remove-unit" || args.command == "set-unit") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);

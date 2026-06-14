@@ -26,6 +26,7 @@ import Utilities;
 import BinaryReader;
 import BinaryWriter;
 import PathingAnalysis;
+import PlacedUnits;
 
 namespace {
 namespace fs = std::filesystem;
@@ -342,6 +343,47 @@ bool write_regions(const std::vector<RegionRecord>& regions, std::string& err) {
 		err = std::string("failed writing war3map.w3r: ") + e.what();
 		return false;
 	}
+}
+
+// ---- placed units (war3mapUnits.doo) --------------------------------------
+
+std::string placed_unit_to_json(const placed::Unit& u, std::size_t index) {
+	JsonObject o;
+	o.number("index", index);
+	o.str("id", u.id);
+	o.str("skin_id", u.skin_id);
+	o.raw("player", std::to_string(u.player));
+	o.raw("position_world", std::format("[{},{},{}]", u.x, u.y, u.z));
+	o.raw("angle_rad", std::to_string(u.angle));
+	o.raw("angle_deg", std::to_string(u.angle * 180.0 / std::numbers::pi));
+	o.raw("scale", std::format("[{},{},{}]", u.scale_x / 128.f, u.scale_y / 128.f, u.scale_z / 128.f));
+	o.raw("health", std::to_string(static_cast<int32_t>(u.health)));
+	o.raw("mana", std::to_string(static_cast<int32_t>(u.mana)));
+	o.raw("gold", std::to_string(u.gold));
+	o.raw("level", std::to_string(u.level));
+	o.raw("strength", std::to_string(u.strength));
+	o.raw("agility", std::to_string(u.agility));
+	o.raw("intelligence", std::to_string(u.intelligence));
+	o.raw("creation_number", std::to_string(u.creation_number));
+	o.raw("waygate", std::to_string(static_cast<int32_t>(u.waygate)));
+	// Inventory items.
+	std::string inv = "[";
+	for (std::size_t i = 0; i < u.inventory.size(); ++i) {
+		if (i) inv += ",";
+		inv += jstr(u.inventory[i].second);
+	}
+	inv += "]";
+	o.raw("inventory", inv);
+	// Abilities.
+	std::string abil = "[";
+	for (std::size_t i = 0; i < u.abilities.size(); ++i) {
+		if (i) abil += ",";
+		abil += jstr(std::get<0>(u.abilities[i]));
+	}
+	abil += "]";
+	o.raw("abilities", abil);
+	o.raw("dropped_item_sets", std::to_string(u.item_sets.size()));
+	return o.dump();
 }
 
 std::string region_to_json(const RegionRecord& r, std::size_t index) {
@@ -1039,6 +1081,181 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		o.str("map", *map_opt);
 		o.boolean("dry_run", args.has_flag("dry-run"));
 		o.raw("region", region_to_json(r, target));
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- pre-placed units (war3mapUnits.doo), no CASC / object data needed ----
+	if (args.command == "list-units" || args.command == "add-unit" ||
+		args.command == "remove-unit" || args.command == "set-unit") {
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+
+		std::string err;
+		auto file_opt = placed::load(err);
+		placed::File file;
+		if (file_opt) {
+			file = std::move(*file_opt);
+		} else if (args.command != "add-unit") {
+			return error(err);
+		}
+
+		auto find_by_creation = [&](uint32_t cn) -> std::optional<std::size_t> {
+			for (std::size_t i = 0; i < file.units.size(); ++i) {
+				if (file.units[i].creation_number == cn) return i;
+			}
+			return std::nullopt;
+		};
+
+		if (args.command == "list-units") {
+			std::optional<uint32_t> player_filter;
+			if (const auto p = args.get("player")) {
+				try { player_filter = static_cast<uint32_t>(std::stoul(*p)); } catch (...) {}
+			}
+			const auto id_filter = args.get("id");
+			std::optional<std::array<float, 4>> rect; // l,b,r,t
+			if (const auto r = args.get("rect")) {
+				const auto parts = split_csv(*r);
+				if (parts.size() == 4) {
+					try {
+						rect = std::array<float, 4>{ std::stof(parts[0]), std::stof(parts[1]), std::stof(parts[2]), std::stof(parts[3]) };
+					} catch (...) {}
+				}
+			}
+			std::size_t limit = 1000;
+			if (const auto l = args.get("limit")) {
+				try { limit = static_cast<std::size_t>(std::stoul(*l)); } catch (...) {}
+			}
+
+			std::string arr = "[";
+			std::size_t shown = 0, matched = 0;
+			for (std::size_t i = 0; i < file.units.size(); ++i) {
+				const placed::Unit& u = file.units[i];
+				if (player_filter && u.player != *player_filter) continue;
+				if (id_filter && u.id != *id_filter) continue;
+				if (rect) {
+					const float lo_x = std::min((*rect)[0], (*rect)[2]), hi_x = std::max((*rect)[0], (*rect)[2]);
+					const float lo_y = std::min((*rect)[1], (*rect)[3]), hi_y = std::max((*rect)[1], (*rect)[3]);
+					if (u.x < lo_x || u.x > hi_x || u.y < lo_y || u.y > hi_y) continue;
+				}
+				matched++;
+				if (shown >= limit) continue;
+				if (shown) arr += ",";
+				arr += placed_unit_to_json(u, i);
+				shown++;
+			}
+			arr += "]";
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.number("total_placed", file.units.size());
+			o.number("matched", matched);
+			o.number("returned", shown);
+			o.raw("units", arr);
+			ok = true;
+			return o.dump();
+		}
+
+		// Mutating commands share writing.
+		auto deg_to_rad = [](double deg) { return static_cast<float>(deg * std::numbers::pi / 180.0); };
+		auto write_back = [&]() -> std::optional<std::string> {
+			if (args.has_flag("dry-run")) return std::nullopt;
+			std::string werr;
+			if (!placed::save(file, werr)) return werr;
+			return std::nullopt;
+		};
+
+		if (args.command == "add-unit") {
+			const auto id = args.get("id");
+			const auto x = args.get("x");
+			const auto y = args.get("y");
+			if (!id) return error("add-unit needs --id <rawcode>");
+			if (!x || !y) return error("add-unit needs --x and --y (world coordinates)");
+
+			placed::Unit u;
+			try {
+				u.id = *id;
+				u.skin_id = *id;
+				u.x = std::stof(*x);
+				u.y = std::stof(*y);
+				u.z = args.get("z") ? std::stof(*args.get("z")) : 0.f;
+				u.angle = args.get("angle") ? deg_to_rad(std::stod(*args.get("angle"))) : 0.f;
+				const float s = args.get("scale") ? std::stof(*args.get("scale")) : 1.f;
+				u.scale_x = u.scale_y = u.scale_z = s * 128.f;
+				if (const auto p = args.get("player")) u.player = static_cast<uint32_t>(std::stoul(*p));
+				if (const auto hp = args.get("health")) u.health = static_cast<uint32_t>(std::stol(*hp));
+				if (const auto mp = args.get("mana")) u.mana = static_cast<uint32_t>(std::stol(*mp));
+				if (const auto lv = args.get("level")) u.level = static_cast<uint32_t>(std::stoul(*lv));
+			} catch (const std::exception&) {
+				return error("add-unit: numeric option failed to parse");
+			}
+			u.random = { 1, 0, 0, 0 }; // matches HiveWE's Units::add_unit default
+			uint32_t max_cn = 0;
+			for (const auto& existing : file.units) max_cn = std::max(max_cn, existing.creation_number);
+			u.creation_number = max_cn + 1;
+			const std::size_t new_index = file.units.size();
+			file.units.push_back(u);
+
+			if (const auto e = write_back()) return error(*e);
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.boolean("dry_run", args.has_flag("dry-run"));
+			o.number("total_placed", file.units.size());
+			o.raw("added", placed_unit_to_json(u, new_index));
+			ok = true;
+			return o.dump();
+		}
+
+		// remove-unit / set-unit target by creation number (unique & stable).
+		const auto cn_opt = args.get("creation-number");
+		if (!cn_opt) return error(std::string(args.command) + " needs --creation-number N (see list-units)");
+		uint32_t cn = 0;
+		try { cn = static_cast<uint32_t>(std::stoul(*cn_opt)); } catch (...) { return error("invalid --creation-number: " + *cn_opt); }
+		const auto target_opt = find_by_creation(cn);
+		if (!target_opt) return error("no placed unit with creation_number " + *cn_opt);
+		const std::size_t target = *target_opt;
+
+		if (args.command == "remove-unit") {
+			const placed::Unit removed = file.units[target];
+			file.units.erase(file.units.begin() + target);
+			if (const auto e = write_back()) return error(*e);
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.boolean("dry_run", args.has_flag("dry-run"));
+			o.number("total_placed", file.units.size());
+			o.raw("removed", placed_unit_to_json(removed, target));
+			ok = true;
+			return o.dump();
+		}
+
+		// set-unit
+		placed::Unit& u = file.units[target];
+		try {
+			if (const auto p = args.get("player")) u.player = static_cast<uint32_t>(std::stoul(*p));
+			if (const auto x = args.get("x")) u.x = std::stof(*x);
+			if (const auto y = args.get("y")) u.y = std::stof(*y);
+			if (const auto z = args.get("z")) u.z = std::stof(*z);
+			if (const auto a = args.get("angle")) u.angle = deg_to_rad(std::stod(*a));
+			if (const auto s = args.get("scale")) { const float v = std::stof(*s) * 128.f; u.scale_x = u.scale_y = u.scale_z = v; }
+			if (const auto hp = args.get("health")) u.health = static_cast<uint32_t>(std::stol(*hp));
+			if (const auto mp = args.get("mana")) u.mana = static_cast<uint32_t>(std::stol(*mp));
+			if (const auto lv = args.get("level")) u.level = static_cast<uint32_t>(std::stoul(*lv));
+			if (const auto g = args.get("gold")) u.gold = static_cast<uint32_t>(std::stoul(*g));
+		} catch (const std::exception&) {
+			return error("set-unit: numeric option failed to parse");
+		}
+		if (const auto e = write_back()) return error(*e);
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.boolean("dry_run", args.has_flag("dry-run"));
+		o.raw("unit", placed_unit_to_json(u, target));
 		ok = true;
 		return o.dump();
 	}
