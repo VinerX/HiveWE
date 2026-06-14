@@ -155,6 +155,7 @@ target_sources(HiveWE_core PUBLIC FILE_SET core_modules TYPE CXX_MODULES FILES
 	"src/base/sounds.ixx"
 	"src/base/imports.ixx"
 	"src/base/safe_move.ixx"
+	"src/base/pathing_analysis.ixx"
 )
 target_include_directories(HiveWE_core PUBLIC
 	"src"

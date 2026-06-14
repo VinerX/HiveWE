@@ -24,6 +24,7 @@ import Sounds;
 import SafeMove;
 import Utilities;
 import BinaryReader;
+import PathingAnalysis;
 
 namespace {
 namespace fs = std::filesystem;
@@ -225,6 +226,40 @@ std::vector<std::string> split_csv(std::string_view sv) {
 	}
 	out.erase(std::remove_if(out.begin(), out.end(), [](const auto& s) { return s.empty(); }), out.end());
 	return out;
+}
+
+// Parses "x,y" into a pair of doubles. Returns nullopt on malformed input.
+std::optional<std::pair<double, double>> parse_xy(std::string_view sv) {
+	const auto comma = sv.find(',');
+	if (comma == std::string_view::npos) return std::nullopt;
+	try {
+		const double x = std::stod(std::string(sv.substr(0, comma)));
+		const double y = std::stod(std::string(sv.substr(comma + 1)));
+		return std::pair{ x, y };
+	} catch (const std::exception&) {
+		return std::nullopt;
+	}
+}
+
+// Converts an (x, y) in the chosen coordinate system to a pathing cell.
+// system: "world" (default), "tile" (terrain tiles), or "cell" (raw pathing cells).
+// Returns nullopt with `err` set when world coords are requested but no offset is
+// available (no readable war3map.w3e).
+std::optional<std::pair<int, int>> to_cell(const pathing::Grid& grid, std::string_view system,
+										   double x, double y, std::string& err) {
+	if (system == "cell") {
+		return std::pair{ static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)) };
+	}
+	if (system == "tile") {
+		return std::pair{ static_cast<int>(std::lround(x * 4.0)), static_cast<int>(std::lround(y * 4.0)) };
+	}
+	// world
+	if (!grid.has_offset) {
+		err = "world coordinates need the terrain offset from war3map.w3e, which could not be read; "
+			  "pass --coords cell or --coords tile instead";
+		return std::nullopt;
+	}
+	return std::pair{ grid.world_to_cell_x(static_cast<float>(x)), grid.world_to_cell_y(static_cast<float>(y)) };
 }
 
 std::string changelog_ts() {
@@ -565,6 +600,206 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 	}
 	if (!std::filesystem::is_directory(*map_opt)) {
 		return error("map folder not found: " + *map_opt);
+	}
+
+	// ---- terrain traversability (war3map.wpm), no CASC / object data needed ----
+	if (args.command == "pathing-islands" || args.command == "pathing-path") {
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+
+		const std::string move_str = args.get("move").value_or("foot");
+		const auto move_opt = pathing::parse_move_type(move_str);
+		if (!move_opt) {
+			return error("unknown --move '" + move_str + "' (expected foot|water|amphibious|fly)");
+		}
+		const pathing::MoveType move = *move_opt;
+
+		std::string load_err;
+		const auto grid_opt = pathing::load_grid(load_err);
+		if (!grid_opt) {
+			return error(load_err);
+		}
+		const pathing::Grid& grid = *grid_opt;
+
+		JsonObject grid_obj;
+		grid_obj.number("cells_wide", static_cast<std::size_t>(grid.width));
+		grid_obj.number("cells_high", static_cast<std::size_t>(grid.height));
+		grid_obj.boolean("has_world_offset", grid.has_offset);
+		if (grid.has_offset) {
+			grid_obj.raw("offset_x", std::to_string(grid.offset_x));
+			grid_obj.raw("offset_y", std::to_string(grid.offset_y));
+		}
+
+		if (args.command == "pathing-islands") {
+			const pathing::Components comps = pathing::connected_components(grid, move);
+
+			std::size_t min_cells = 1;
+			if (const auto m = args.get("min-cells")) {
+				try { min_cells = static_cast<std::size_t>(std::stoul(*m)); } catch (...) {}
+			}
+			std::size_t limit = 50;
+			if (const auto l = args.get("limit")) {
+				try { limit = static_cast<std::size_t>(std::stoul(*l)); } catch (...) {}
+			}
+
+			std::string arr = "[";
+			std::size_t shown = 0;
+			std::size_t total_shown = 0;
+			for (const auto& c : comps.components) {
+				if (c.cell_count < min_cells) continue;
+				total_shown++;
+				if (shown >= limit) continue;
+				if (shown) arr += ",";
+				shown++;
+
+				const double cx = c.sum_x / static_cast<double>(c.cell_count);
+				const double cy = c.sum_y / static_cast<double>(c.cell_count);
+
+				JsonObject island;
+				island.number("id", static_cast<std::size_t>(c.id));
+				island.number("cells", c.cell_count);
+				// Each cell is 32x32 world units.
+				island.raw("area_world", std::to_string(static_cast<double>(c.cell_count) * 32.0 * 32.0));
+				island.raw("bbox_cell", std::format("[{},{},{},{}]", c.min_x, c.min_y, c.max_x, c.max_y));
+				island.raw("centroid_cell", std::format("[{},{}]",
+					static_cast<int>(std::lround(cx)), static_cast<int>(std::lround(cy))));
+				if (grid.has_offset) {
+					island.raw("bbox_world", std::format("[{},{},{},{}]",
+						grid.cell_to_world_x(c.min_x), grid.cell_to_world_y(c.min_y),
+						grid.cell_to_world_x(c.max_x), grid.cell_to_world_y(c.max_y)));
+					island.raw("centroid_world", std::format("[{},{}]",
+						grid.cell_to_world_x(static_cast<int>(std::lround(cx))),
+						grid.cell_to_world_y(static_cast<int>(std::lround(cy)))));
+				}
+				arr += island.dump();
+			}
+			arr += "]";
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.str("move", pathing::move_type_name(move));
+			o.raw("grid", grid_obj.dump());
+			o.number("island_count", static_cast<std::size_t>(comps.count));
+			o.number("islands_returned", shown);
+			o.number("islands_matching_filter", total_shown);
+			o.raw("islands", arr);
+			ok = true;
+			return o.dump();
+		}
+
+		// pathing-path
+		const std::string system = args.get("coords").value_or("world");
+		if (system != "world" && system != "tile" && system != "cell") {
+			return error("unknown --coords '" + system + "' (expected world|tile|cell)");
+		}
+		const auto from_opt = args.get("from");
+		const auto to_opt = args.get("to");
+		if (!from_opt || !to_opt) {
+			return error("pathing-path needs --from \"x,y\" and --to \"x,y\"");
+		}
+		const auto from_xy = parse_xy(*from_opt);
+		const auto to_xy = parse_xy(*to_opt);
+		if (!from_xy || !to_xy) {
+			return error("--from/--to must be \"x,y\" (e.g. --from \"512,-1024\")");
+		}
+
+		std::string conv_err;
+		const auto start_cell = to_cell(grid, system, from_xy->first, from_xy->second, conv_err);
+		if (!start_cell) return error(conv_err);
+		const auto goal_cell = to_cell(grid, system, to_xy->first, to_xy->second, conv_err);
+		if (!goal_cell) return error(conv_err);
+
+		// Approximate coordinates (e.g. a unit position on an unwalkable footprint)
+		// snap to the nearest passable cell within --snap-radius (Chebyshev), unless
+		// --no-snap is given.
+		const int snap_radius = args.has_flag("no-snap") ? 0 : [&] {
+			if (const auto s = args.get("snap-radius")) {
+				try { return std::max(0, std::stoi(*s)); } catch (...) {}
+			}
+			return 16;
+		}();
+		auto snap_cell = [&](std::pair<int, int> c) -> std::pair<int, int> {
+			if (snap_radius <= 0) return c;
+			return pathing::nearest_passable(grid, move, c.first, c.second, snap_radius).value_or(c);
+		};
+
+		// Optional portals: "ax,ay->bx,by;cx,cy->dx,dy" in the same coordinate system.
+		std::vector<pathing::Portal> portals;
+		if (const auto portal_arg = args.get("portals")) {
+			std::stringstream ss(*portal_arg);
+			std::string segment;
+			while (std::getline(ss, segment, ';')) {
+				const auto arrow = segment.find("->");
+				if (arrow == std::string::npos) continue;
+				const auto a = parse_xy(segment.substr(0, arrow));
+				const auto b = parse_xy(segment.substr(arrow + 2));
+				if (!a || !b) continue;
+				const auto ac = to_cell(grid, system, a->first, a->second, conv_err);
+				const auto bc = to_cell(grid, system, b->first, b->second, conv_err);
+				if (ac && bc) {
+					const auto sa = snap_cell(*ac);
+					const auto sb = snap_cell(*bc);
+					portals.push_back({ sa.first, sa.second, sb.first, sb.second });
+				}
+			}
+		}
+
+		const bool oob_start = !grid.in_bounds(start_cell->first, start_cell->second);
+		const bool oob_goal = !grid.in_bounds(goal_cell->first, goal_cell->second);
+		if (oob_start || oob_goal) {
+			return error(std::format("coordinate maps outside the grid ({}x{} cells): {}",
+				grid.width, grid.height, oob_start ? "--from" : "--to"));
+		}
+
+		const std::pair<int, int> eff_start = snap_cell(*start_cell);
+		const std::pair<int, int> eff_goal = snap_cell(*goal_cell);
+		const bool start_snapped = eff_start != *start_cell;
+		const bool goal_snapped = eff_goal != *goal_cell;
+
+		const pathing::PathResult path = pathing::find_path(
+			grid, move, eff_start.first, eff_start.second, eff_goal.first, eff_goal.second, portals);
+
+		// Same-island check (ignores portals): are both endpoints in one component?
+		const pathing::Components comps = pathing::connected_components(grid, move);
+		const int start_label = comps.labels[grid.index(eff_start.first, eff_start.second)];
+		const int goal_label = comps.labels[grid.index(eff_goal.first, eff_goal.second)];
+
+		std::string waypoints = "[";
+		for (std::size_t i = 0; i < path.cells.size(); ++i) {
+			if (i) waypoints += ",";
+			const auto [wx, wy] = path.cells[i];
+			JsonObject wp;
+			wp.raw("cell", std::format("[{},{}]", wx, wy));
+			if (grid.has_offset) {
+				wp.raw("world", std::format("[{},{}]", grid.cell_to_world_x(wx), grid.cell_to_world_y(wy)));
+			}
+			waypoints += wp.dump();
+		}
+		waypoints += "]";
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("move", pathing::move_type_name(move));
+		o.str("coords", system);
+		o.raw("grid", grid_obj.dump());
+		o.raw("start_cell", std::format("[{},{}]", eff_start.first, eff_start.second));
+		o.raw("goal_cell", std::format("[{},{}]", eff_goal.first, eff_goal.second));
+		o.boolean("start_snapped", start_snapped);
+		o.boolean("goal_snapped", goal_snapped);
+		if (start_snapped) o.raw("start_requested_cell", std::format("[{},{}]", start_cell->first, start_cell->second));
+		if (goal_snapped) o.raw("goal_requested_cell", std::format("[{},{}]", goal_cell->first, goal_cell->second));
+		o.boolean("reachable", path.reachable);
+		o.boolean("same_island", start_label != -1 && start_label == goal_label);
+		o.boolean("used_portal", path.used_portal);
+		o.raw("cost_cells", std::to_string(path.cost));
+		o.raw("length_world", std::to_string(path.cost * 32.0));
+		o.number("waypoint_count", path.cells.size());
+		o.raw("waypoints", waypoints);
+		ok = true;
+		return o.dump();
 	}
 
 	if (args.command == "describe-race") {

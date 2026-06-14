@@ -1336,7 +1336,7 @@ int main(int argc, char* argv[]) {
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
 									   "list-object-types", "search-objects", "get-object", "get-objects-bulk", "set-field", "copy-object", "batch-edit", "safe-move", "describe-race",
-									   "show-building", "list-race-objects", "list-all-races", "dump-objects", "list-fields", "trace-unit"})},
+									   "show-building", "list-race-objects", "list-all-races", "dump-objects", "list-fields", "trace-unit", "pathing-islands", "pathing-path"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -1359,6 +1359,8 @@ int main(int argc, char* argv[]) {
 				   {"list-race-objects", "--map <dir> --suffix <text> [--type all|building|unit|hero] [--warcraft <dir>]"},
 				   {"list-all-races", "--map <dir> [--warcraft <dir>]"},
 				   {"trace-unit", "--map <dir> --id <rawcode> [--depth N] [--format tree|flat|json] [--warcraft <dir>] [--hd]"},
+				   {"pathing-islands", "--map <dir> [--move foot|water|amphibious|fly] [--min-cells N] [--limit N]"},
+				   {"pathing-path", "--map <dir> --from \"x,y\" --to \"x,y\" [--move foot|water|amphibious|fly] [--coords world|tile|cell] [--portals \"ax,ay->bx,by;...\"] [--snap-radius 16] [--no-snap]"},
 			   })},
 			  {"notes", json::array({
 				   "Quote any path containing spaces, e.g. --warcraft \"F:/Games/Warcraft III\" and --map \"data/test map\"; otherwise the shell splits it and only the part before the space is used.",
@@ -1382,7 +1384,8 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
 			   args.command == "get-object" || args.command == "get-objects-bulk" || args.command == "set-field" || args.command == "copy-object" || args.command == "batch-edit" || args.command == "describe-race" ||
 			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races" ||
-			   args.command == "dump-objects" || args.command == "list-fields" || args.command == "trace-unit") {
+			   args.command == "dump-objects" || args.command == "list-fields" || args.command == "trace-unit" ||
+			   args.command == "pathing-islands" || args.command == "pathing-path") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(effective_argc, effective_argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);
