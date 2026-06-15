@@ -16,6 +16,10 @@
 #include "DockManager.h"
 
 #ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+
 // To force HiveWE to run on the discrete GPU if available
 extern "C" {
 __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -37,19 +41,67 @@ import GLThreadPool;
 import WindowHandler;
 namespace fs = std::filesystem;
 
+// Absolute path to the log file, fixed to the exe directory so logging works
+// regardless of the current working directory (e.g. when a user launches via a
+// shortcut). Set once at startup; read by the terminate handler (which must be
+// a captureless function for std::set_terminate).
+static std::string g_log_path = "hivewe.log";
+
+// Write a line to the log file, flushed, and echo to the console only when one
+// is attached (a GUI-subsystem build has no console, so std::println would have
+// nowhere to go).
+static void write_log_line(const std::string& msg) {
+	std::ofstream log(g_log_path, std::ios::app);
+	log << msg << "\n";
+	log.flush();
+#ifdef WIN32
+	if (GetConsoleWindow() == nullptr) {
+		return;
+	}
+#endif
+	std::println("{}", msg);
+}
+
+// Route Qt diagnostics (qWarning/qCritical/qFatal) into the same log file.
+// Without this, early failures reported via qWarning (e.g. a missing theme)
+// only reach stderr and are lost in a GUI-subsystem release.
+static void qt_message_to_log(QtMsgType type, const QMessageLogContext&, const QString& message) {
+	const char* level = "[QT]";
+	switch (type) {
+		case QtDebugMsg:    level = "[QT][debug]"; break;
+		case QtInfoMsg:     level = "[QT][info]"; break;
+		case QtWarningMsg:  level = "[QT][warning]"; break;
+		case QtCriticalMsg: level = "[QT][critical]"; break;
+		case QtFatalMsg:    level = "[QT][fatal]"; break;
+	}
+	write_log_line(std::string(level) + " " + message.toStdString());
+}
+
 int main(int argc, char* argv[]) {
 	ZoneScopedN("main");
 
 	Timer start_timer;
 
+#ifdef WIN32
+	// Pin the working directory and log path to the exe's folder. The release
+	// resolves "data/...", themes and the log relative to the CWD; launching via
+	// a shortcut or from another folder otherwise breaks all of these silently.
+	{
+		wchar_t module_path[MAX_PATH] = {};
+		const DWORD len = GetModuleFileNameW(nullptr, module_path, MAX_PATH);
+		if (len > 0 && len < MAX_PATH) {
+			const fs::path exe_dir = fs::path(std::wstring(module_path, len)).parent_path();
+			SetCurrentDirectoryW(exe_dir.c_str());
+			g_log_path = (exe_dir / "hivewe.log").string();
+		}
+	}
+#endif
+
 	// Diagnostic logging: startup failures are otherwise lost because stdout is
 	// buffered and an unhandled exception aborts the process (0xC0000409) before
 	// the buffer is flushed. Write to a flushed log file next to the exe.
 	const auto log_line = [](const std::string& msg) {
-		std::ofstream log("hivewe.log", std::ios::app);
-		log << msg << "\n";
-		log.flush();
-		std::println("{}", msg);
+		write_log_line(msg);
 	};
 
 	std::set_terminate([] {
@@ -63,12 +115,11 @@ int main(int argc, char* argv[]) {
 				msg = "[FATAL] Unhandled non-std exception";
 			}
 		}
-		std::ofstream log("hivewe.log", std::ios::app);
-		log << msg << "\n";
-		log.flush();
-		std::println("{}", msg);
+		write_log_line(msg);
 		std::abort();
 	});
+
+	qInstallMessageHandler(qt_message_to_log);
 
 	QSurfaceFormat format;
 	format.setDepthBufferSize(24);
@@ -196,10 +247,13 @@ int main(int argc, char* argv[]) {
 
 	if (!is_casc_open) {
 		fs::path directory = warcraft_directory();
+		log_line("[WARN] Could not open Warcraft III data (CASC) at '" + directory.string() + "'. Prompting for the install folder. "
+				 "HiveWE needs an installed Warcraft III to read base game data.");
 
 		while (!hierarchy.open_casc(directory)) {
-			directory = QFileDialog::getExistingDirectory(nullptr, "Select Warcraft Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();
+			directory = QFileDialog::getExistingDirectory(nullptr, "Select Warcraft III Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();
 			if (directory == "") {
+				log_line("[FATAL] No Warcraft III installation selected; cannot load base game data. Exiting.");
 				exit(EXIT_SUCCESS);
 			}
 		}

@@ -1,0 +1,46 @@
+HiveWE (VinerX Edition) - System requirements
+=============================================
+
+If HiveWE does not start, check this list. On startup HiveWE writes a log file
+named "hivewe.log" next to HiveWE.exe - open it; the last lines say how far it
+got and name anything that is missing.
+
+REQUIRED (HiveWE cannot run without these)
+------------------------------------------
+
+1. Windows 10 or 11, 64-bit.
+   Older Windows is missing the Universal C Runtime (api-ms-win-crt-*.dll). If
+   you must run Windows 7/8.1, install all Windows Updates or the "Update for
+   Universal C Runtime" (Microsoft KB2999226).
+
+2. A graphics card and driver supporting OpenGL 4.5.
+   This is the most common reason the editor will not open. HiveWE renders the
+   terrain with OpenGL 4.5 and cannot fall back to software rendering.
+   - Update your GPU drivers (NVIDIA / AMD / Intel).
+   - Most discrete GPUs since ~2014 and Intel HD since Skylake support 4.5.
+   - Remote Desktop (RDP) and many virtual machines expose only OpenGL 1.1 -
+     run HiveWE on the physical machine instead.
+   If OpenGL is too old, HiveWE now shows a dialog and writes the detected
+   version + GPU name to hivewe.log (line starting with "[INFO] OpenGL ...").
+
+3. Warcraft III installed (Reforged or Classic 1.31+).
+   HiveWE reads the base unit/ability/tile data from the game's files. On first
+   run it auto-detects the install; if it cannot, it asks you to pick the
+   Warcraft III folder. Cancelling that dialog exits HiveWE (logged as
+   "[FATAL] No Warcraft III installation selected").
+
+BUNDLED (already included in this zip - nothing to install)
+-----------------------------------------------------------
+
+- The Microsoft Visual C++ runtime (vcruntime140*.dll, msvcp140*.dll). These
+  ship in this folder; you do NOT need to install the "Visual C++
+  Redistributable" separately.
+- Qt 6 and all other dependency DLLs, plus the platforms/, styles/ and
+  imageformats/ plugin folders. Keep the whole folder together - do not move
+  HiveWE.exe out on its own.
+
+HOW TO RUN
+----------
+
+Unzip the WHOLE folder somewhere (not inside the zip viewer), then run
+HiveWE.exe (or run_hivewe.bat). If it still fails, send hivewe.log to the author.

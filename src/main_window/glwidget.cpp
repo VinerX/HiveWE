@@ -2,6 +2,7 @@
 
 #include <QTimer>
 #include <QPainter>
+#include <QMessageBox>
 
 #include <tracy/Tracy.hpp>
 
@@ -117,12 +118,54 @@ GLWidget::GLWidget(QWidget* parent) : QOpenGLWidget(parent) {
 	});
 }
 
+// Append one line to hivewe.log next to the exe. main() pins the working
+// directory to the exe folder at startup, so the relative path resolves there
+// (and matches where main()'s own logger writes).
+static void gl_startup_log(const std::string& msg) {
+	std::ofstream log("hivewe.log", std::ios::app);
+	log << msg << "\n";
+	log.flush();
+}
+
 void GLWidget::initializeGL() {
+	// OpenGL 4.5 is a hard, unavoidable dependency (HiveWE renders the terrain
+	// with a 4.5 core-profile context). On machines without a real GPU driver
+	// (software OpenGL 1.1, Remote Desktop, a VM without 3D acceleration, very old
+	// integrated graphics) this fails. Previously the failure was a silent
+	// exit(-1) to an invisible stdout; now it is logged and shown to the user.
 	if (!gladLoadGL()) {
-		std::println("Something went wrong initializing GLAD");
-		exit(-1);
+		gl_startup_log("[FATAL] OpenGL initialization failed: could not load OpenGL functions (gladLoadGL). "
+					   "HiveWE requires a GPU and driver supporting OpenGL 4.5.");
+		QMessageBox::critical(nullptr, "HiveWE - OpenGL error",
+			"HiveWE could not initialize OpenGL.\n\n"
+			"It requires a graphics card and driver supporting OpenGL 4.5.\n"
+			"• Update your graphics drivers.\n"
+			"• If you are using Remote Desktop or a virtual machine, run HiveWE locally instead.\n\n"
+			"Details were written to hivewe.log next to HiveWE.exe.");
+		std::exit(-1);
 	}
-	std::println("OpenGL {}.{}", GLVersion.major, GLVersion.minor);
+
+	const char* gl_version  = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+	const char* gl_renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+	const char* gl_vendor   = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+	gl_startup_log(std::format("[INFO] OpenGL {}.{} | version=\"{}\" renderer=\"{}\" vendor=\"{}\"",
+		GLVersion.major, GLVersion.minor,
+		gl_version ? gl_version : "?", gl_renderer ? gl_renderer : "?", gl_vendor ? gl_vendor : "?"));
+
+	if (GLVersion.major < 4 || (GLVersion.major == 4 && GLVersion.minor < 5)) {
+		gl_startup_log(std::format("[FATAL] OpenGL 4.5 required but the driver provides only {}.{} (renderer: {}). Aborting.",
+			GLVersion.major, GLVersion.minor, gl_renderer ? gl_renderer : "?"));
+		QMessageBox::critical(nullptr, "HiveWE - OpenGL too old",
+			QString::fromStdString(std::format(
+				"HiveWE requires OpenGL 4.5, but your system provides only OpenGL {}.{}.\n\n"
+				"Renderer: {}\n\n"
+				"• Update your graphics drivers.\n"
+				"• A dedicated GPU may be required.\n"
+				"• Remote Desktop and some virtual machines cap OpenGL at 1.1 - run locally.\n\n"
+				"Details were written to hivewe.log next to HiveWE.exe.",
+				GLVersion.major, GLVersion.minor, gl_renderer ? gl_renderer : "?")));
+		std::exit(-1);
+	}
 
 	glEnable(GL_DEBUG_OUTPUT);
 	glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
