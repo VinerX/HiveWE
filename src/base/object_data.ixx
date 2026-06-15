@@ -264,6 +264,67 @@ void load_base_object_data(Logger&& log_phase) {
 	buff_future.get();
 }
 
+// Outcome of a 3-way merge of one object-data cell (a single id+field override).
+// Each side is the map's shadow override (std::nullopt = no override = base game
+// value). base = the override at map-load time; mine = current in-editor state;
+// theirs = the state now on disk (e.g. edited by the CLI/agent).
+export enum class CellMerge {
+	unchanged,   // mine == theirs (nothing to do)
+	take_mine,   // only the editor changed this cell
+	take_theirs, // only the disk changed this cell
+	conflict     // both changed it differently — needs resolution
+};
+
+export inline CellMerge classify_cell_merge(const std::optional<std::string>& base,
+											 const std::optional<std::string>& mine,
+											 const std::optional<std::string>& theirs) {
+	if (mine == theirs) {
+		return CellMerge::unchanged;
+	}
+	if (mine == base) {
+		return CellMerge::take_theirs;
+	}
+	if (theirs == base) {
+		return CellMerge::take_mine;
+	}
+	return CellMerge::conflict;
+}
+
+// A single object-data cell whose editor (mine) and on-disk (theirs) states both
+// diverged from the load-time baseline — the user must pick which to keep.
+export struct ObjectMergeConflict {
+	std::string table;  // "unit","item","ability","doodad","destructible","upgrade","buff"
+	std::string id;     // object rawcode
+	std::string field;  // SLK column
+	std::optional<std::string> base, mine, theirs; // std::nullopt = no override (base game value)
+	bool take_theirs = true; // resolution; defaults to the on-disk value
+};
+
+// An auto-resolved cell change to apply to the live SLK (std::nullopt = remove the
+// override, reverting to the base game value).
+export struct ObjectMergeChange {
+	int table_index = 0;
+	std::string id;
+	std::string field;
+	std::optional<std::string> value;
+};
+
+// A custom object present on disk but not in the editor; its row must be created
+// (copied from oldid) before its fields are applied.
+export struct ObjectMergeRowAdd {
+	int table_index = 0;
+	std::string id;
+	std::string oldid;
+};
+
+export struct ObjectMergePlan {
+	std::vector<ObjectMergeChange> changes;
+	std::vector<ObjectMergeConflict> conflicts;
+	std::vector<ObjectMergeRowAdd> row_adds;
+
+	[[nodiscard]] bool empty() const { return changes.empty() && conflicts.empty() && row_adds.empty(); }
+};
+
 export void load_map_object_data() {
 	if (hierarchy.map_file_exists("war3map.w3d")) {
 		load_modification_file("war3map.w3d", doodads_slk, doodads_meta_slk, true);

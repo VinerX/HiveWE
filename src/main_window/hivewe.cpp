@@ -17,6 +17,7 @@ import ResourceManager;
 import "pathing_palette.h";
 import "object_editor/object_editor.h";
 import "object_editor/spreadsheet_editor.h";
+import "object_editor/object_merge_dialog.h";
 #include "object_editor/techtree_viewer.h"
 import "model_editor/model_editor.h";
 import "tile_setter.h";
@@ -252,20 +253,32 @@ HiveWE::HiveWE(QWidget* parent)
 			return;
 		}
 
-		const auto answer = QMessageBox::warning(this, "Merge object data from disk",
-			"This re-reads only the object data (units, items, abilities, doodads, "
-			"destructibles, upgrades, buffs) from disk, keeping your terrain, "
-			"placements and triggers in memory.\n\nUse it to pick up object-data edits "
-			"made by the CLI/agent. Any unsaved object-data changes in HiveWE will be "
-			"lost, and open Object/Spreadsheet editors will refresh.\n\nMerge now?",
-			QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+		ui.widget->makeCurrent();
+		ObjectMergePlan plan = map->compute_object_merge();
 
-		if (answer != QMessageBox::Yes) {
+		if (plan.empty()) {
+			QMessageBox::information(this, "Merge object data",
+				"No object-data differences between the editor and the files on disk.");
 			return;
 		}
 
-		ui.widget->makeCurrent();
-		map->reload_object_data();
+		// Conflicts (both sides changed the same cell) need a decision; the rest merges
+		// automatically while keeping your in-editor edits.
+		if (!plan.conflicts.empty()) {
+			ObjectMergeDialog dialog(plan, this);
+			if (dialog.exec() != QDialog::Accepted) {
+				return;
+			}
+		}
+
+		const std::size_t auto_count = plan.changes.size() + plan.row_adds.size();
+		const std::size_t conflict_count = plan.conflicts.size();
+		map->apply_object_merge(plan);
+
+		QMessageBox::information(this, "Merge object data",
+			QString("Merged %1 change(s) from disk and resolved %2 conflict(s). "
+					"Your other in-editor edits were kept.")
+				.arg(auto_count).arg(conflict_count));
 	});
 
 	restore_window_state();
