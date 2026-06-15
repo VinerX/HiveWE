@@ -63,7 +63,12 @@ std::string move_type_name(MoveType mt) {
 struct Grid {
 	int width = 0;
 	int height = 0;
-	std::vector<uint8_t> cells; // size width*height
+	std::vector<uint8_t> cells; // war3map.wpm flags, size width*height
+	// Per-cell water flag taken from the terrain (war3map.w3e), NOT the unreliable
+	// wpm water bit. Empty when the terrain could not be read (then we fall back to
+	// the wpm bit). Size width*height when present.
+	std::vector<uint8_t> water_mask;
+	bool has_water_mask = false;
 	// Terrain centre offset from war3map.w3e, used for world <-> cell conversion.
 	float offset_x = 0.f;
 	float offset_y = 0.f;
@@ -73,6 +78,28 @@ struct Grid {
 	bool in_bounds(int x, int y) const { return x >= 0 && y >= 0 && x < width && y < height; }
 	int index(int x, int y) const { return y * width + x; }
 
+	bool is_water(int x, int y) const {
+		if (has_water_mask) {
+			return water_mask[static_cast<std::size_t>(y) * width + x] != 0;
+		}
+		return (at(x, y) & water) != 0; // fallback to the (unreliable) wpm bit
+	}
+
+	// Whether the given movement type can occupy cell (x, y). The water surface comes
+	// from the terrain; ground/air blocking comes from the wpm. Deep water is already
+	// flagged unwalkable in the wpm, so foot = "not unwalkable" (it includes shallow
+	// wadeable water and excludes deep ocean).
+	bool passable(int x, int y, MoveType mt) const {
+		const uint8_t cell = at(x, y);
+		switch (mt) {
+			case MoveType::foot: return (cell & unwalkable) == 0;
+			case MoveType::water: return is_water(x, y);
+			case MoveType::amphibious: return is_water(x, y) || (cell & unwalkable) == 0;
+			case MoveType::fly: return (cell & unflyable) == 0;
+		}
+		return false;
+	}
+
 	// World units -> pathing cell (rounded). Requires has_offset.
 	int world_to_cell_x(float wx) const { return static_cast<int>(std::lround((wx - offset_x) / 32.f)); }
 	int world_to_cell_y(float wy) const { return static_cast<int>(std::lround((wy - offset_y) / 32.f)); }
@@ -81,22 +108,13 @@ struct Grid {
 	float cell_to_world_y(int cy) const { return offset_y + (cy + 0.5f) * 32.f; }
 };
 
-inline bool passable(uint8_t cell, MoveType mt) {
-	const bool is_water = (cell & water) != 0;
-	const bool blocked = (cell & unwalkable) != 0;
-	switch (mt) {
-		case MoveType::foot: return !blocked && !is_water;
-		case MoveType::water: return is_water;
-		case MoveType::amphibious: return is_water || !blocked;
-		case MoveType::fly: return (cell & unflyable) == 0;
-	}
-	return false;
-}
-
-// Reads only what we need from war3map.w3e: the centre offset (for world<->cell).
-// Best-effort: on any failure the grid simply keeps has_offset = false and callers
-// fall back to cell/tile coordinates.
-inline void try_load_offset(Grid& grid) {
+// Reads the terrain (war3map.w3e): the centre offset (for world<->cell) and the
+// authoritative per-tile water flag, which it rasterises onto the pathing grid
+// (4x resolution). The wpm "water" bit is unreliable — open ocean is often not
+// flagged there and some land is — so the terrain flag is the correct source for
+// where water actually is. Best-effort: on failure has_offset/has_water_mask stay
+// false and callers fall back.
+inline void load_terrain_water(Grid& grid) {
 	auto result = hierarchy.map_file_read("war3map.w3e");
 	if (!result.has_value()) {
 		return;
@@ -106,20 +124,51 @@ inline void try_load_offset(Grid& grid) {
 		if (reader.read_string(4) != "W3E!") {
 			return;
 		}
-		(void)reader.read<uint32_t>();    // version
+		const uint32_t version = reader.read<uint32_t>();
 		(void)reader.read<char>();        // tileset
 		reader.advance(4);                // custom tileset flag
 		const uint32_t ground_textures = reader.read<uint32_t>();
 		for (uint32_t i = 0; i < ground_textures; ++i) (void)reader.read_string(4);
 		const uint32_t cliff_textures = reader.read<uint32_t>();
 		for (uint32_t i = 0; i < cliff_textures; ++i) (void)reader.read_string(4);
-		(void)reader.read<uint32_t>();    // width  (corners)
-		(void)reader.read<uint32_t>();    // height (corners)
+		const uint32_t tw = reader.read<uint32_t>(); // corner columns
+		const uint32_t th = reader.read<uint32_t>(); // corner rows
 		grid.offset_x = reader.read<float>();
 		grid.offset_y = reader.read<float>();
 		grid.has_offset = true;
+
+		if (tw == 0 || th == 0) {
+			return;
+		}
+
+		// Per-corner water flag.
+		std::vector<uint8_t> tile_water(static_cast<std::size_t>(tw) * th, 0);
+		for (std::size_t i = 0; i < static_cast<std::size_t>(tw) * th; ++i) {
+			(void)reader.read<uint16_t>(); // ground height
+			(void)reader.read<uint16_t>(); // water height + edge flag
+			if (version >= 11) {
+				const uint16_t flags = reader.read<uint16_t>();
+				tile_water[i] = (flags & 0x0100) ? 1 : 0;
+			} else {
+				const uint8_t flags = reader.read<uint8_t>();
+				tile_water[i] = (flags & 0x40) ? 1 : 0;
+			}
+			(void)reader.read<uint8_t>();  // variation
+			(void)reader.read<uint8_t>();  // misc (cliff texture / layer height)
+		}
+
+		// Rasterise onto the 4x pathing grid: cell (cx, cy) samples corner (cx/4, cy/4).
+		grid.water_mask.assign(static_cast<std::size_t>(grid.width) * grid.height, 0);
+		for (int cy = 0; cy < grid.height; ++cy) {
+			const std::size_t ty = std::min<std::size_t>(static_cast<std::size_t>(cy) / 4, th - 1);
+			for (int cx = 0; cx < grid.width; ++cx) {
+				const std::size_t tx = std::min<std::size_t>(static_cast<std::size_t>(cx) / 4, tw - 1);
+				grid.water_mask[static_cast<std::size_t>(cy) * grid.width + cx] = tile_water[ty * tw + tx];
+			}
+		}
+		grid.has_water_mask = true;
 	} catch (...) {
-		grid.has_offset = false;
+		grid.has_water_mask = false;
 	}
 }
 
@@ -147,7 +196,7 @@ inline std::optional<Grid> load_grid(std::string& error) {
 			return std::nullopt;
 		}
 		grid.cells = reader.read_vector<uint8_t>(static_cast<std::size_t>(grid.width) * grid.height);
-		try_load_offset(grid);
+		load_terrain_water(grid);
 		return grid;
 	} catch (const std::exception& e) {
 		error = std::string("failed parsing war3map.wpm: ") + e.what();
@@ -161,7 +210,7 @@ inline std::optional<Grid> load_grid(std::string& error) {
 // sits on an unwalkable footprint), so snapping makes path queries robust.
 inline std::optional<std::pair<int, int>> nearest_passable(const Grid& grid, MoveType mt,
 														   int x, int y, int max_radius) {
-	if (grid.in_bounds(x, y) && passable(grid.at(x, y), mt)) {
+	if (grid.in_bounds(x, y) && grid.passable(x, y, mt)) {
 		return std::pair{ x, y };
 	}
 	for (int r = 1; r <= max_radius; ++r) {
@@ -170,7 +219,7 @@ inline std::optional<std::pair<int, int>> nearest_passable(const Grid& grid, Mov
 				if (std::max(std::abs(dx), std::abs(dy)) != r) continue; // ring only
 				const int nx = x + dx;
 				const int ny = y + dy;
-				if (grid.in_bounds(nx, ny) && passable(grid.at(nx, ny), mt)) {
+				if (grid.in_bounds(nx, ny) && grid.passable(nx, ny, mt)) {
 					return std::pair{ nx, ny };
 				}
 			}
@@ -205,7 +254,7 @@ inline Components connected_components(const Grid& grid, MoveType mt) {
 	const int h = grid.height;
 
 	for (int start = 0; start < w * h; ++start) {
-		if (out.labels[start] != -1 || !passable(grid.cells[start], mt)) {
+		if (out.labels[start] != -1 || !grid.passable(start % w, start / w, mt)) {
 			continue;
 		}
 		const int label = static_cast<int>(comps.size());
@@ -234,7 +283,7 @@ inline Components connected_components(const Grid& grid, MoveType mt) {
 			for (int n = 0; n < 4; ++n) {
 				if (!grid.in_bounds(nx[n], ny[n])) continue;
 				const int nidx = grid.index(nx[n], ny[n]);
-				if (out.labels[nidx] == -1 && passable(grid.cells[nidx], mt)) {
+				if (out.labels[nidx] == -1 && grid.passable(nx[n], ny[n], mt)) {
 					out.labels[nidx] = label;
 					stack.push_back(nidx);
 				}
@@ -273,7 +322,7 @@ inline PathResult find_path(const Grid& grid, MoveType mt, int sx, int sy, int g
 	if (!grid.in_bounds(sx, sy) || !grid.in_bounds(gx, gy)) {
 		return res;
 	}
-	if (!passable(grid.at(sx, sy), mt) || !passable(grid.at(gx, gy), mt)) {
+	if (!grid.passable(sx, sy, mt) || !grid.passable(gx, gy, mt)) {
 		return res;
 	}
 
@@ -324,11 +373,11 @@ inline PathResult find_path(const Grid& grid, MoveType mt, int sx, int sy, int g
 		for (int d = 0; d < 8; ++d) {
 			const int nx = cx + dx8[d];
 			const int ny = cy + dy8[d];
-			if (!grid.in_bounds(nx, ny) || !passable(grid.at(nx, ny), mt)) continue;
+			if (!grid.in_bounds(nx, ny) || !grid.passable(nx, ny, mt)) continue;
 			const bool diagonal = d >= 4;
 			if (diagonal) {
 				// Prevent cutting across a blocked corner.
-				if (!passable(grid.at(cx, ny), mt) || !passable(grid.at(nx, cy), mt)) continue;
+				if (!grid.passable(cx, ny, mt) || !grid.passable(nx, cy, mt)) continue;
 			}
 			const int nidx = grid.index(nx, ny);
 			if (closed[nidx]) continue;
@@ -345,7 +394,7 @@ inline PathResult find_path(const Grid& grid, MoveType mt, int sx, int sy, int g
 		// Portal edges from the current cell (small fixed cost).
 		if (const auto it = portal_edges.find(current); it != portal_edges.end()) {
 			for (const int nidx : it->second) {
-				if (closed[nidx] || !passable(grid.cells[nidx], mt)) continue;
+				if (closed[nidx] || !grid.passable(nidx % w, nidx / w, mt)) continue;
 				const double tentative = g_score[current] + 1.0;
 				if (tentative < g_score[nidx]) {
 					g_score[nidx] = tentative;
