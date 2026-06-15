@@ -77,6 +77,25 @@ export class Map: public QObject {
   public:
 	bool loaded = false;
 
+	// Re-reads object data (base game SLK + the map's modification tables) from
+	// disk in place, keeping terrain, placements, triggers, etc. untouched. Used
+	// by the editor's "Merge object data from disk" button to pick up changes the
+	// CLI/agent made to object definitions without discarding in-editor work.
+	// The existing TableModels are reused (their SLK pointers stay valid); each is
+	// wrapped in a model reset so open Object/Spreadsheet editors refresh.
+	void reload_object_data() {
+		TableModel* tables[] = { units_table, items_table, abilities_table,
+								 doodads_table, destructibles_table, upgrade_table, buff_table };
+		for (TableModel* t : tables) {
+			if (t) t->begin_reset();
+		}
+		load_base_object_data([](std::string_view) {});
+		load_map_object_data();
+		for (TableModel* t : tables) {
+			if (t) t->end_reset();
+		}
+	}
+
 	TriggerStrings trigger_strings;
 	Triggers triggers;
 	MapInfo info;

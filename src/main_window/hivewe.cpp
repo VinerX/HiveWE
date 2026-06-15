@@ -246,6 +246,28 @@ HiveWE::HiveWE(QWidget* parent)
 		delete loading_box;
 	});
 
+	connect(ui.ribbon->merge_object_data, &QRibbonButton::clicked, [this]() {
+		if (!map || !map->loaded || map->filesystem_path.empty() || !fs::exists(map->filesystem_path / "war3map.w3i")) {
+			QMessageBox::information(this, "Merge object data", "No map is currently open in folder mode.");
+			return;
+		}
+
+		const auto answer = QMessageBox::warning(this, "Merge object data from disk",
+			"This re-reads only the object data (units, items, abilities, doodads, "
+			"destructibles, upgrades, buffs) from disk, keeping your terrain, "
+			"placements and triggers in memory.\n\nUse it to pick up object-data edits "
+			"made by the CLI/agent. Any unsaved object-data changes in HiveWE will be "
+			"lost, and open Object/Spreadsheet editors will refresh.\n\nMerge now?",
+			QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+
+		if (answer != QMessageBox::Yes) {
+			return;
+		}
+
+		ui.widget->makeCurrent();
+		map->reload_object_data();
+	});
+
 	restore_window_state();
 	update_recent_menu();
 

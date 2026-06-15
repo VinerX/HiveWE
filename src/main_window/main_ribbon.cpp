@@ -49,6 +49,11 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	reload_from_disk->setText("Reload\nfrom disk");
 	editor_section->addWidget(reload_from_disk);
 
+	// Lighter alternative: re-read only object data from disk, keeping terrain/placement/triggers.
+	merge_object_data->setIcon(QIcon("data/icons/ribbon/reset.png"));
+	merge_object_data->setText("Merge obj\nfrom disk");
+	editor_section->addWidget(merge_object_data);
+
 	QRibbonSection* palette_section = new QRibbonSection;
 	palette_section->setText("Palette");
 

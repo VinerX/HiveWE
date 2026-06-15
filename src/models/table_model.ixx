@@ -93,6 +93,13 @@ export class TableModel : public QAbstractTableModel {
 		invalid_icon = resource_manager.load<QIconResource>("ReplaceableTextures/WorldEditUI/DoodadPlaceholder.dds").value();
 	}
 
+	// Public wrappers around the protected model-reset signals so the underlying
+	// SLK can be fully reloaded (e.g. merging object data from disk) while views
+	// re-read everything. Call begin_reset() before mutating the SLK and
+	// end_reset() afterwards.
+	void begin_reset() { beginResetModel(); }
+	void end_reset() { endResetModel(); }
+
 	[[nodiscard]] int rowCount(const QModelIndex& parent = QModelIndex()) const override {
 		return slk->rows();
 	}

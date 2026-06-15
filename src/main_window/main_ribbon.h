@@ -48,6 +48,7 @@ public:
 	QRibbonButton* model_editor = new QRibbonButton;
 	QRibbonButton* asset_manager = new QRibbonButton;
 	QRibbonButton* reload_from_disk = new QRibbonButton;
+	QRibbonButton* merge_object_data = new QRibbonButton;
 
 	QRibbonButton* terrain_palette = new QRibbonButton;
 	QRibbonButton* doodad_palette = new QRibbonButton;
