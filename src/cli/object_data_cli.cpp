@@ -1260,6 +1260,173 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		return o.dump();
 	}
 
+	// ---- region <-> island helpers (pathing + regions), no CASC needed --------
+	if (args.command == "island-at" || args.command == "region-for-island" ||
+		args.command == "regions-coverage") {
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+
+		const std::string move_str = args.get("move").value_or("foot");
+		const auto move_opt = pathing::parse_move_type(move_str);
+		if (!move_opt) return error("unknown --move '" + move_str + "' (expected foot|water|amphibious|fly)");
+
+		std::string load_err;
+		const auto grid_opt = pathing::load_grid(load_err);
+		if (!grid_opt) return error(load_err);
+		const pathing::Grid& grid = *grid_opt;
+		if (!grid.has_offset) {
+			return error("this command needs world coordinates from war3map.w3e, which could not be read");
+		}
+		const pathing::Components comps = pathing::connected_components(grid, *move_opt);
+
+		// Island world bbox covering all its cells (cell edges, not centres).
+		auto island_bbox_world = [&](const pathing::Component& c) {
+			const float l = grid.offset_x + c.min_x * 32.f;
+			const float r = grid.offset_x + (c.max_x + 1) * 32.f;
+			const float b = grid.offset_y + c.min_y * 32.f;
+			const float t = grid.offset_y + (c.max_y + 1) * 32.f;
+			return std::array<float, 4>{ l, b, r, t };
+		};
+		auto find_component = [&](int id) -> const pathing::Component* {
+			for (const auto& c : comps.components) if (c.id == id) return &c;
+			return nullptr;
+		};
+
+		if (args.command == "island-at") {
+			const auto x = args.get("x");
+			const auto y = args.get("y");
+			if (!x || !y) return error("island-at needs --x and --y (world coordinates)");
+			int cx = 0, cy = 0;
+			try { cx = grid.world_to_cell_x(std::stof(*x)); cy = grid.world_to_cell_y(std::stof(*y)); }
+			catch (...) { return error("--x/--y must be numbers"); }
+			const int snap_radius = 16;
+			const auto snapped = pathing::nearest_passable(grid, *move_opt, cx, cy, snap_radius);
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.str("move", pathing::move_type_name(*move_opt));
+			if (!snapped) {
+				o.boolean("on_island", false);
+				o.str("note", "no passable cell within snap radius — point is in impassable terrain for this move type");
+				ok = true;
+				return o.dump();
+			}
+			const int label = comps.labels[grid.index(snapped->first, snapped->second)];
+			const pathing::Component* c = find_component(label);
+			o.boolean("on_island", c != nullptr);
+			if (c) {
+				const auto bb = island_bbox_world(*c);
+				o.number("island_id", static_cast<std::size_t>(c->id));
+				o.number("island_cells", c->cell_count);
+				o.raw("island_bbox_world", std::format("[{},{},{},{}]", bb[0], bb[1], bb[2], bb[3]));
+			}
+			ok = true;
+			return o.dump();
+		}
+
+		if (args.command == "region-for-island") {
+			const auto id_opt = args.get("island-id");
+			if (!id_opt) return error("region-for-island needs --island-id K (see pathing-islands)");
+			int island_id = 0;
+			try { island_id = std::stoi(*id_opt); } catch (...) { return error("invalid --island-id: " + *id_opt); }
+			const pathing::Component* c = find_component(island_id);
+			if (!c) return error("no island with id " + *id_opt + " for move type " + move_str);
+
+			float pad = 0.f;
+			if (const auto p = args.get("padding")) { try { pad = std::stof(*p); } catch (...) {} }
+			const auto bb = island_bbox_world(*c);
+
+			RegionRecord r;
+			r.name = args.get("name").value_or(std::format("Island_{}", island_id));
+			r.left = bb[0] - pad;
+			r.bottom = bb[1] - pad;
+			r.right = bb[2] + pad;
+			r.top = bb[3] + pad;
+
+			std::string rerr;
+			auto regions_opt = read_regions(rerr);
+			std::vector<RegionRecord> regions = regions_opt ? std::move(*regions_opt) : std::vector<RegionRecord>{};
+			int32_t max_cn = 0;
+			for (const auto& e : regions) max_cn = std::max(max_cn, e.creation_number);
+			r.creation_number = max_cn + 1;
+			const std::size_t new_index = regions.size();
+			regions.push_back(r);
+			if (!args.has_flag("dry-run")) {
+				if (!write_regions(regions, rerr)) return error(rerr);
+			}
+
+			JsonObject o;
+			o.boolean("ok", true);
+			o.str("command", args.command);
+			o.str("map", *map_opt);
+			o.boolean("dry_run", args.has_flag("dry-run"));
+			o.number("island_id", static_cast<std::size_t>(island_id));
+			o.number("island_cells", c->cell_count);
+			o.raw("added", region_to_json(r, new_index));
+			ok = true;
+			return o.dump();
+		}
+
+		// regions-coverage: which islands are / are not covered by an existing region.
+		std::size_t min_cells = 50;
+		if (const auto m = args.get("min-cells")) { try { min_cells = static_cast<std::size_t>(std::stoul(*m)); } catch (...) {} }
+
+		std::string rerr;
+		const auto regions_opt = read_regions(rerr);
+		const std::vector<RegionRecord> regions = regions_opt ? *regions_opt : std::vector<RegionRecord>{};
+
+		auto overlaps = [](const std::array<float, 4>& isl, const RegionRecord& reg) {
+			// isl = [l,b,r,t]; region rect normalised on read.
+			return !(reg.right < isl[0] || reg.left > isl[2] || reg.top < isl[1] || reg.bottom > isl[3]);
+		};
+
+		std::string arr = "[";
+		std::size_t shown = 0, uncovered = 0;
+		std::string uncovered_ids = "[";
+		for (const auto& c : comps.components) {
+			if (c.cell_count < min_cells) continue;
+			const auto bb = island_bbox_world(c);
+			std::string covering = "[";
+			bool any = false;
+			for (const auto& reg : regions) {
+				if (overlaps(bb, reg)) {
+					if (any) covering += ",";
+					covering += jstr(reg.name);
+					any = true;
+				}
+			}
+			covering += "]";
+			if (!any) {
+				if (uncovered) uncovered_ids += ",";
+				uncovered_ids += std::to_string(c.id);
+				uncovered++;
+			}
+			if (shown) arr += ",";
+			JsonObject isl;
+			isl.number("island_id", static_cast<std::size_t>(c.id));
+			isl.number("cells", c.cell_count);
+			isl.raw("bbox_world", std::format("[{},{},{},{}]", bb[0], bb[1], bb[2], bb[3]));
+			isl.boolean("covered", any);
+			isl.raw("covering_regions", covering);
+			arr += isl.dump();
+			shown++;
+		}
+		arr += "]";
+		uncovered_ids += "]";
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("move", pathing::move_type_name(*move_opt));
+		o.number("islands_considered", shown);
+		o.number("uncovered_count", uncovered);
+		o.raw("uncovered_island_ids", uncovered_ids);
+		o.raw("islands", arr);
+		ok = true;
+		return o.dump();
+	}
+
 	if (args.command == "describe-race") {
 		const auto suffix_opt = resolve_suffix(args);
 		if (!suffix_opt) {
