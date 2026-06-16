@@ -264,6 +264,81 @@ std::optional<std::pair<int, int>> to_cell(const pathing::Grid& grid, std::strin
 	return std::pair{ grid.world_to_cell_x(static_cast<float>(x)), grid.world_to_cell_y(static_cast<float>(y)) };
 }
 
+// Best-effort: read the map tileset (war3map.w3e), open CASC at `warcraft`, and
+// return the water-plane height offset from TerrainArt/Water.slk ("<tileset>Sha").
+// Returns {0, false} when CASC is unavailable — the caller then falls back to a
+// flag-based water classification (offset assumed 0, deep/shallow split approximate).
+std::pair<float, bool> resolve_water_offset(const std::string& warcraft) {
+	const auto ts = pathing::peek_tileset();
+	if (!ts || warcraft.empty()) {
+		return { 0.f, false };
+	}
+	try {
+		hierarchy.ptr = false;
+		hierarchy.hd = false;
+		hierarchy.teen = false;
+		hierarchy.local_files = false;
+		if (!hierarchy.open_casc(warcraft)) {
+			return { 0.f, false };
+		}
+		const slk::SLK water("TerrainArt/Water.slk");
+		const float off = water.data<float>("height", std::string(1, *ts) + "Sha");
+		return { off, true };
+	} catch (...) {
+		return { 0.f, false };
+	}
+}
+
+// Loads the pathing grid, resolving the Water.slk height offset first when the water
+// surface matters (water/amphibious moves, or the render). `--warcraft` overrides the
+// registry fallback; `--no-casc` skips CASC entirely (flag-based water fallback).
+std::optional<pathing::Grid> load_grid_for(const CliArgs& args, const std::string& warcraft_fallback,
+										   bool need_water, std::string& err) {
+	float water_offset = 0.f;
+	bool offset_known = false;
+	if (need_water && !args.has_flag("no-casc")) {
+		std::string warcraft;
+		if (const auto w = args.get("warcraft")) {
+			warcraft = *w;
+		} else if (!warcraft_fallback.empty()) {
+			warcraft = warcraft_fallback;
+		}
+		const auto resolved = resolve_water_offset(warcraft);
+		water_offset = resolved.first;
+		offset_known = resolved.second;
+	}
+	return pathing::load_grid(err, water_offset, offset_known);
+}
+
+// ---- minimal 24-bit BMP writer (uncompressed, no image library) -----------
+// `bgr` holds width*height*3 bytes in B,G,R order, top scanline first. BMP stores
+// bottom-up, so rows are emitted in reverse.
+bool write_bmp(const fs::path& path, int w, int h, const std::vector<uint8_t>& bgr, std::string& err) {
+	const int row_raw = w * 3;
+	const int row_padded = (row_raw + 3) & ~3;
+	const uint32_t pixel_bytes = static_cast<uint32_t>(row_padded) * static_cast<uint32_t>(h);
+	std::ofstream out(path, std::ios::binary);
+	if (!out) {
+		err = "cannot open output file: " + path.string();
+		return false;
+	}
+	auto u16 = [&](uint16_t v) { out.put(static_cast<char>(v & 0xFF)); out.put(static_cast<char>((v >> 8) & 0xFF)); };
+	auto u32 = [&](uint32_t v) {
+		out.put(static_cast<char>(v & 0xFF)); out.put(static_cast<char>((v >> 8) & 0xFF));
+		out.put(static_cast<char>((v >> 16) & 0xFF)); out.put(static_cast<char>((v >> 24) & 0xFF));
+	};
+	auto i32 = [&](int32_t v) { u32(static_cast<uint32_t>(v)); };
+	out.put('B'); out.put('M'); u32(54 + pixel_bytes); u16(0); u16(0); u32(54);     // file header
+	u32(40); i32(w); i32(h); u16(1); u16(24); u32(0); u32(pixel_bytes);             // DIB header
+	i32(2835); i32(2835); u32(0); u32(0);                                          // 72 DPI, no palette
+	const std::vector<char> pad(static_cast<std::size_t>(row_padded - row_raw), 0);
+	for (int y = h - 1; y >= 0; --y) {
+		out.write(reinterpret_cast<const char*>(bgr.data() + static_cast<std::size_t>(y) * row_raw), row_raw);
+		if (!pad.empty()) out.write(pad.data(), static_cast<std::streamsize>(pad.size()));
+	}
+	return static_cast<bool>(out);
+}
+
 // ---- regions (war3map.w3r) ------------------------------------------------
 // Data-only codec for the regions file: raw world coordinates as stored (no
 // terrain-offset conversion), so it round-trips and matches the coordinates used
@@ -751,7 +826,8 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		const pathing::MoveType move = *move_opt;
 
 		std::string load_err;
-		const auto grid_opt = pathing::load_grid(load_err);
+		const bool need_water = move == pathing::MoveType::water || move == pathing::MoveType::amphibious;
+		const auto grid_opt = load_grid_for(args, warcraft_fallback, need_water, load_err);
 		if (!grid_opt) {
 			return error(load_err);
 		}
@@ -935,6 +1011,124 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		o.raw("length_world", std::to_string(path.cost * 32.0));
 		o.number("waypoint_count", path.cells.size());
 		o.raw("waypoints", waypoints);
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- terrain traversability render (BMP) ----------------------------------
+	// Paints the whole map by class so the agent can eyeball passability:
+	//   deep water (naval only)        -> blue
+	//   shallow water (foot + naval)   -> teal
+	//   walkable land (foot)           -> green
+	//   blocked land (cliffs/blockers) -> brown
+	// Water comes from war3map.w3e (height-accurate); land walkability from the wpm.
+	if (args.command == "pathing-render") {
+		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
+
+		std::string load_err;
+		const auto grid_opt = load_grid_for(args, warcraft_fallback, /*need_water=*/true, load_err);
+		if (!grid_opt) {
+			return error(load_err);
+		}
+		const pathing::Grid& grid = *grid_opt;
+
+		// Downsample so the longest side stays manageable; --downsample N overrides.
+		int down = std::max(1, (std::max(grid.width, grid.height) + 1499) / 1500);
+		if (const auto d = args.get("downsample")) {
+			try { down = std::max(1, std::stoi(*d)); } catch (...) {}
+		}
+		const int out_w = (grid.width + down - 1) / down;
+		const int out_h = (grid.height + down - 1) / down;
+
+		// Class colours (R,G,B). Priority deep > shallow > walkable > blocked keeps
+		// thin water channels and walkable corridors visible after downsampling.
+		struct Rgb { uint8_t r, g, b; };
+		constexpr Rgb c_deep{ 36, 92, 168 };
+		constexpr Rgb c_shallow{ 92, 188, 208 };
+		constexpr Rgb c_land{ 74, 150, 60 };
+		constexpr Rgb c_blocked{ 120, 96, 66 };
+
+		std::vector<uint8_t> bgr(static_cast<std::size_t>(out_w) * out_h * 3, 0);
+		for (int r = 0; r < out_h; ++r) {
+			// Row 0 is the top of the image = north = highest cell-y.
+			const int cy_base = (out_h - 1 - r) * down;
+			for (int c = 0; c < out_w; ++c) {
+				const int cx_base = c * down;
+				bool deep = false, shallow = false, walk = false, blocked = false;
+				for (int dy = 0; dy < down; ++dy) {
+					const int cy = cy_base + dy;
+					if (cy >= grid.height) break;
+					for (int dx = 0; dx < down; ++dx) {
+						const int cx = cx_base + dx;
+						if (cx >= grid.width) break;
+						const uint8_t wc = grid.water_at(cx, cy);
+						if (wc == 2) { deep = true; }
+						else if (wc == 1) { shallow = true; }
+						else if ((grid.at(cx, cy) & pathing::unwalkable) == 0) { walk = true; }
+						else { blocked = true; }
+					}
+				}
+				const Rgb px = deep ? c_deep : shallow ? c_shallow : walk ? c_land : blocked ? c_blocked : c_deep;
+				const std::size_t idx = (static_cast<std::size_t>(r) * out_w + c) * 3;
+				bgr[idx + 0] = px.b;
+				bgr[idx + 1] = px.g;
+				bgr[idx + 2] = px.r;
+			}
+		}
+
+		// Full-resolution class tallies (the "how much land" answer).
+		std::size_t deep_n = 0, shallow_n = 0, walk_n = 0, blocked_n = 0;
+		const std::size_t total = static_cast<std::size_t>(grid.width) * grid.height;
+		for (int y = 0; y < grid.height; ++y) {
+			for (int x = 0; x < grid.width; ++x) {
+				const uint8_t wc = grid.water_at(x, y);
+				if (wc == 2) ++deep_n;
+				else if (wc == 1) ++shallow_n;
+				else if ((grid.at(x, y) & pathing::unwalkable) == 0) ++walk_n;
+				else ++blocked_n;
+			}
+		}
+
+		const fs::path out_path = args.get("out").has_value()
+			? fs::path(*args.get("out"))
+			: hierarchy.map_directory / "pathing_render.bmp";
+		std::string bmp_err;
+		if (!write_bmp(out_path, out_w, out_h, bgr, bmp_err)) {
+			return error(bmp_err);
+		}
+
+		auto pct = [&](std::size_t n) { return std::to_string(100.0 * static_cast<double>(n) / static_cast<double>(total)); };
+		JsonObject legend;
+		legend.str("deep_water", "blue (naval only)");
+		legend.str("shallow_water", "teal (foot + naval)");
+		legend.str("walkable_land", "green (foot)");
+		legend.str("blocked_land", "brown (cliffs/blockers)");
+
+		JsonObject stats;
+		stats.number("total_cells", total);
+		stats.raw("deep_water", std::format("{{\"cells\":{},\"percent\":{}}}", deep_n, pct(deep_n)));
+		stats.raw("shallow_water", std::format("{{\"cells\":{},\"percent\":{}}}", shallow_n, pct(shallow_n)));
+		stats.raw("walkable_land", std::format("{{\"cells\":{},\"percent\":{}}}", walk_n, pct(walk_n)));
+		stats.raw("blocked_land", std::format("{{\"cells\":{},\"percent\":{}}}", blocked_n, pct(blocked_n)));
+		stats.raw("water_total_percent", pct(deep_n + shallow_n));
+		stats.raw("land_total_percent", pct(walk_n + blocked_n));
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		o.str("out", out_path.string());
+		o.number("image_width", static_cast<std::size_t>(out_w));
+		o.number("image_height", static_cast<std::size_t>(out_h));
+		o.number("downsample", static_cast<std::size_t>(down));
+		o.boolean("north_up", true);
+		o.boolean("water_height_accurate", grid.water_offset_known);
+		if (!grid.water_offset_known) {
+			o.str("note", "Water.slk offset unavailable (no CASC); deep/shallow split is approximate — "
+						  "pass --warcraft <WC3 dir> for height-accurate water");
+		}
+		o.raw("legend", legend.dump());
+		o.raw("stats", stats.dump());
 		ok = true;
 		return o.dump();
 	}
@@ -1270,7 +1464,8 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		if (!move_opt) return error("unknown --move '" + move_str + "' (expected foot|water|amphibious|fly)");
 
 		std::string load_err;
-		const auto grid_opt = pathing::load_grid(load_err);
+		const bool need_water = *move_opt == pathing::MoveType::water || *move_opt == pathing::MoveType::amphibious;
+		const auto grid_opt = load_grid_for(args, warcraft_fallback, need_water, load_err);
 		if (!grid_opt) return error(load_err);
 		const pathing::Grid& grid = *grid_opt;
 		if (!grid.has_offset) {

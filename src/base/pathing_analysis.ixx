@@ -64,11 +64,21 @@ struct Grid {
 	int width = 0;
 	int height = 0;
 	std::vector<uint8_t> cells; // war3map.wpm flags, size width*height
-	// Per-cell water flag taken from the terrain (war3map.w3e), NOT the unreliable
-	// wpm water bit. Empty when the terrain could not be read (then we fall back to
-	// the wpm bit). Size width*height when present.
-	std::vector<uint8_t> water_mask;
-	bool has_water_mask = false;
+	// Per-cell water classification derived from the terrain (war3map.w3e) heights,
+	// NOT the unreliable wpm water bit:
+	//   0 = no water (dry land)
+	//   1 = shallow water (water surface above the ground but <= 0.40 above it):
+	//       foot units can wade here AND naval units float here — the overlap zone
+	//   2 = deep water (water surface > 0.40 above the ground): naval only, the wpm
+	//       also flags these cells unwalkable
+	// Empty when the terrain could not be read (then is_water falls back to the wpm
+	// bit). Size width*height when present.
+	std::vector<uint8_t> water_class;
+	bool has_water = false;
+	// False when the water-plane height offset (TerrainArt/Water.slk) was unavailable
+	// (no CASC); the deep/shallow split is then approximate (offset assumed 0).
+	bool water_offset_known = false;
+	char tileset = 0; // war3map.w3e tileset char (indexes Water.slk as "<t>Sha")
 	// Terrain centre offset from war3map.w3e, used for world <-> cell conversion.
 	float offset_x = 0.f;
 	float offset_y = 0.f;
@@ -78,12 +88,17 @@ struct Grid {
 	bool in_bounds(int x, int y) const { return x >= 0 && y >= 0 && x < width && y < height; }
 	int index(int x, int y) const { return y * width + x; }
 
-	bool is_water(int x, int y) const {
-		if (has_water_mask) {
-			return water_mask[static_cast<std::size_t>(y) * width + x] != 0;
+	// 0 none / 1 shallow / 2 deep. Falls back to the (unreliable) wpm bit (as deep)
+	// when the terrain water class is unavailable.
+	uint8_t water_at(int x, int y) const {
+		if (has_water) {
+			return water_class[static_cast<std::size_t>(y) * width + x];
 		}
-		return (at(x, y) & water) != 0; // fallback to the (unreliable) wpm bit
+		return (at(x, y) & water) ? 2 : 0;
 	}
+	bool is_water(int x, int y) const { return water_at(x, y) != 0; }
+	bool is_deep_water(int x, int y) const { return water_at(x, y) == 2; }
+	bool is_shallow_water(int x, int y) const { return water_at(x, y) == 1; }
 
 	// Whether the given movement type can occupy cell (x, y). The water surface comes
 	// from the terrain; ground/air blocking comes from the wpm. Deep water is already
@@ -108,13 +123,48 @@ struct Grid {
 	float cell_to_world_y(int cy) const { return offset_y + (cy + 0.5f) * 32.f; }
 };
 
-// Reads the terrain (war3map.w3e): the centre offset (for world<->cell) and the
-// authoritative per-tile water flag, which it rasterises onto the pathing grid
-// (4x resolution). The wpm "water" bit is unreliable — open ocean is often not
-// flagged there and some land is — so the terrain flag is the correct source for
-// where water actually is. Best-effort: on failure has_offset/has_water_mask stay
-// false and callers fall back.
-inline void load_terrain_water(Grid& grid) {
+// Reads just the war3map.w3e tileset character (needed to look up the water-plane
+// height offset in TerrainArt/Water.slk). Best-effort: nullopt if unreadable.
+inline std::optional<char> peek_tileset() {
+	auto result = hierarchy.map_file_read("war3map.w3e");
+	if (!result.has_value()) {
+		return std::nullopt;
+	}
+	try {
+		BinaryReader reader = std::move(result.value());
+		if (reader.read_string(4) != "W3E!") {
+			return std::nullopt;
+		}
+		(void)reader.read<uint32_t>(); // version
+		return reader.read<char>();    // tileset
+	} catch (...) {
+		return std::nullopt;
+	}
+}
+
+// Reads the terrain (war3map.w3e): the centre offset (for world<->cell) and a
+// per-cell water classification (none / shallow / deep), which it rasterises onto
+// the pathing grid (4x resolution).
+//
+// Water is decided exactly the way the terrain renderer/pathing does it (see
+// Terrain::make_minimap / get_terrain_pathing): a corner has water only when its
+// water flag is set AND the water surface sits above the ground. Shallow vs deep is
+// the 0.40-unit threshold the engine uses to mark deep water unwalkable. This is the
+// correct source — the wpm "water" bit is unreliable (open ocean is often unflagged
+// and some land carries it), and the raw flag alone over-counts (it stays set on
+// tiles whose water plane is below the ground, i.e. actually dry).
+//
+//   final_ground = (ground_height) + layer_height - 2.0
+//   final_water  = (water_height)  + water_offset      [Water.slk "<tileset>Sha".height]
+//   class = !flag || final_water <= final_ground          -> 0 (dry)
+//           final_water  > final_ground + 0.40            -> 2 (deep)
+//           else                                          -> 1 (shallow)
+//
+// water_offset comes from CASC (Water.slk); pass has_offset=false when unavailable,
+// in which case the offset is treated as 0 and the deep/shallow split is approximate.
+// Best-effort: on failure has_offset/has_water stay false and callers fall back to
+// the wpm bit.
+inline void load_terrain_water(Grid& grid, float water_offset, bool has_offset) {
 	auto result = hierarchy.map_file_read("war3map.w3e");
 	if (!result.has_value()) {
 		return;
@@ -125,7 +175,7 @@ inline void load_terrain_water(Grid& grid) {
 			return;
 		}
 		const uint32_t version = reader.read<uint32_t>();
-		(void)reader.read<char>();        // tileset
+		grid.tileset = reader.read<char>();
 		reader.advance(4);                // custom tileset flag
 		const uint32_t ground_textures = reader.read<uint32_t>();
 		for (uint32_t i = 0; i < ground_textures; ++i) (void)reader.read_string(4);
@@ -141,39 +191,56 @@ inline void load_terrain_water(Grid& grid) {
 			return;
 		}
 
-		// Per-corner water flag.
+		// Per-corner water class (0 none / 1 shallow / 2 deep).
 		std::vector<uint8_t> tile_water(static_cast<std::size_t>(tw) * th, 0);
 		for (std::size_t i = 0; i < static_cast<std::size_t>(tw) * th; ++i) {
-			(void)reader.read<uint16_t>(); // ground height
-			(void)reader.read<uint16_t>(); // water height + edge flag
-			if (version >= 11) {
+			const float ground_height = (reader.read<uint16_t>() - 8192.f) / 512.f;
+			const uint16_t water_and_edge = reader.read<uint16_t>();
+			const float water_height = ((water_and_edge & 0x3FFF) - 8192.f) / 512.f;
+
+			bool flag = false;
+			if (version >= 12) {                      // matches Terrain: >=12 -> 16-bit flags
 				const uint16_t flags = reader.read<uint16_t>();
-				tile_water[i] = (flags & 0x0100) ? 1 : 0;
+				flag = (flags & 0x0100) != 0;
 			} else {
 				const uint8_t flags = reader.read<uint8_t>();
-				tile_water[i] = (flags & 0x40) ? 1 : 0;
+				flag = (flags & 0x40) != 0;
 			}
-			(void)reader.read<uint8_t>();  // variation
-			(void)reader.read<uint8_t>();  // misc (cliff texture / layer height)
+			(void)reader.read<uint8_t>();             // variation
+			const uint8_t misc = reader.read<uint8_t>();
+			const float layer_height = static_cast<float>(misc & 0x0F);
+
+			const float final_ground = ground_height + layer_height - 2.0f;
+			const float final_water = water_height + water_offset;
+			const float depth = final_water - final_ground;
+			uint8_t cls = 0;
+			if (flag && depth > 0.f) {
+				cls = (depth > 0.40f) ? 2 : 1;
+			}
+			tile_water[i] = cls;
 		}
 
 		// Rasterise onto the 4x pathing grid: cell (cx, cy) samples corner (cx/4, cy/4).
-		grid.water_mask.assign(static_cast<std::size_t>(grid.width) * grid.height, 0);
+		grid.water_class.assign(static_cast<std::size_t>(grid.width) * grid.height, 0);
 		for (int cy = 0; cy < grid.height; ++cy) {
 			const std::size_t ty = std::min<std::size_t>(static_cast<std::size_t>(cy) / 4, th - 1);
 			for (int cx = 0; cx < grid.width; ++cx) {
 				const std::size_t tx = std::min<std::size_t>(static_cast<std::size_t>(cx) / 4, tw - 1);
-				grid.water_mask[static_cast<std::size_t>(cy) * grid.width + cx] = tile_water[ty * tw + tx];
+				grid.water_class[static_cast<std::size_t>(cy) * grid.width + cx] = tile_water[ty * tw + tx];
 			}
 		}
-		grid.has_water_mask = true;
+		grid.has_water = true;
+		grid.water_offset_known = has_offset;
 	} catch (...) {
-		grid.has_water_mask = false;
+		grid.has_water = false;
 	}
 }
 
-// Loads war3map.wpm into a Grid. Returns nullopt and sets `error` on failure.
-inline std::optional<Grid> load_grid(std::string& error) {
+// Loads war3map.wpm into a Grid. `water_offset` (TerrainArt/Water.slk "<tileset>Sha"
+// height) refines the deep/shallow water split; pass has_water_offset=false when CASC
+// is unavailable. Returns nullopt and sets `error` on failure.
+inline std::optional<Grid> load_grid(std::string& error, float water_offset = 0.f,
+									 bool has_water_offset = false) {
 	auto result = hierarchy.map_file_read("war3map.wpm");
 	if (!result.has_value()) {
 		error = "could not read war3map.wpm: " + result.error();
@@ -196,7 +263,7 @@ inline std::optional<Grid> load_grid(std::string& error) {
 			return std::nullopt;
 		}
 		grid.cells = reader.read_vector<uint8_t>(static_cast<std::size_t>(grid.width) * grid.height);
-		load_terrain_water(grid);
+		load_terrain_water(grid, water_offset, has_water_offset);
 		return grid;
 	} catch (const std::exception& e) {
 		error = std::string("failed parsing war3map.wpm: ") + e.what();

@@ -1336,7 +1336,7 @@ int main(int argc, char* argv[]) {
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "probe-map", "read-war3-log", "read-custom-map-data-log", "validate-script",
 									   "list-object-types", "search-objects", "get-object", "get-objects-bulk", "set-field", "copy-object", "batch-edit", "safe-move", "describe-race",
-									   "show-building", "list-race-objects", "list-all-races", "dump-objects", "list-fields", "trace-unit", "pathing-islands", "pathing-path",
+									   "show-building", "list-race-objects", "list-all-races", "dump-objects", "list-fields", "trace-unit", "pathing-islands", "pathing-path", "pathing-render",
 									   "list-regions", "add-region", "remove-region", "set-region",
 								   "list-units", "add-unit", "remove-unit", "set-unit",
 								   "island-at", "region-for-island", "regions-coverage"})},
@@ -1364,6 +1364,7 @@ int main(int argc, char* argv[]) {
 				   {"trace-unit", "--map <dir> --id <rawcode> [--depth N] [--format tree|flat|json] [--warcraft <dir>] [--hd]"},
 				   {"pathing-islands", "--map <dir> [--move foot|water|amphibious|fly] [--min-cells N] [--limit N]"},
 				   {"pathing-path", "--map <dir> --from \"x,y\" --to \"x,y\" [--move foot|water|amphibious|fly] [--coords world|tile|cell] [--portals \"ax,ay->bx,by;...\"] [--snap-radius 16] [--no-snap]"},
+				   {"pathing-render", "--map <dir> [--out <file.bmp>] [--downsample N] [--warcraft <dir>] [--no-casc]"},
 				   {"list-regions", "--map <dir>"},
 				   {"add-region", "--map <dir> --name <name> --rect \"left,bottom,right,top\" (world units) [--weather <id>] [--ambient <id>] [--color r,g,b] [--dry-run]"},
 				   {"remove-region", "--map <dir> (--index N | --name <name>) [--dry-run]"},
@@ -1382,7 +1383,8 @@ int main(int argc, char* argv[]) {
 				   "When Warcraft III data (CASC) is unavailable, the map-only paths of show-building / list-race-objects / list-all-races resolve base-object names from data/wc3_name_fallback.tsv.",
 					   "COORDINATES: regions, placed units, and pathing all use Warcraft world coordinates (the same ones triggers/JASS see), e.g. x in [-30720,30720] on a 480x480 map. A terrain tile is 128 world units; a pathing cell is 32. pathing-path also accepts --coords tile or cell.",
 					   "EDITING IS LIVE & DESTRUCTIVE: add/remove/set-region and add/remove/set-unit write the map file in place. Close the map in HiveWE first (the editor does not watch files and will overwrite your changes on its next save). Use --dry-run to preview the result JSON without writing. There is no undo; back up or use git.",
-					   "TERRAIN TRAVERSABILITY (pathing-islands / pathing-path): ground/air blocking comes from war3map.wpm; the WATER surface comes from the terrain water flag in war3map.w3e (the wpm water bit is unreliable, so do not trust --move water without the terrain). Use pathing-islands to find isolated landmasses or seas (each 'island' is a connected region for that move type) so you can decide where portals/transports/regions are needed; use pathing-path to test whether B is reachable from A, optionally adding hypothetical --portals to see if they connect two islands (used_portal / same_island tell you). Movement types: foot (dry land + shallow water, deep water blocked), water (the ocean/lake surface), amphibious (land+water), fly (ignores ground). NOTE: placed trees/gates (dynamic doodad pathing) are not yet applied, so a foot route through a forest may read as open.",
+					   "TERRAIN TRAVERSABILITY (pathing-islands / pathing-path / pathing-render): ground/air blocking comes from war3map.wpm; the WATER surface comes from war3map.w3e height data (the wpm water bit is unreliable). Water is classified per cell as DEEP (water surface >0.40 above the ground; naval only, unwalkable) or SHALLOW (0..0.40 above ground; foot can wade AND naval floats). The exact deep/shallow split needs the water-plane offset from Warcraft's Water.slk, so for --move water|amphibious and pathing-render the tool opens CASC (via --warcraft or the registry); pass --no-casc to skip it (then the split is approximate). Use pathing-islands to find isolated landmasses or seas (each 'island' is a connected region for that move type) so you can decide where portals/transports/regions are needed; use pathing-path to test whether B is reachable from A, optionally adding hypothetical --portals (used_portal / same_island tell you). Movement types: foot (dry land + shallow water, deep water blocked), water (the ocean/lake surface), amphibious (land+water), fly (ignores ground). NOTE: placed trees/gates (dynamic doodad pathing) are not yet applied, so a foot route through a forest may read as open.",
+						   "PATHING-RENDER: writes a BMP map of the whole terrain coloured by class (deep water=blue, shallow water=teal, walkable land=green, blocked land=brown), north-up, default <map>/pathing_render.bmp. Returns per-class cell counts + percentages in stats (the 'how much land/water' answer). --downsample N shrinks the image (default auto-fit to ~1500px); priority deep>shallow>walkable>blocked keeps thin water channels and corridors visible. Use it to eyeball oceans/continents and sanity-check pathing-islands output.",
 					   "PLACED UNITS: list-units / add-unit / remove-unit / set-unit operate on war3mapUnits.doo instances, NOT object-data definitions (edit those via set-field). Target an existing instance by its --creation-number (the stable id shown by list-units), not by list index. 'sloc' entries are start locations. health/mana of -1 means default. --angle is in degrees; --scale is a multiplier (1.0 = normal).",
 					   "REGIONS: target by --name or --index. --rect is \"left,bottom,right,top\" in world units (auto-normalised so order does not matter). Use list-regions for current names/rects; pair with pathing-islands to place regions over specific landmasses.",
 			   })}});
@@ -1405,6 +1407,7 @@ int main(int argc, char* argv[]) {
 			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races" ||
 			   args.command == "dump-objects" || args.command == "list-fields" || args.command == "trace-unit" ||
 			   args.command == "pathing-islands" || args.command == "pathing-path" ||
+			   args.command == "pathing-render" ||
 			   args.command == "list-regions" || args.command == "add-region" ||
 			   args.command == "remove-region" || args.command == "set-region" ||
 			   args.command == "list-units" || args.command == "add-unit" ||
