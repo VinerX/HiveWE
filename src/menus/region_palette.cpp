@@ -1,6 +1,7 @@
 #include "region_palette.h"
 
 #include <QListWidgetItem>
+#include <QMessageBox>
 #include <QPixmap>
 
 import std;
@@ -8,6 +9,9 @@ import SLK;
 import MapGlobal;
 import Globals;
 import Camera;
+import Regions;
+import RegionsUndo;
+import WorldUndoManager;
 
 RegionPalette::RegionPalette(QWidget* parent) : Palette(parent) {
 	ui.setupUi(this);
@@ -15,6 +19,22 @@ RegionPalette::RegionPalette(QWidget* parent) : Palette(parent) {
 	show();
 
 	map->brush = &brush;
+
+	QRibbonSection* region_section = new QRibbonSection;
+	region_section->setText("Region");
+
+	// Explicit create button: regions are otherwise only made by left-drag on the
+	// terrain (placement mode), which is not discoverable. This drops a default-sized
+	// region at the camera centre, fully registered (saved + gg_rct_ in the script).
+	new_region->setText("New\nRegion");
+	new_region->setIcon(QIcon("data/icons/ribbon/new.ico"));
+	region_section->addWidget(new_region);
+
+	delete_region->setText("Delete\nRegion");
+	delete_region->setIcon(QIcon("data/icons/terrain/boundary_remove.png"));
+	region_section->addWidget(delete_region);
+
+	ribbon_tab->addSection(region_section);
 
 	QRibbonSection* selection_section = new QRibbonSection;
 	selection_section->setText("Selection");
@@ -28,6 +48,8 @@ RegionPalette::RegionPalette(QWidget* parent) : Palette(parent) {
 	ribbon_tab->addSection(selection_section);
 
 	connect(selection_mode, &QRibbonButton::toggled, [&]() { brush.switch_mode(); });
+	connect(new_region, &QRibbonButton::clicked, this, &RegionPalette::create_region);
+	connect(delete_region, &QRibbonButton::clicked, this, &RegionPalette::delete_selected_regions);
 
 	slk::SLK weather_slk("TerrainArt/Weather.slk");
 	weather_slk.substitute(world_edit_strings, "WorldEditStrings");
@@ -220,6 +242,57 @@ void RegionPalette::update_properties() {
 	}
 
 	updating = false;
+}
+
+void RegionPalette::create_region() {
+	// Regions snap to the cell grid (a quarter of a tile), matching the brush
+	const auto snap = [](float v) { return std::round(v * 4.f) / 4.f; };
+
+	// Default 4x4 tile region centred on the current camera focus
+	const float half = 2.f;
+	const float cx = camera.position.x;
+	const float cy = camera.position.y;
+
+	Region region;
+	region.left = snap(cx - half);
+	region.right = snap(cx + half);
+	region.bottom = snap(cy - half);
+	region.top = snap(cy + half);
+	region.name = map->regions.get_unique_name();
+	region.creation_number = map->regions.get_unique_creation_number();
+	region.color = region_preset_colors[region.creation_number % region_preset_colors.size()];
+
+	map->regions.regions.push_back(region);
+	Region* added = &map->regions.regions.back();
+
+	// Same registration the drag-create path uses: an undo entry so the region is
+	// part of the document, saved to war3map.w3r and written as gg_rct_<name>.
+	auto undo = std::make_unique<RegionAddAction>();
+	undo->regions.push_back(*added);
+	map->world_undo.new_undo_group();
+	map->world_undo.add_undo_action(std::move(undo));
+
+	// Select the new region so its properties (name/colour/...) are ready to edit
+	brush.selections = { added };
+	update_list();
+}
+
+void RegionPalette::delete_selected_regions() {
+	if (brush.selections.empty()) {
+		return;
+	}
+
+	const size_t count = brush.selections.size();
+	const QString text = count == 1
+		? QString("Delete region \"%1\"?").arg(QString::fromStdString((*brush.selections.begin())->name))
+		: QString("Delete %1 selected regions?").arg(count);
+
+	if (QMessageBox::question(this, "Delete regions", text) != QMessageBox::Yes) {
+		return;
+	}
+
+	// Handles the (batched) undo entry, removal and list refresh for all selected regions
+	brush.delete_selection();
 }
 
 bool RegionPalette::event(QEvent* e) {
