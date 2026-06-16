@@ -1017,11 +1017,16 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 
 	// ---- terrain traversability render (BMP) ----------------------------------
 	// Paints the whole map by class so the agent can eyeball passability:
-	//   deep water (naval only)        -> blue
-	//   shallow water (foot + naval)   -> teal
-	//   walkable land (foot)           -> green
-	//   blocked land (cliffs/blockers) -> brown
-	// Water comes from war3map.w3e (height-accurate); land walkability from the wpm.
+	//   void / world boundary (nothing) -> black
+	//   deep water (naval only)         -> blue
+	//   shallow water (foot + naval)    -> teal
+	//   walkable land (foot)            -> green
+	//   blocked land (cliffs/blockers)  -> brown
+	// "void" = cells flagged unflyable: not even air crosses them. These are the map
+	// boundary and the bands that wall off separate "worlds" (e.g. Outland) on one
+	// map, only bridged by portals — distinct from cliffs/water so the agent does not
+	// mistake them for sailable/flyable terrain. Water comes from war3map.w3e
+	// (height-accurate); land walkability from the wpm.
 	if (args.command == "pathing-render") {
 		hierarchy.map_directory = std::filesystem::absolute(*map_opt);
 
@@ -1040,13 +1045,24 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		const int out_w = (grid.width + down - 1) / down;
 		const int out_h = (grid.height + down - 1) / down;
 
-		// Class colours (R,G,B). Priority deep > shallow > walkable > blocked keeps
-		// thin water channels and walkable corridors visible after downsampling.
+		// Class colours (R,G,B). Priority void > deep > shallow > walkable > blocked
+		// keeps thin void chasms, water channels and walkable corridors visible after
+		// downsampling. A cell is "void" when unflyable (nothing crosses it).
 		struct Rgb { uint8_t r, g, b; };
+		constexpr Rgb c_void{ 12, 12, 16 };
 		constexpr Rgb c_deep{ 36, 92, 168 };
 		constexpr Rgb c_shallow{ 92, 188, 208 };
 		constexpr Rgb c_land{ 74, 150, 60 };
 		constexpr Rgb c_blocked{ 120, 96, 66 };
+
+		// Classifies one cell: 0 void, 1 deep, 2 shallow, 3 walkable land, 4 blocked.
+		auto classify = [&](int x, int y) -> int {
+			if (grid.at(x, y) & pathing::unflyable) return 0;
+			const uint8_t wc = grid.water_at(x, y);
+			if (wc == 2) return 1;
+			if (wc == 1) return 2;
+			return (grid.at(x, y) & pathing::unwalkable) == 0 ? 3 : 4;
+		};
 
 		std::vector<uint8_t> bgr(static_cast<std::size_t>(out_w) * out_h * 3, 0);
 		for (int r = 0; r < out_h; ++r) {
@@ -1054,21 +1070,18 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 			const int cy_base = (out_h - 1 - r) * down;
 			for (int c = 0; c < out_w; ++c) {
 				const int cx_base = c * down;
-				bool deep = false, shallow = false, walk = false, blocked = false;
+				int best = 5; // lower class number = higher priority
 				for (int dy = 0; dy < down; ++dy) {
 					const int cy = cy_base + dy;
 					if (cy >= grid.height) break;
 					for (int dx = 0; dx < down; ++dx) {
 						const int cx = cx_base + dx;
 						if (cx >= grid.width) break;
-						const uint8_t wc = grid.water_at(cx, cy);
-						if (wc == 2) { deep = true; }
-						else if (wc == 1) { shallow = true; }
-						else if ((grid.at(cx, cy) & pathing::unwalkable) == 0) { walk = true; }
-						else { blocked = true; }
+						best = std::min(best, classify(cx, cy));
 					}
 				}
-				const Rgb px = deep ? c_deep : shallow ? c_shallow : walk ? c_land : blocked ? c_blocked : c_deep;
+				const Rgb px = best == 0 ? c_void : best == 1 ? c_deep : best == 2 ? c_shallow
+							 : best == 3 ? c_land : best == 4 ? c_blocked : c_deep;
 				const std::size_t idx = (static_cast<std::size_t>(r) * out_w + c) * 3;
 				bgr[idx + 0] = px.b;
 				bgr[idx + 1] = px.g;
@@ -1077,15 +1090,17 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		}
 
 		// Full-resolution class tallies (the "how much land" answer).
-		std::size_t deep_n = 0, shallow_n = 0, walk_n = 0, blocked_n = 0;
+		std::size_t void_n = 0, deep_n = 0, shallow_n = 0, walk_n = 0, blocked_n = 0;
 		const std::size_t total = static_cast<std::size_t>(grid.width) * grid.height;
 		for (int y = 0; y < grid.height; ++y) {
 			for (int x = 0; x < grid.width; ++x) {
-				const uint8_t wc = grid.water_at(x, y);
-				if (wc == 2) ++deep_n;
-				else if (wc == 1) ++shallow_n;
-				else if ((grid.at(x, y) & pathing::unwalkable) == 0) ++walk_n;
-				else ++blocked_n;
+				switch (classify(x, y)) {
+					case 0: ++void_n; break;
+					case 1: ++deep_n; break;
+					case 2: ++shallow_n; break;
+					case 3: ++walk_n; break;
+					default: ++blocked_n; break;
+				}
 			}
 		}
 
@@ -1099,6 +1114,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 
 		auto pct = [&](std::size_t n) { return std::to_string(100.0 * static_cast<double>(n) / static_cast<double>(total)); };
 		JsonObject legend;
+		legend.str("void", "black (boundary / separate worlds — nothing crosses, not even air)");
 		legend.str("deep_water", "blue (naval only)");
 		legend.str("shallow_water", "teal (foot + naval)");
 		legend.str("walkable_land", "green (foot)");
@@ -1106,6 +1122,7 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 
 		JsonObject stats;
 		stats.number("total_cells", total);
+		stats.raw("void", std::format("{{\"cells\":{},\"percent\":{}}}", void_n, pct(void_n)));
 		stats.raw("deep_water", std::format("{{\"cells\":{},\"percent\":{}}}", deep_n, pct(deep_n)));
 		stats.raw("shallow_water", std::format("{{\"cells\":{},\"percent\":{}}}", shallow_n, pct(shallow_n)));
 		stats.raw("walkable_land", std::format("{{\"cells\":{},\"percent\":{}}}", walk_n, pct(walk_n)));
