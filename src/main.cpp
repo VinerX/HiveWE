@@ -13,6 +13,7 @@
 #include <QStyleFactory>
 
 #include "main_window/hivewe.h"
+#include "main_window/warcraft_selection.h"
 #include "DockManager.h"
 
 #ifdef WIN32
@@ -174,6 +175,17 @@ int main(int argc, char* argv[]) {
 	ads::CDockManager::setConfigFlag(ads::CDockManager::MiddleMouseButtonClosesTab);
 
 	QSettings settings;
+
+	// Escape hatch: `HiveWE.exe --reset-warcraft` clears the saved game folder so
+	// a broken/old saved path can be wiped without editing the registry by hand.
+	// Startup then falls through to the first-run selection dialog.
+	for (int i = 1; i < argc; ++i) {
+		if (argv[i] && std::string_view(argv[i]) == "--reset-warcraft") {
+			settings.remove("warcraftDirectory");
+			log_line("[INFO] --reset-warcraft: cleared saved Warcraft III folder; will prompt for it.");
+		}
+	}
+
 	QFile file("data/themes/" + settings.value("theme", "Dark").toString() + ".qss");
 	if (!file.open(QIODevice::ReadOnly)) {
 		qWarning() << "Error: Reading theme failed:" << file.error() << ": " << file.errorString();
@@ -221,20 +233,19 @@ int main(int argc, char* argv[]) {
 		hierarchy.local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
 	}
 
-	// Prefer the user-configured Warcraft directory (QSettings), falling back to
-	// the Qt-free filesystem probe in Utilities. Kept here so Utilities stays
-	// headless.
-	const auto warcraft_directory = [&]() -> fs::path {
-		if (settings.contains("warcraftDirectory")) {
-			return settings.value("warcraftDirectory").toString().toStdString();
-		}
-		return find_warcraft_directory();
-	};
+	// A saved Warcraft folder takes the fast path: open it async while the GL pool
+	// spins up. First run, a cleared setting (--reset-warcraft), or a saved folder
+	// that no longer opens all fall through to an explicit selection dialog, so we
+	// never silently lock onto an outdated/wrong install the way the old auto-pick
+	// could.
+	const bool have_saved_directory = settings.contains("warcraftDirectory");
 
 	bool is_casc_open = false;
 	const auto casc_future = std::async(std::launch::async, [&]() {
-		const fs::path directory = warcraft_directory();
-
+		if (!have_saved_directory) {
+			return; // first run: prompt on the GUI thread, don't auto-open
+		}
+		const fs::path directory = settings.value("warcraftDirectory").toString().toStdString();
 		is_casc_open = hierarchy.open_casc(directory);
 		if (is_casc_open) {
 			load_files();
@@ -246,19 +257,26 @@ int main(int argc, char* argv[]) {
 	casc_future.wait();
 
 	if (!is_casc_open) {
-		fs::path directory = warcraft_directory();
-		log_line("[WARN] Could not open Warcraft III data (CASC) at '" + directory.string() + "'. Prompting for the install folder. "
-				 "HiveWE needs an installed Warcraft III to read base game data.");
+		const QString reason = have_saved_directory
+			? "Could not open Warcraft III data at the saved folder. It may have moved, "
+			  "or be an old/incomplete install. Please confirm or pick another folder."
+			: "Welcome to HiveWE! Please confirm your Warcraft III installation folder. "
+			  "HiveWE needs an installed Warcraft III to read base game data.";
+		log_line("[INFO] Prompting for Warcraft III folder (saved="
+				 + std::string(have_saved_directory ? "yes" : "no") + ").");
 
-		while (!hierarchy.open_casc(directory)) {
-			directory = QFileDialog::getExistingDirectory(nullptr, "Select Warcraft III Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();
-			if (directory == "") {
-				log_line("[FATAL] No Warcraft III installation selected; cannot load base game data. Exiting.");
-				exit(EXIT_SUCCESS);
-			}
+		const std::optional<fs::path> chosen = warcraft_selection::prompt(
+			nullptr, warcraft_selection::detect_candidates(), /*allow_cancel*/ false, reason);
+		if (!chosen) {
+			log_line("[FATAL] No Warcraft III installation selected; cannot load base game data. Exiting.");
+			exit(EXIT_SUCCESS);
 		}
-		settings.setValue("warcraftDirectory", QString::fromStdString(directory.string()));
 
+		settings.setValue("warcraftDirectory", QString::fromStdString(chosen->string()));
+		log_line("[INFO] Using Warcraft III folder: " + chosen->string()
+				 + " (version " + warcraft_selection::version_label(*chosen) + ").");
+
+		// prompt() already opened CASC for the chosen folder; just load the files.
 		load_files();
 	}
 

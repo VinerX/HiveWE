@@ -33,7 +33,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Multi-config build tree produced by `cmake --preset Release`.
 BUILD_DIR = REPO_ROOT / "build" / "Release" / "Release"
 DATA_SRC = REPO_ROOT / "data"
-DEFAULT_VERSION = "0.11.2"
+DEFAULT_VERSION = "0.11.3"
 
 # Files copied from the build dir into the release. Executables + every runtime
 # DLL the build placed next to them (Qt, StormLib, CascLib, MSVC runtime, ...).

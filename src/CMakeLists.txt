@@ -119,6 +119,8 @@ target_sources(HiveWE_lib PRIVATE
 	"main_window/hivewe.cpp"
 	"main_window/glwidget.cpp"
 	"main_window/main_ribbon.cpp"
+	"main_window/warcraft_selection.cpp"
+	"main_window/warcraft_selection.h"
 
 	"brush/brush.cpp"
 	"brush/doodad_brush.cpp"

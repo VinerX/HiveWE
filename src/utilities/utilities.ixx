@@ -359,12 +359,105 @@ transform_aabb_non_uniform(const glm::vec3& min, const glm::vec3& max, glm::vec3
 // filesystem locations. Qt-free so the headless data layer (and CLI) can reuse
 // it. The GUI prefers a user-configured path (QSettings "warcraftDirectory")
 // and only falls back to this probe; that lookup lives in main.cpp.
+// True when `directory` plausibly holds an installed Warcraft III (CASC). The
+// same three locations open_casc() probes; cheap filesystem check, no CASC open.
+export bool looks_like_warcraft_directory(const fs::path& directory) {
+	if (directory.empty()) {
+		return false;
+	}
+	std::error_code ec;
+	return fs::exists(directory / ".build.info", ec)
+		|| fs::exists(directory / "Data", ec)
+		|| fs::exists(directory / "_retail_", ec);
+}
+
+// Well-known filesystem locations to probe for a Warcraft III install, in
+// preference order. Registry-based detection (custom install dirs) is layered on
+// top by the GUI; this stays Qt-free so the headless data layer/CLI can reuse it.
+export std::vector<fs::path> find_warcraft_directories() {
+	std::vector<fs::path> result;
+	for (const fs::path candidate : {
+			 "C:/Program Files/Warcraft III",
+			 "C:/Program Files (x86)/Warcraft III",
+			 "C:/Program Files/Warcraft III Public Test",
+		 }) {
+		std::error_code ec;
+		if (fs::exists(candidate, ec)) {
+			result.push_back(candidate);
+		}
+	}
+	return result;
+}
+
 export fs::path find_warcraft_directory() {
-	if (fs::exists("C:/Program Files/Warcraft III")) {
-		return "C:/Program Files/Warcraft III";
-	} else if (fs::exists("C:/Program Files (x86)/Warcraft III")) {
-		return "C:/Program Files (x86)/Warcraft III";
-	} else {
+	const auto candidates = find_warcraft_directories();
+	return candidates.empty() ? fs::path{} : candidates.front();
+}
+
+// Read the installed game version from `<directory>/.build.info`. That file is a
+// '|'-delimited table whose header names columns as "Name!TYPE:size"; we locate
+// the "Version" column and return it for the active (Active==1) record, falling
+// back to the first record. Returns "" when the file is absent/unparseable (e.g.
+// a classic, pre-Reforged MPQ install that has no .build.info). Lets the GUI show
+// which version a candidate is so the user can reject an old/wrong one.
+export std::string read_warcraft_version(const fs::path& directory) {
+	std::ifstream file(directory / ".build.info");
+	if (!file) {
 		return "";
 	}
+
+	const auto split = [](const std::string& line) {
+		std::vector<std::string> fields;
+		size_t start = 0;
+		while (true) {
+			const size_t bar = line.find('|', start);
+			std::string field = line.substr(start, bar == std::string::npos ? std::string::npos : bar - start);
+			fields.push_back(std::string{ trimmed(field) });
+			if (bar == std::string::npos) {
+				break;
+			}
+			start = bar + 1;
+		}
+		return fields;
+	};
+
+	std::string header;
+	if (!std::getline(file, header)) {
+		return "";
+	}
+
+	const std::vector<std::string> columns = split(header);
+	int version_col = -1;
+	int active_col = -1;
+	for (int i = 0; i < static_cast<int>(columns.size()); ++i) {
+		const std::string name{ columns[i].substr(0, columns[i].find('!')) };
+		if (name == "Version") {
+			version_col = i;
+		} else if (name == "Active") {
+			active_col = i;
+		}
+	}
+	if (version_col < 0) {
+		return "";
+	}
+
+	std::string fallback;
+	std::string line;
+	while (std::getline(file, line)) {
+		if (trimmed(line).empty()) {
+			continue;
+		}
+		const std::vector<std::string> fields = split(line);
+		if (version_col >= static_cast<int>(fields.size())) {
+			continue;
+		}
+		const std::string& version = fields[version_col];
+		if (active_col >= 0 && active_col < static_cast<int>(fields.size()) && fields[active_col] == "1") {
+			return version;
+		}
+		if (fallback.empty()) {
+			fallback = version;
+		}
+	}
+	return fallback;
 }

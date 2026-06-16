@@ -1,4 +1,5 @@
 #include "HiveWE.h"
+#include "warcraft_selection.h"
 #define __STORMLIB_NO_STATIC_LINK__
 #include "StormLib.h"
 
@@ -566,17 +567,28 @@ void HiveWE::switch_warcraft() {
 	hierarchy.ptr = settings.value("flavour", "Retail").toString() == "PTR";
 	hierarchy.hd = settings.value("hd", "False").toString() == "True";
 	hierarchy.teen = settings.value("teen", "False").toString() == "True";
-	fs::path directory;
-	do {
-		directory = QFileDialog::getExistingDirectory(this, "Select Warcraft Directory", "/home", QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks).toStdWString();
-		if (directory == "") {
-			directory = settings.value("warcraftDirectory").toString().toStdString();
-		}
-	} while (!hierarchy.open_casc(directory));
 
-	if (directory != hierarchy.warcraft_directory) {
-		settings.setValue("warcraftDirectory", QString::fromStdString(directory.string()));
+	// Remember the currently-open folder so we can restore it if the user cancels
+	// (prompt() opens CASC on each folder it validates).
+	const fs::path previous = hierarchy.warcraft_directory;
+
+	const std::optional<fs::path> chosen = warcraft_selection::prompt(
+		this, warcraft_selection::detect_candidates(), /*allow_cancel*/ true,
+		"Select the Warcraft III installation folder to use. The detected version is shown below.");
+
+	if (!chosen) {
+		// Cancelled: keep the previous folder and leave hierarchy pointing at it.
+		if (!previous.empty()) {
+			hierarchy.open_casc(previous);
+		}
+		return;
 	}
+
+	settings.setValue("warcraftDirectory", QString::fromStdString(chosen->string()));
+	QMessageBox::information(this, "Warcraft III folder",
+		QString("Now using:\n%1\nVersion: %2\n\nRestart HiveWE for the change to fully take effect.")
+			.arg(QString::fromStdString(chosen->string()),
+				 QString::fromStdString(warcraft_selection::version_label(*chosen))));
 }
 
 // ToDo move to terrain class?
