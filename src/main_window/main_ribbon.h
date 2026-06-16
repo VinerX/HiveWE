@@ -20,6 +20,7 @@ public:
 	QRibbonButton* units_visible = new QRibbonButton;
 	QRibbonButton* doodads_visible = new QRibbonButton;
 	QRibbonButton* pathing_visible = new QRibbonButton;
+	QRibbonButton* regions_visible = new QRibbonButton;
 	QRibbonButton* brush_visible = new QRibbonButton;
 	QRibbonButton* lighting_visible = new QRibbonButton;
 	QRibbonButton* water_visible = new QRibbonButton;
@@ -35,6 +36,7 @@ public:
 	QRibbonButton* map_options = new QRibbonButton;
 	QRibbonButton* map_size_camera_bounds = new QRibbonButton;
 	QRibbonButton* gameplay_constants = new QRibbonButton;
+	QRibbonButton* map_protection = new QRibbonButton;
 
 	QRibbonButton* import_heightmap = new QRibbonButton;
 	QRibbonButton* change_tileset = new QRibbonButton;
@@ -54,6 +56,7 @@ public:
 	QRibbonButton* doodad_palette = new QRibbonButton;
 	QRibbonButton* unit_palette = new QRibbonButton;
 	QRibbonButton* pathing_palette = new QRibbonButton;
+	QRibbonButton* region_palette = new QRibbonButton;
 
 	QToolButton* new_map = new QToolButton;
 	QToolButton* open_map_mpq = new QToolButton;
@@ -62,7 +65,7 @@ public:
 
 	QToolButton* save_map = new QToolButton;
 	QToolButton* save_map_as = new QToolButton;
-	QToolButton* export_mpq = new QToolButton;
+	QToolButton* export_map = new QToolButton;
 
 	QToolButton* test_map = new QToolButton;
 	QToolButton* settings = new QToolButton;

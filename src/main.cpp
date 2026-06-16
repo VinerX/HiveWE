@@ -230,7 +230,7 @@ int main(int argc, char* argv[]) {
 	hierarchy.teen = settings.value("teen", "False").toString() == "True";
 	{
 		QSettings war3reg("HKEY_CURRENT_USER\\Software\\Blizzard Entertainment\\Warcraft III", QSettings::NativeFormat);
-		hierarchy.local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
+		hierarchy.allow_local_files = war3reg.value("Allow Local Files", 0).toInt() != 0;
 	}
 
 	// A saved Warcraft folder takes the fast path: open it async while the GL pool

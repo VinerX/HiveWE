@@ -641,7 +641,7 @@ void AssetManager::refresh() const {
 
 	if (group_by_folder) {
 		std::unordered_map<std::string, QStandardItem*> folders;
-		for (const auto& [path, used_by] : results) {
+		for (const auto& [path, size, used_by] : results) {
 			const auto slash = path.find_last_of('/');
 			const std::string folder_path = slash == std::string::npos ? "" : path.substr(0, slash);
 			const std::string file_name = slash == std::string::npos ? path : path.substr(slash + 1);
@@ -662,7 +662,7 @@ void AssetManager::refresh() const {
 		}
 		tree_view->expandToDepth(0);
 	} else {
-		for (const auto& [path, used_by] : results) {
+		for (const auto& [path, size, used_by] : results) {
 			model->appendRow(make_file_row(path, QString::fromStdString(path), used_by));
 		}
 	}

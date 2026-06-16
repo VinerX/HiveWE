@@ -309,7 +309,11 @@ std::unordered_map<std::string, UnitRecord> load_map_only_unit_records(const fs:
 		return out;
 	}
 
-	slk::SLK meta_slk(meta_path, true);
+	slk::SLK meta_slk;
+	if (auto r = meta_slk.load_local(meta_path); !r) {
+		warnings.push_back("failed to load local UnitMetaData.slk: " + r.error());
+		return out;
+	}
 	meta_slk.build_meta_map();
 
 	if (!hierarchy.map_file_exists("war3map.w3u")) {

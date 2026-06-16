@@ -140,6 +140,7 @@ target_sources(HiveWE_core PUBLIC FILE_SET core_modules TYPE CXX_MODULES FILES
 	"src/utilities/no_init_allocator.ixx"
 	"src/utilities/unordered_map.ixx"
 	"src/utilities/utilities.ixx"
+	"src/utilities/file_paths.ixx"
 	"src/base/binary_reader.ixx"
 	"src/base/binary_writer.ixx"
 	"src/file_formats/casc.ixx"

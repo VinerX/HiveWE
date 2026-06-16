@@ -21,7 +21,6 @@ namespace fs = std::filesystem;
 import QRibbon;
 import WindowHandler;
 import <glm/glm.hpp>;
-import <glm/gtc/matrix_transform.hpp>;
 import <glm/gtc/quaternion.hpp>;
 import "palette.h";
 import "minimap.h";
@@ -34,11 +33,12 @@ public:
 
 	void load_map(const fs::path& directory);
 
+	void new_map();
 	void load_folder();
 	void load_mpq();
 	void save();
 	void save_as();
-	void export_mpq();
+	void export_map();
 	void play_test();
 
 	void add_to_recent_maps(const QString& path);

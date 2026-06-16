@@ -277,7 +277,7 @@ std::pair<float, bool> resolve_water_offset(const std::string& warcraft) {
 		hierarchy.ptr = false;
 		hierarchy.hd = false;
 		hierarchy.teen = false;
-		hierarchy.local_files = false;
+		hierarchy.allow_local_files = false;
 		if (!hierarchy.open_casc(warcraft)) {
 			return { 0.f, false };
 		}
@@ -754,7 +754,7 @@ std::optional<std::string> bootstrap(const std::string& warcraft, const std::str
 	hierarchy.ptr = false;
 	hierarchy.hd = hd;
 	hierarchy.teen = false;
-	hierarchy.local_files = false;
+	hierarchy.allow_local_files = false;
 
 	if (!hierarchy.open_casc(warcraft)) {
 		return "failed to open Warcraft III data (CASC) at: " + warcraft;
@@ -1921,7 +1921,8 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 			if (!fs::is_regular_file(meta_path)) {
 				return error("local UnitMetaData.slk not found; cannot read .w3u without Warcraft III data");
 			}
-			slk::SLK meta_slk(meta_path, true);
+			slk::SLK meta_slk;
+			(void)meta_slk.load_local(meta_path);
 			meta_slk.build_meta_map();
 
 			if (!hierarchy.map_file_exists("war3map.w3u")) {
@@ -2114,7 +2115,8 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				warnings.push_back("local UnitMetaData.slk not found; map-only fallback unavailable");
 				goto list_race_output;
 			}
-			slk::SLK meta_slk(meta_path, true);
+			slk::SLK meta_slk;
+			(void)meta_slk.load_local(meta_path);
 			meta_slk.build_meta_map();
 			if (!hierarchy.map_file_exists("war3map.w3u")) {
 				warnings.push_back("map does not contain war3map.w3u");
@@ -2268,7 +2270,8 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 				warnings.push_back("local UnitMetaData.slk not found");
 				goto list_races_output;
 			}
-			slk::SLK meta_slk(meta_path, true);
+			slk::SLK meta_slk;
+			(void)meta_slk.load_local(meta_path);
 			meta_slk.build_meta_map();
 			if (!hierarchy.map_file_exists("war3map.w3u")) {
 				warnings.push_back("map does not contain war3map.w3u");

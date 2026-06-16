@@ -73,6 +73,10 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	pathing_palette->setText("Pathing");
 	palette_section->addWidget(pathing_palette);
 
+	region_palette->setIcon(QIcon("data/icons/ribbon/sizebounds.png"));
+	region_palette->setText("Regions");
+	palette_section->addWidget(region_palette);
+
 
 
 	//view_history->setIcon(QIcon("data/icons/ribbon/description.png"));
@@ -131,6 +135,11 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	pathing_visible->setText("Pathing");
 	pathing_visible->setCheckable(true);
 	visible_section->addWidget(pathing_visible);
+
+	regions_visible->setIcon(QIcon("data/icons/ribbon/sizebounds.png"));
+	regions_visible->setText("Regions");
+	regions_visible->setCheckable(true);
+	visible_section->addWidget(regions_visible);
 	
 	brush_visible->setIcon(QIcon("data/icons/ribbon/brush.png"));
 	brush_visible->setText("Brush");
@@ -185,7 +194,6 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	new_map->setIcon(QIcon("data/icons/ribbon/new.ico"));
 	new_map->setIconSize({ 32, 32 });
 	new_map->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-	new_map->setDisabled(true);
 	addMenuItem(new_map);
 
 	open_map_folder->setText("Open Map (Folder)");
@@ -220,11 +228,11 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	save_map_as->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
 	addMenuItem(save_map_as);
 
-	export_mpq->setText("Export MPQ");
-	export_mpq->setIcon(QIcon("data/icons/ribbon/saveas.png"));
-	export_mpq->setIconSize({ 32, 32 });
-	export_mpq->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-	addMenuItem(export_mpq);
+	export_map->setText("Export Map");
+	export_map->setIcon(QIcon("data/icons/ribbon/saveas.png"));
+	export_map->setIconSize({ 32, 32 });
+	export_map->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	addMenuItem(export_map);
 
 	test_map->setText("Test Map");
 	test_map->setIcon(QIcon("data/icons/ribbon/test.ico"));
@@ -266,6 +274,10 @@ MainRibbon::MainRibbon(QWidget* parent) : QRibbon(parent) {
 	gameplay_constants->setIcon(QIcon("data/icons/ribbon/options.png"));
 	gameplay_constants->setText("Gameplay\nConstants");
 	map_section->addWidget(gameplay_constants);
+
+	map_protection->setIcon(QIcon("data/icons/ribbon/options.png"));
+	map_protection->setText("Protection");
+	map_section->addWidget(map_protection);
 
 	//map_size_camera_bounds->setIcon(QIcon("data/icons/ribbon/sizebounds.png"));
 	//map_size_camera_bounds->setText("Size&&Camera\nBounds");
