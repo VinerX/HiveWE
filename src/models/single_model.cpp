@@ -2,6 +2,7 @@
 
 #include "model_view.h"
 
+#include <QApplication>
 #include <QPainter>
 #include <QPlainTextEdit>
 #include <QDialogButtonBox>
@@ -9,6 +10,7 @@
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QListWidget>
+#include <QMenu>
 #include <QPushButton>
 #include <QTreeView>
 #include <QVBoxLayout>
@@ -321,6 +323,8 @@ QWidget* TableDelegate::createEditor(QWidget* parent, const QStyleOptionViewItem
 	const std::string minVal = single_model->meta_slk->data("minval", mapping[transformed_index.row()].key);
 	const std::string maxVal = single_model->meta_slk->data("maxval", mapping[transformed_index.row()].key);
 
+	bool shift_held = QApplication::keyboardModifiers() & Qt::ShiftModifier;
+
 	if (type == "int") {
 		QSpinBox* editor = new QSpinBox(parent);
 		editor->setMinimum(INT_MIN);
@@ -343,16 +347,22 @@ QWidget* TableDelegate::createEditor(QWidget* parent, const QStyleOptionViewItem
 		//		editor->setMaxLength(std::stoi(maxVal));
 		return editor;
 	} else if (type == "model") {
+		if (shift_held) return new QLineEdit(parent);
 		return create_model_editor(parent);
 	} else if (type == "targetList") {
+		if (shift_held) return new QLineEdit(parent);
 		return create_target_list_editor(parent);
 	} else if (type == "unitList") {
+		if (shift_held) return new QLineEdit(parent);
 		return create_unit_list_editor(parent);
 	} else if (type == "upgradeList") {
+		if (shift_held) return new QLineEdit(parent);
 		return create_upgrade_list_editor(parent);
 	} else if (type == "abilityList" || type == "heroAbilityList" || type == "abilitySkinList") {
+		if (shift_held) return new QLineEdit(parent);
 		return create_ability_list_editor(parent);
 	} else if (type.ends_with("List")) {
+		if (shift_held) return new QLineEdit(parent);
 		return create_list_editor(parent);
 	} else if (unit_editor_data.section_exists(type)) {
 		QComboBox* editor = new QComboBox(parent);
@@ -368,6 +378,7 @@ QWidget* TableDelegate::createEditor(QWidget* parent, const QStyleOptionViewItem
 		}
 		return editor;
 	} else if (type == "icon") {
+		if (shift_held) return new QLineEdit(parent);
 		return create_icon_editor(parent);
 	} else if (type == "doodadCategory") {
 		QComboBox* editor = new QComboBox(parent);
@@ -393,6 +404,11 @@ void TableDelegate::setEditorData(QWidget* editor, const QModelIndex& index) con
 	}
 	const std::string_view type =
 		single_model->meta_slk->data<std::string_view>("type", single_model->getMapping()[transformed_index.row()].key);
+
+	if (dynamic_cast<QLineEdit*>(editor)) {
+		dynamic_cast<QLineEdit*>(editor)->setText(index.data(Qt::EditRole).toString());
+		return;
+	}
 
 	if (type == "int") {
 		dynamic_cast<QSpinBox*>(editor)->setValue(index.data(Qt::EditRole).toInt());
@@ -487,6 +503,11 @@ void TableDelegate::setModelData(QWidget* editor, QAbstractItemModel* model, con
 	}
 	const std::string_view type =
 		single_model->meta_slk->data<std::string_view>("type", single_model->getMapping()[transformed_index.row()].key);
+
+	if (dynamic_cast<QLineEdit*>(editor)) {
+		model->setData(index, static_cast<QLineEdit*>(editor)->text());
+		return;
+	}
 
 	if (type == "int") {
 		model->setData(index, static_cast<QSpinBox*>(editor)->value());
@@ -714,6 +735,19 @@ QWidget* TableDelegate::create_upgrade_list_editor(QWidget* parent) const {
 	list->setObjectName("upgradeList");
 	list->setIconSize(QSize(32, 32));
 	list->setDragDropMode(QAbstractItemView::DragDropMode::InternalMove);
+	list->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(list, &QListWidget::customContextMenuRequested, [=](const QPoint& pos) {
+		QListWidgetItem* item = list->itemAt(pos);
+		if (!item) return;
+		QMenu ctxMenu;
+		QAction* showAction = ctxMenu.addAction("Show in Object Editor");
+		connect(showAction, &QAction::triggered, [=]() {
+			const auto delegate = const_cast<TableDelegate*>(this);
+			emit delegate->showInObjectEditor("upgrade", item->data(Qt::StatusTipRole).toString());
+			dialog->close();
+		});
+		ctxMenu.exec(list->mapToGlobal(pos));
+	});
 	layout->addWidget(list);
 
 	QHBoxLayout* hbox = new QHBoxLayout;
@@ -746,6 +780,23 @@ QWidget* TableDelegate::create_upgrade_list_editor(QWidget* parent) const {
 		view->setSelectionBehavior(QAbstractItemView::SelectRows);
 		view->setSelectionMode(QAbstractItemView::ExtendedSelection);
 		view->expandAll();
+
+		view->setContextMenuPolicy(Qt::CustomContextMenu);
+		connect(view, &QTreeView::customContextMenuRequested, [=](const QPoint& pos) {
+			QModelIndex index = view->indexAt(pos);
+			if (!index.isValid()) return;
+			QModelIndex sourceIndex = filter->mapToSource(index);
+			BaseTreeItem* treeItem = static_cast<BaseTreeItem*>(sourceIndex.internalPointer());
+			if (treeItem->baseCategory || treeItem->subCategory) return;
+			QMenu ctxMenu;
+			QAction* showAction = ctxMenu.addAction("Show in Object Editor");
+			connect(showAction, &QAction::triggered, [=]() {
+				const auto delegate = const_cast<TableDelegate*>(this);
+				emit delegate->showInObjectEditor("upgrade", QString::fromStdString(treeItem->id));
+				selectdialog->close();
+			});
+			ctxMenu.exec(view->mapToGlobal(pos));
+		});
 
 		connect(search, &QLineEdit::textChanged, filter, QOverload<const QString&>::of(&QSortFilterProxyModel::setFilterFixedString));
 
@@ -831,6 +882,19 @@ QWidget* TableDelegate::create_unit_list_editor(QWidget* parent) const {
 	list->setObjectName("unitList");
 	list->setIconSize(QSize(32, 32));
 	list->setDragDropMode(QAbstractItemView::DragDropMode::InternalMove);
+	list->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(list, &QListWidget::customContextMenuRequested, [=](const QPoint& pos) {
+		QListWidgetItem* item = list->itemAt(pos);
+		if (!item) return;
+		QMenu ctxMenu;
+		QAction* showAction = ctxMenu.addAction("Show in Object Editor");
+		connect(showAction, &QAction::triggered, [=]() {
+			const auto delegate = const_cast<TableDelegate*>(this);
+			emit delegate->showInObjectEditor("unit", item->data(Qt::StatusTipRole).toString());
+			dialog->close();
+		});
+		ctxMenu.exec(list->mapToGlobal(pos));
+	});
 	layout->addWidget(list);
 
 	QHBoxLayout* hbox = new QHBoxLayout;
@@ -863,6 +927,23 @@ QWidget* TableDelegate::create_unit_list_editor(QWidget* parent) const {
 		view->setSelectionBehavior(QAbstractItemView::SelectRows);
 		view->setSelectionMode(QAbstractItemView::ExtendedSelection);
 		view->expandAll();
+
+		view->setContextMenuPolicy(Qt::CustomContextMenu);
+		connect(view, &QTreeView::customContextMenuRequested, [=](const QPoint& pos) {
+			QModelIndex index = view->indexAt(pos);
+			if (!index.isValid()) return;
+			QModelIndex sourceIndex = filter->mapToSource(index);
+			BaseTreeItem* treeItem = static_cast<BaseTreeItem*>(sourceIndex.internalPointer());
+			if (treeItem->baseCategory || treeItem->subCategory) return;
+			QMenu ctxMenu;
+			QAction* showAction = ctxMenu.addAction("Show in Object Editor");
+			connect(showAction, &QAction::triggered, [=]() {
+				const auto delegate = const_cast<TableDelegate*>(this);
+				emit delegate->showInObjectEditor("unit", QString::fromStdString(treeItem->id));
+				selectdialog->close();
+			});
+			ctxMenu.exec(view->mapToGlobal(pos));
+		});
 
 		connect(search, &QLineEdit::textChanged, filter, QOverload<const QString&>::of(&QSortFilterProxyModel::setFilterFixedString));
 
@@ -950,6 +1031,19 @@ QWidget* TableDelegate::create_ability_list_editor(QWidget* parent) const {
 	list->setDragDropMode(QAbstractItemView::DragDropMode::InternalMove);
 	list->setSelectionBehavior(QAbstractItemView::SelectRows);
 	list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	list->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(list, &QListWidget::customContextMenuRequested, [=](const QPoint& pos) {
+		QListWidgetItem* item = list->itemAt(pos);
+		if (!item) return;
+		QMenu ctxMenu;
+		QAction* showAction = ctxMenu.addAction("Show in Object Editor");
+		connect(showAction, &QAction::triggered, [=]() {
+			const auto delegate = const_cast<TableDelegate*>(this);
+			emit delegate->showInObjectEditor("ability", item->data(Qt::StatusTipRole).toString());
+			dialog->close();
+		});
+		ctxMenu.exec(list->mapToGlobal(pos));
+	});
 
 	layout->addWidget(list);
 
@@ -983,6 +1077,23 @@ QWidget* TableDelegate::create_ability_list_editor(QWidget* parent) const {
 		view->setSelectionBehavior(QAbstractItemView::SelectRows);
 		view->setSelectionMode(QAbstractItemView::ExtendedSelection);
 		view->expandAll();
+
+		view->setContextMenuPolicy(Qt::CustomContextMenu);
+		connect(view, &QTreeView::customContextMenuRequested, [=](const QPoint& pos) {
+			QModelIndex index = view->indexAt(pos);
+			if (!index.isValid()) return;
+			QModelIndex sourceIndex = filter->mapToSource(index);
+			BaseTreeItem* treeItem = static_cast<BaseTreeItem*>(sourceIndex.internalPointer());
+			if (treeItem->baseCategory || treeItem->subCategory) return;
+			QMenu ctxMenu;
+			QAction* showAction = ctxMenu.addAction("Show in Object Editor");
+			connect(showAction, &QAction::triggered, [=]() {
+				const auto delegate = const_cast<TableDelegate*>(this);
+				emit delegate->showInObjectEditor("ability", QString::fromStdString(treeItem->id));
+				selectdialog->close();
+			});
+			ctxMenu.exec(view->mapToGlobal(pos));
+		});
 
 		connect(search, &QLineEdit::textChanged, filter, QOverload<const QString&>::of(&QSortFilterProxyModel::setFilterFixedString));
 

@@ -85,6 +85,8 @@ private:
 	std::shared_ptr<QIconResource> custom_buff_icon;
 	std::shared_ptr<QIconResource> custom_upgrade_icon;
 
+	bool show_tree_rawcodes = false;
+
 	nlohmann::json ability_insights;
 
 	void itemClicked(const QSortFilterProxyModel* model, TableModel* table, const QModelIndex& index);

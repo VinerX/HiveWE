@@ -105,4 +105,7 @@ public:
 
 		return size;
 	}
+
+signals:
+	void showInObjectEditor(const QString& category, const QString& id);
 };

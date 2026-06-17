@@ -137,6 +137,17 @@ ObjectEditor::ObjectEditor(QWidget* parent) : QMainWindow(parent) {
 		edit->selectAll();
 	});
 
+	connect(new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), this), &QShortcut::activated, [&]() {
+		show_tree_rawcodes = !show_tree_rawcodes;
+		unitTreeFilter->setShowRawcodes(show_tree_rawcodes);
+		itemTreeFilter->setShowRawcodes(show_tree_rawcodes);
+		doodadTreeFilter->setShowRawcodes(show_tree_rawcodes);
+		destructibleTreeFilter->setShowRawcodes(show_tree_rawcodes);
+		abilityTreeFilter->setShowRawcodes(show_tree_rawcodes);
+		upgradeTreeFilter->setShowRawcodes(show_tree_rawcodes);
+		buffTreeFilter->setShowRawcodes(show_tree_rawcodes);
+	});
+
 	show();
 	} catch (const std::exception& ex) {
 		std::ofstream log("hivewe.log", std::ios::app);
@@ -207,6 +218,24 @@ void ObjectEditor::open_by_id(TableModel* table, const std::string& id, const QS
 	single_model->setID(id);
 
 	TableDelegate* delegate = new TableDelegate(single_model);
+
+	connect(delegate, &TableDelegate::showInObjectEditor, this, [this](const QString& category, const QString& id) {
+		if (category == "ability") {
+			select_id(Category::ability, id.toStdString());
+		} else if (category == "unit") {
+			select_id(Category::unit, id.toStdString());
+		} else if (category == "upgrade") {
+			select_id(Category::upgrade, id.toStdString());
+		} else if (category == "item") {
+			select_id(Category::item, id.toStdString());
+		} else if (category == "doodad") {
+			select_id(Category::doodad, id.toStdString());
+		} else if (category == "destructible") {
+			select_id(Category::destructible, id.toStdString());
+		} else if (category == "buff") {
+			select_id(Category::buff, id.toStdString());
+		}
+	}, Qt::QueuedConnection);
 
 	QTableView* view = new QTableView;
 	view->setItemDelegate(delegate);

@@ -291,11 +291,35 @@ export class BaseFilter : public QSortFilterProxyModel {
 	Q_OBJECT
 
 	bool filterCustom = false;
+	bool show_rawcodes = false;
 
   public:
 	slk::SLK* slk;
 
 	using QSortFilterProxyModel::QSortFilterProxyModel;
+
+	QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override {
+		if (role == Qt::DisplayRole && show_rawcodes) {
+			QModelIndex sourceIndex = mapToSource(index);
+			if (sourceIndex.isValid()) {
+				BaseTreeItem* item = static_cast<BaseTreeItem*>(sourceIndex.internalPointer());
+				if (item && !item->id.empty() && !item->baseCategory && !item->subCategory) {
+					QString name = QSortFilterProxyModel::data(index, role).toString();
+					if (name.isEmpty()) {
+						if (slk->column_headers.contains("name")) {
+							name = QString::fromStdString(slk->data("name", item->id));
+						} else if (slk->column_headers.contains("bufftip")) {
+							name = QString::fromStdString(slk->data("bufftip", item->id));
+						} else if (slk->column_headers.contains("editorname")) {
+							name = QString::fromStdString(slk->data("editorname", item->id));
+						}
+					}
+					return QString("[%1] %2").arg(QString::fromStdString(item->id), name);
+				}
+			}
+		}
+		return QSortFilterProxyModel::data(index, role);
+	}
 
 	bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const {
 		QModelIndex index0 = sourceModel()->index(sourceRow, 0, sourceParent);
@@ -318,6 +342,12 @@ export class BaseFilter : public QSortFilterProxyModel {
 	void setFilterCustom(const bool filter) {
 		beginFilterChange();
 		filterCustom = filter;
+		endFilterChange(Direction::Rows);
+	}
+
+	void setShowRawcodes(const bool show) {
+		beginFilterChange();
+		show_rawcodes = show;
 		endFilterChange(Direction::Rows);
 	}
 };
