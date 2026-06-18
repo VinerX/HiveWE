@@ -393,6 +393,18 @@ HiveWE::HiveWE(QWidget* parent) : QMainWindow(parent) {
 	});
 
 	map->render_manager.resize_framebuffers(ui.widget->width(), ui.widget->height());
+
+	// Load last opened map on startup
+	{
+		QSettings settings;
+		const QStringList recent = settings.value("recentMaps").toStringList();
+		if (!recent.isEmpty()) {
+			const fs::path last_path = recent.first().toStdString();
+			if (fs::exists(last_path / "war3map.w3i")) {
+				load_map(last_path);
+			}
+		}
+	}
 }
 
 void HiveWE::load_map(const fs::path& directory) {
@@ -415,7 +427,7 @@ void HiveWE::load_map(const fs::path& directory) {
 	map->load(directory);
 
 	map->render_manager.resize_framebuffers(ui.widget->width(), ui.widget->height());
-	setWindowTitle("HiveWE 0.11 - " + QString::fromStdString(map->filesystem_path.string()));
+	setWindowTitle("HiveWE (VinerX Edition) - " + QString::fromStdString(map->name) + " - " + QString::fromStdString(map->filesystem_path.string()));
 
 	add_to_recent_maps(QString::fromStdString(directory.string()));
 }
@@ -521,7 +533,7 @@ void HiveWE::new_map() {
 
 	load_map(directory);
 	map->is_in_temp_dir = true;
-	setWindowTitle("HiveWE 0.11 - Untitled Map");
+	setWindowTitle("HiveWE (VinerX Edition) - Untitled Map");
 }
 
 void HiveWE::load_folder() {
@@ -668,7 +680,7 @@ void HiveWE::save_as() {
 		}
 	}
 
-	setWindowTitle("HiveWE 0.11 - " + QString::fromStdString(map->filesystem_path.string()));
+	setWindowTitle("HiveWE (VinerX Edition) - " + QString::fromStdString(map->name) + " - " + QString::fromStdString(map->filesystem_path.string()));
 }
 
 void HiveWE::export_map() {
