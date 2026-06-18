@@ -1406,6 +1406,7 @@ int main(int argc, char* argv[]) {
 			   args.command == "get-object" || args.command == "get-objects-bulk" || args.command == "set-field" || args.command == "copy-object" || args.command == "batch-edit" || args.command == "describe-race" ||
 			   args.command == "show-building" || args.command == "list-race-objects" || args.command == "list-all-races" ||
 			   args.command == "dump-objects" || args.command == "list-fields" || args.command == "trace-unit" ||
+			   args.command == "merge-objects" ||
 			   args.command == "pathing-islands" || args.command == "pathing-path" ||
 			   args.command == "pathing-render" ||
 			   args.command == "list-regions" || args.command == "add-region" ||

@@ -104,8 +104,6 @@ export class Map: public QObject {
 
 	// ---- object-data 3-way merge (CLI/agent edits vs in-editor edits) ---------
 
-	using ShadowData = std::remove_reference_t<decltype(units_slk.shadow_data)>;
-
 	struct ObjTableDesc {
 		const char* name;
 		slk::SLK* slk;
@@ -140,138 +138,38 @@ export class Map: public QObject {
 
 	// Computes a 3-way merge between the load-time baseline, the current in-editor
 	// state (mine) and the current on-disk state (theirs), WITHOUT mutating any live
-	// data. Non-conflicting changes are collected to apply; cells both sides changed
-	// differently become conflicts for the user to resolve.
+	// data. Delegates to the free function in ObjectData.
 	ObjectMergePlan compute_object_merge() {
-		ObjectMergePlan plan;
 		auto tables = object_tables();
 
-		auto lookup = [](const ShadowData& s, const std::string& id, const std::string& field) -> std::optional<std::string> {
-			const auto row = s.find(id);
-			if (row == s.end()) {
-				return std::nullopt;
-			}
-			const auto cell = row->second.find(field);
-			if (cell == row->second.end()) {
-				return std::nullopt;
-			}
-			return cell->second;
-		};
-
+		std::array<ShadowData, 7> mine;
 		for (int i = 0; i < 7; i++) {
-			ObjTableDesc& T = tables[i];
-			const ShadowData& base = shadow_at_load[i];
-			const ShadowData& mine = T.slk->shadow_data;
-
-			// Build "theirs" by reloading the on-disk modification files into a copy of
-			// the live SLK with its overrides cleared — never touches the live data.
-			slk::SLK temp = *T.slk;
-			temp.shadow_data.clear();
-			for (const char* file : T.files) {
-				if (hierarchy.map_file_exists(file)) {
-					load_modification_file(file, temp, *T.meta, T.optional_ints);
-				}
-			}
-			const ShadowData& theirs = temp.shadow_data;
-
-			std::unordered_set<std::string> ids;
-			for (const auto& [id, _] : base) ids.insert(id);
-			for (const auto& [id, _] : mine) ids.insert(id);
-			for (const auto& [id, _] : theirs) ids.insert(id);
-
-			for (const std::string& id : ids) {
-				const bool in_editor = T.slk->base_data.contains(id);
-				bool row_add_planned = false;
-				auto ensure_row = [&] {
-					if (in_editor || row_add_planned) {
-						return;
-					}
-					// Theirs-only custom object: remember to recreate its row on apply.
-					std::string oldid;
-					if (const auto o = lookup(theirs, id, "oldid")) {
-						oldid = *o;
-					}
-					plan.row_adds.push_back({ i, id, oldid });
-					row_add_planned = true;
-				};
-
-				std::unordered_set<std::string> fields;
-				auto collect = [&](const ShadowData& s) {
-					const auto row = s.find(id);
-					if (row != s.end()) {
-						for (const auto& [f, _] : row->second) fields.insert(f);
-					}
-				};
-				collect(base);
-				collect(mine);
-				collect(theirs);
-
-				for (const std::string& field : fields) {
-					const auto vb = lookup(base, id, field);
-					const auto vm = lookup(mine, id, field);
-					const auto vt = lookup(theirs, id, field);
-					switch (classify_cell_merge(vb, vm, vt)) {
-						case CellMerge::unchanged:
-						case CellMerge::take_mine:
-							break; // mine is already the live value — nothing to apply
-						case CellMerge::take_theirs:
-							ensure_row();
-							plan.changes.push_back({ i, id, field, vt });
-							break;
-						case CellMerge::conflict:
-							ensure_row();
-							plan.conflicts.push_back({ T.name, id, field, vb, vm, vt, /*take_theirs=*/true });
-							break;
-					}
-				}
-			}
+			mine[i] = tables[i].slk->shadow_data;
 		}
-		return plan;
+
+		std::array<ObjectMergeTableDesc, 7> descs;
+		for (int i = 0; i < 7; i++) {
+			descs[i] = { tables[i].name, tables[i].slk, tables[i].meta,
+						 tables[i].optional_ints, tables[i].files };
+		}
+
+		auto theirs = load_theirs_shadows(descs);
+		return ::compute_object_merge(shadow_at_load, mine, theirs, descs);
 	}
 
 	// Applies a (resolved) merge plan to the live SLKs and refreshes the views.
 	void apply_object_merge(const ObjectMergePlan& plan) {
-		auto tables = object_tables();
-
-		auto apply_cell = [](slk::SLK* slk, const std::string& id, const std::string& field, const std::optional<std::string>& value) {
-			if (value) {
-				slk->set_shadow_data(field, id, *value);
-			} else if (slk->shadow_data.contains(id)) {
-				slk->shadow_data.at(id).erase(field);
-				if (slk->shadow_data.at(id).empty()) {
-					slk->shadow_data.erase(id);
-				}
-			}
-		};
-		auto table_index = [&](const std::string& name) {
-			for (int i = 0; i < 7; i++) {
-				if (name == tables[i].name) return i;
-			}
-			return 0;
-		};
-
 		for (TableModel* t : { units_table, items_table, abilities_table, doodads_table, destructibles_table, upgrade_table, buff_table }) {
 			if (t) t->begin_reset();
 		}
 
-		for (const ObjectMergeRowAdd& add : plan.row_adds) {
-			slk::SLK* slk = tables[add.table_index].slk;
-			if (slk->base_data.contains(add.id)) {
-				continue;
-			}
-			if (!add.oldid.empty() && slk->base_data.contains(add.oldid)) {
-				slk->copy_row(add.oldid, add.id, false);
-			} else {
-				slk->add_row(add.id);
-			}
+		std::array<ObjectMergeTableDesc, 7> descs;
+		auto tables = object_tables();
+		for (int i = 0; i < 7; i++) {
+			descs[i] = { tables[i].name, tables[i].slk, tables[i].meta,
+						 tables[i].optional_ints, tables[i].files };
 		}
-		for (const ObjectMergeChange& c : plan.changes) {
-			apply_cell(tables[c.table_index].slk, c.id, c.field, c.value);
-		}
-		for (const ObjectMergeConflict& cf : plan.conflicts) {
-			slk::SLK* slk = tables[table_index(cf.table)].slk;
-			apply_cell(slk, cf.id, cf.field, cf.take_theirs ? cf.theirs : cf.mine);
-		}
+		::apply_object_merge(plan, descs);
 
 		for (TableModel* t : { units_table, items_table, abilities_table, doodads_table, destructibles_table, upgrade_table, buff_table }) {
 			if (t) t->end_reset();

@@ -7,6 +7,7 @@ add_executable(HiveWE_tests
 	mdl_reader_test.cpp
 	validator_test.cpp
 	spreadsheet_proxy_test.cpp
+	object_merge_test.cpp
 )
 
 target_link_libraries(HiveWE_tests PRIVATE

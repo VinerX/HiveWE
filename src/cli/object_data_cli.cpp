@@ -814,6 +814,173 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		return error("map folder not found: " + *map_opt);
 	}
 
+	// ---- merge-objects (3-way object-data merge, needs bootstrap) ----------
+	if (args.command == "merge-objects") {
+		std::string warcraft;
+		if (const auto w = args.get("warcraft")) {
+			warcraft = *w;
+		} else if (!warcraft_fallback.empty()) {
+			warcraft = warcraft_fallback;
+		} else {
+			return error("could not determine Warcraft III directory; pass --warcraft <dir>");
+		}
+
+		const auto theirs_opt = args.get("theirs");
+		const auto base_opt = args.get("base");
+		const bool preview = args.has_flag("preview");
+		const bool save_flag = args.has_flag("save");
+		const bool accept_theirs = args.has_flag("accept-theirs");
+		const bool accept_mine = args.has_flag("accept-mine");
+
+		TriggerStrings ts;
+		try {
+			if (const auto err = bootstrap(warcraft, *map_opt, args.has_flag("hd"), ts)) {
+				return error(*err);
+			}
+		} catch (const std::exception& e) {
+			return error(std::string("failed to load object data: ") + e.what());
+		}
+
+		auto tables = get_object_merge_tables();
+
+		// Snapshot mine
+		std::array<ShadowData, 7> mine_shadows;
+		for (int i = 0; i < 7; i++) {
+			mine_shadows[i] = tables[i].slk->shadow_data;
+		}
+
+		// Baseline
+		std::array<ShadowData, 7> base_shadows;
+		if (base_opt) {
+			auto saved_dir = hierarchy.map_directory;
+			hierarchy.map_directory = std::filesystem::absolute(*base_opt);
+			for (int i = 0; i < 7; i++) {
+				slk::SLK temp = *tables[i].slk;
+				temp.shadow_data.clear();
+				for (const char* file : tables[i].files) {
+					if (hierarchy.map_file_exists(file)) {
+						load_modification_file(file, temp, *tables[i].meta, tables[i].optional_ints);
+					}
+				}
+				base_shadows[i] = std::move(temp.shadow_data);
+			}
+			hierarchy.map_directory = saved_dir;
+		} else {
+			base_shadows = mine_shadows;
+		}
+
+		// Load theirs
+		std::array<ShadowData, 7> theirs_shadows;
+		if (theirs_opt) {
+			theirs_shadows = load_theirs_shadows(tables, *theirs_opt);
+		} else {
+			theirs_shadows = load_theirs_shadows(tables);
+		}
+
+		// Compute merge
+		ObjectMergePlan plan = compute_object_merge(base_shadows, mine_shadows, theirs_shadows, tables);
+
+		// Resolve conflicts if requested
+		if (accept_theirs || accept_mine) {
+			for (auto& c : plan.conflicts) {
+				c.take_theirs = accept_theirs;
+			}
+			auto table_idx = [&](const std::string& name) {
+				for (int i = 0; i < 7; i++) {
+					if (name == tables[i].name) return i;
+				}
+				return 0;
+			};
+			for (auto& c : plan.conflicts) {
+				plan.changes.push_back({ table_idx(c.table), c.id, c.field,
+										c.take_theirs ? c.theirs : c.mine });
+			}
+			plan.conflicts.clear();
+		}
+
+		// Apply merge (unless --preview)
+		if (!preview) {
+			apply_object_merge(plan, tables);
+
+			if (save_flag) {
+				for (int i = 0; i < 7; i++) {
+					save_modification_file(tables[i].files[0], *tables[i].slk, *tables[i].meta, tables[i].optional_ints, false);
+					save_modification_file(tables[i].files[1], *tables[i].slk, *tables[i].meta, tables[i].optional_ints, true);
+				}
+			}
+		}
+
+		// Build JSON output
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("map", *map_opt);
+		if (theirs_opt) o.str("theirs", *theirs_opt);
+		if (base_opt) o.str("base", *base_opt);
+		o.boolean("preview", preview);
+		o.boolean("applied", !preview);
+		o.boolean("saved", save_flag && !preview);
+		o.number("changes", plan.changes.size());
+		o.number("conflicts", plan.conflicts.size());
+		o.number("row_adds", plan.row_adds.size());
+
+		auto conflict_json = [&]() -> std::string {
+			std::string arr = "[";
+			for (std::size_t i = 0; i < plan.conflicts.size(); i++) {
+				if (i) arr += ",";
+				const auto& c = plan.conflicts[i];
+				JsonObject co;
+				co.str("table", c.table);
+				co.str("id", c.id);
+				co.str("field", c.field);
+				if (c.base) co.str("base", *c.base); else co.raw("base", "null");
+				if (c.mine) co.str("mine", *c.mine); else co.raw("mine", "null");
+				if (c.theirs) co.str("theirs", *c.theirs); else co.raw("theirs", "null");
+				co.boolean("resolved_to_theirs", c.take_theirs);
+				arr += co.dump();
+			}
+			arr += "]";
+			return arr;
+		};
+
+		auto change_json = [&]() -> std::string {
+			std::string arr = "[";
+			for (std::size_t i = 0; i < plan.changes.size(); i++) {
+				if (i) arr += ",";
+				const auto& c = plan.changes[i];
+				JsonObject co;
+				co.str("table", tables[c.table_index].name);
+				co.str("id", c.id);
+				co.str("field", c.field);
+				if (c.value) co.str("value", *c.value); else co.raw("value", "null");
+				arr += co.dump();
+			}
+			arr += "]";
+			return arr;
+		};
+
+		auto row_add_json = [&]() -> std::string {
+			std::string arr = "[";
+			for (std::size_t i = 0; i < plan.row_adds.size(); i++) {
+				if (i) arr += ",";
+				const auto& r = plan.row_adds[i];
+				JsonObject ra;
+				ra.str("table", tables[r.table_index].name);
+				ra.str("id", r.id);
+				ra.str("oldid", r.oldid);
+				arr += ra.dump();
+			}
+			arr += "]";
+			return arr;
+		};
+
+		o.raw("conflicts", conflict_json());
+		o.raw("changes", change_json());
+		o.raw("row_adds", row_add_json());
+		ok = true;
+		return o.dump();
+	}
+
 	// ---- terrain traversability (war3map.wpm), no CASC / object data needed ----
 	if (args.command == "pathing-islands" || args.command == "pathing-path") {
 		hierarchy.map_directory = std::filesystem::absolute(*map_opt);

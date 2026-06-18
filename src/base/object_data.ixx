@@ -15,6 +15,7 @@ import INI;
 import Hierarchy;
 import ModificationTables;
 import Globals;
+import UnorderedMap;
 
 namespace fs = std::filesystem;
 
@@ -324,6 +325,175 @@ export struct ObjectMergePlan {
 
 	[[nodiscard]] bool empty() const { return changes.empty() && conflicts.empty() && row_adds.empty(); }
 };
+
+// ---- 3-way object-data merge (free functions, callable from both GUI and CLI) ----
+
+export using ShadowData = hive::unordered_map<std::string, hive::unordered_map<std::string, std::string>>;
+
+export struct ObjectMergeTableDesc {
+	const char* name;
+	slk::SLK* slk;
+	slk::SLK* meta;
+	bool optional_ints;
+	std::array<const char*, 2> files; // map modification files (main + skin)
+};
+
+export std::array<ObjectMergeTableDesc, 7> get_object_merge_tables() {
+	return { {
+		{ "unit", &units_slk, &units_meta_slk, false, { "war3map.w3u", "war3mapSkin.w3u" } },
+		{ "item", &items_slk, &items_meta_slk, false, { "war3map.w3t", "war3mapSkin.w3t" } },
+		{ "ability", &abilities_slk, &abilities_meta_slk, true, { "war3map.w3a", "war3mapSkin.w3a" } },
+		{ "doodad", &doodads_slk, &doodads_meta_slk, true, { "war3map.w3d", "war3mapSkin.w3d" } },
+		{ "destructible", &destructibles_slk, &destructibles_meta_slk, false, { "war3map.w3b", "war3mapSkin.w3b" } },
+		{ "upgrade", &upgrade_slk, &upgrade_meta_slk, true, { "war3map.w3q", "war3mapSkin.w3q" } },
+		{ "buff", &buff_slk, &buff_meta_slk, false, { "war3map.w3h", "war3mapSkin.w3h" } },
+	} };
+}
+
+inline auto shadow_lookup(const ShadowData& s, const std::string& id, const std::string& field) -> std::optional<std::string> {
+	const auto row = s.find(id);
+	if (row == s.end()) {
+		return std::nullopt;
+	}
+	const auto cell = row->second.find(field);
+	if (cell == row->second.end()) {
+		return std::nullopt;
+	}
+	return cell->second;
+}
+
+// Loads the "theirs" modification files into a set of shadow maps.
+// Optionally uses a different map directory (swaps hierarchy.map_directory temporarily).
+export std::array<ShadowData, 7> load_theirs_shadows(
+	const std::array<ObjectMergeTableDesc, 7>& tables,
+	const std::optional<std::string>& map_directory = std::nullopt)
+{
+	std::array<ShadowData, 7> theirs;
+	auto saved_dir = hierarchy.map_directory;
+	if (map_directory) {
+		hierarchy.map_directory = *map_directory;
+	}
+
+	for (int i = 0; i < 7; i++) {
+		slk::SLK temp = *tables[i].slk;
+		temp.shadow_data.clear();
+		for (const char* file : tables[i].files) {
+			if (hierarchy.map_file_exists(file)) {
+				load_modification_file(file, temp, *tables[i].meta, tables[i].optional_ints);
+			}
+		}
+		theirs[i] = std::move(temp.shadow_data);
+	}
+
+	hierarchy.map_directory = saved_dir;
+	return theirs;
+}
+
+// Computes a 3-way merge between base (load-time baseline), mine (current state),
+// and theirs (disk/other-branch state). Does NOT mutate any live data.
+export ObjectMergePlan compute_object_merge(
+	const std::array<ShadowData, 7>& base,
+	const std::array<ShadowData, 7>& mine,
+	const std::array<ShadowData, 7>& theirs,
+	const std::array<ObjectMergeTableDesc, 7>& tables)
+{
+	ObjectMergePlan plan;
+
+	for (int i = 0; i < 7; i++) {
+		const auto& T = tables[i];
+
+		std::unordered_set<std::string> ids;
+		for (const auto& [id, _] : base[i]) ids.insert(id);
+		for (const auto& [id, _] : mine[i]) ids.insert(id);
+		for (const auto& [id, _] : theirs[i]) ids.insert(id);
+
+		for (const std::string& id : ids) {
+			const bool in_editor = T.slk->base_data.contains(id);
+			bool row_add_planned = false;
+			auto ensure_row = [&] {
+				if (in_editor || row_add_planned) {
+					return;
+				}
+				std::string oldid;
+				if (const auto o = shadow_lookup(theirs[i], id, "oldid")) {
+					oldid = *o;
+				}
+				plan.row_adds.push_back({ i, id, oldid });
+				row_add_planned = true;
+			};
+
+			std::unordered_set<std::string> fields;
+			auto collect = [&](const ShadowData& s) {
+				const auto row = s.find(id);
+				if (row != s.end()) {
+					for (const auto& [f, _] : row->second) fields.insert(f);
+				}
+			};
+			collect(base[i]);
+			collect(mine[i]);
+			collect(theirs[i]);
+
+			for (const std::string& field : fields) {
+				const auto vb = shadow_lookup(base[i], id, field);
+				const auto vm = shadow_lookup(mine[i], id, field);
+				const auto vt = shadow_lookup(theirs[i], id, field);
+				switch (classify_cell_merge(vb, vm, vt)) {
+					case CellMerge::unchanged:
+					case CellMerge::take_mine:
+						break;
+					case CellMerge::take_theirs:
+						ensure_row();
+						plan.changes.push_back({ i, id, field, vt });
+						break;
+					case CellMerge::conflict:
+						ensure_row();
+						plan.conflicts.push_back({ T.name, id, field, vb, vm, vt, /*take_theirs=*/true });
+						break;
+				}
+			}
+		}
+	}
+	return plan;
+}
+
+// Applies a (resolved) merge plan to the live SLKs.
+export void apply_object_merge(const ObjectMergePlan& plan, const std::array<ObjectMergeTableDesc, 7>& tables) {
+	auto apply_cell = [](slk::SLK* slk, const std::string& id, const std::string& field, const std::optional<std::string>& value) {
+		if (value) {
+			slk->set_shadow_data(field, id, *value);
+		} else if (slk->shadow_data.contains(id)) {
+			slk->shadow_data.at(id).erase(field);
+			if (slk->shadow_data.at(id).empty()) {
+				slk->shadow_data.erase(id);
+			}
+		}
+	};
+	auto table_index = [&](const std::string& name) {
+		for (int i = 0; i < 7; i++) {
+			if (name == tables[i].name) return i;
+		}
+		return 0;
+	};
+
+	for (const ObjectMergeRowAdd& add : plan.row_adds) {
+		slk::SLK* slk = tables[add.table_index].slk;
+		if (slk->base_data.contains(add.id)) {
+			continue;
+		}
+		if (!add.oldid.empty() && slk->base_data.contains(add.oldid)) {
+			slk->copy_row(add.oldid, add.id, false);
+		} else {
+			slk->add_row(add.id);
+		}
+	}
+	for (const ObjectMergeChange& c : plan.changes) {
+		apply_cell(tables[c.table_index].slk, c.id, c.field, c.value);
+	}
+	for (const ObjectMergeConflict& cf : plan.conflicts) {
+		slk::SLK* slk = tables[table_index(cf.table)].slk;
+		apply_cell(slk, cf.id, cf.field, cf.take_theirs ? cf.theirs : cf.mine);
+	}
+}
 
 export void load_map_object_data() {
 	if (hierarchy.map_file_exists("war3map.w3d")) {
