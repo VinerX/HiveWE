@@ -158,23 +158,29 @@ namespace slk {
 				}
 			}
 
-			// Remove empty rows (might contain data but don't have a row header)
-
-			size_t i = 0;
-			while (i < index_to_row.size()) {
-				if (index_to_row.at(i).empty()) {
-					for (size_t j = index_to_row.size() - 1; j > i; j--) {
-						if (!index_to_row.at(j).empty()) {
-							index_to_row[i] = index_to_row.at(j);
-							row_headers.at(index_to_row.at(i)) = i;
-							index_to_row.erase(j);
-							break;
-						}
-					}
+			// Remove empty rows (might contain data but don't have a row header) and close any gaps.
+			// Retail SLKs such as Doodads.slk can skip row numbers entirely, so map keys are not
+			// guaranteed to be the dense range [0, index_to_row.size()).
+			std::vector<size_t> used_indices;
+			used_indices.reserve(index_to_row.size());
+			for (const auto& [index, header] : index_to_row) {
+				if (!header.empty()) {
+					used_indices.push_back(index);
 				}
-				i += 1;
 			}
+			std::ranges::sort(used_indices);
+
+			hive::unordered_map<size_t, std::string> compacted;
+			compacted.reserve(used_indices.size());
+			for (size_t i = 0; i < used_indices.size(); i++) {
+				compacted.emplace(i, std::move(index_to_row.at(used_indices[i])));
+			}
+			index_to_row = std::move(compacted);
+
 			row_headers.erase("");
+			for (const auto& [index, header] : index_to_row) {
+				row_headers[header] = index;
+			}
 
 			return {};
 		}

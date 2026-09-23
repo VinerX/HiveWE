@@ -8,6 +8,7 @@ add_executable(HiveWE_tests
 	validator_test.cpp
 	spreadsheet_proxy_test.cpp
 	object_merge_test.cpp
+	slk_test.cpp
 )
 
 target_link_libraries(HiveWE_tests PRIVATE
@@ -17,6 +18,7 @@ target_link_libraries(HiveWE_tests PRIVATE
 
 target_compile_definitions(HiveWE_tests PRIVATE
 	MDL_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/mdl"
+	SLK_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/slk"
 )
 
 include(doctest)
