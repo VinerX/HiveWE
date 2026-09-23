@@ -342,7 +342,7 @@ bool write_bmp(const fs::path& path, int w, int h, const std::vector<uint8_t>& b
 // ---- regions (war3map.w3r) ------------------------------------------------
 // Data-only codec for the regions file: raw world coordinates as stored (no
 // terrain-offset conversion), so it round-trips and matches the coordinates used
-// by triggers/units. Format version 5.
+// by triggers/units. Accepts legacy v5 and Reforged 3.0 v7 region files.
 
 struct RegionRecord {
 	float left = 0, bottom = 0, right = 0, top = 0; // world units
@@ -350,8 +350,9 @@ struct RegionRecord {
 	int32_t creation_number = 0;
 	std::string weather_id;  // 4-char code, empty when none
 	std::string ambient_id;  // ambient sound, optional
-	uint8_t color[3] = { 255, 255, 255 };
-	uint8_t end_byte = 0xff; // trailing marker after the colour, preserved verbatim
+	uint8_t color[4] = { 255, 255, 255, 255 };
+	uint32_t block_camera = 0;
+	uint32_t alpha_tile_minimap_color = 0;
 };
 
 std::optional<std::vector<RegionRecord>> read_regions(std::string& err) {
@@ -363,8 +364,8 @@ std::optional<std::vector<RegionRecord>> read_regions(std::string& err) {
 	try {
 		BinaryReader reader = std::move(result.value());
 		const uint32_t version = reader.read<uint32_t>();
-		if (version != 5) {
-			err = std::format("unexpected war3map.w3r version {} (expected 5)", version);
+		if (version != 5 && version != 7) {
+			err = std::format("unsupported war3map.w3r version {} (expected 5 or 7)", version);
 			return std::nullopt;
 		}
 		std::vector<RegionRecord> out;
@@ -381,7 +382,11 @@ std::optional<std::vector<RegionRecord>> read_regions(std::string& err) {
 			r.color[0] = reader.read<uint8_t>();
 			r.color[1] = reader.read<uint8_t>();
 			r.color[2] = reader.read<uint8_t>();
-			r.end_byte = reader.read<uint8_t>();
+			r.color[3] = reader.read<uint8_t>();
+			if (version >= 7) {
+				r.block_camera = reader.read<uint32_t>();
+				r.alpha_tile_minimap_color = reader.read<uint32_t>();
+			}
 		}
 		return out;
 	} catch (const std::exception& e) {
@@ -393,7 +398,7 @@ std::optional<std::vector<RegionRecord>> read_regions(std::string& err) {
 bool write_regions(const std::vector<RegionRecord>& regions, std::string& err) {
 	try {
 		BinaryWriter writer;
-		writer.write<uint32_t>(5);
+		writer.write<uint32_t>(7);
 		writer.write<uint32_t>(static_cast<uint32_t>(regions.size()));
 		for (const auto& r : regions) {
 			writer.write<float>(r.left);
@@ -410,7 +415,9 @@ bool write_regions(const std::vector<RegionRecord>& regions, std::string& err) {
 			writer.write<uint8_t>(r.color[0]);
 			writer.write<uint8_t>(r.color[1]);
 			writer.write<uint8_t>(r.color[2]);
-			writer.write<uint8_t>(r.end_byte);
+			writer.write<uint8_t>(r.color[3]);
+			writer.write<uint32_t>(r.block_camera);
+			writer.write<uint32_t>(r.alpha_tile_minimap_color);
 		}
 		hierarchy.map_file_write("war3map.w3r", writer.buffer);
 		return true;

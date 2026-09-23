@@ -19,7 +19,11 @@ export struct GameCamera {
 	float local_roll;
 	float local_pitch;
 	float local_yaw;
+	float dof_distance = 0.f;
+	float dof_scale = 0.f;
+	float pos_absolute_z = 0.f;
 	std::string name;
+	uint32_t free_camera = 0;
 };
 
 export class GameCameras {
@@ -30,7 +34,7 @@ export class GameCameras {
 		BinaryReader reader = hierarchy.map_file_read_or_throw("war3map.w3c", "GameCameras::load");
 
 		int version = reader.read<u32>();
-		if (version != 0) {
+		if (version != 0 && version != 3) {
 			std::cout << "Unknown war3map.w3c version: " << version << " Attempting to load but may crash\n";
 		}
 
@@ -55,7 +59,15 @@ export class GameCameras {
 				i.local_yaw = reader.read<float>();
 				i.local_roll = reader.read<float>();
 			}
+			if (version >= 3) {
+				i.dof_distance = reader.read<float>();
+				i.dof_scale = reader.read<float>();
+				i.pos_absolute_z = reader.read<float>();
+			}
 			i.name = reader.read_c_string();
+			if (version >= 3) {
+				i.free_camera = reader.read<uint32_t>();
+			}
 		}
 	}
 

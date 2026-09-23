@@ -33,6 +33,7 @@ export struct Unit {
 	glm::vec3 scale;
 
 	std::string skin_id;
+	uint32_t group_id = 0;
 
 	uint8_t flags = 2;
 	int player = 0;
@@ -65,6 +66,9 @@ export struct Unit {
 	int custom_color = -1;
 	int waygate = -1;
 	int creation_number;
+	float roll = 0.f;
+	float pitch = 0.f;
+	std::vector<Light> lights;
 
 	SkeletalModelInstance skeleton;
 	std::shared_ptr<SkinnedMesh> mesh;
@@ -103,6 +107,7 @@ export class Units {
 
 	static constexpr int write_version = 8;
 	static constexpr int write_subversion = 11;
+	uint32_t file_version = write_version;
 
 	//static constexpr int mod_table_write_version = 2;
 
@@ -118,7 +123,8 @@ export class Units {
 			std::cout << "Invalid war3mapUnits.w3e file: Magic number is not W3do\n";
 		}
 		const uint32_t version = reader.read<uint32_t>();
-		if (version != 7 && version != 8) {
+		file_version = version;
+		if (version != 7 && version != 8 && version != 13) {
 			std::cout << "Unknown war3mapUnits.doo version: " << version
 					  << " Attempting to load but may crash\nPlease send this map to eejin\n";
 		}
@@ -143,6 +149,9 @@ export class Units {
 				i.skin_id = reader.read_string(4);
 			} else {
 				i.skin_id = i.id;
+			}
+			if (version >= 13) {
+				i.group_id = reader.read<uint32_t>();
 			}
 
 			i.flags = reader.read<uint8_t>();
@@ -211,6 +220,22 @@ export class Units {
 			i.custom_color = reader.read<uint32_t>();
 			i.waygate = reader.read<uint32_t>();
 			i.creation_number = reader.read<uint32_t>();
+			if (version >= 13) {
+				i.roll = reader.read<float>();
+				i.pitch = reader.read<float>();
+				i.lights.resize(reader.read<uint32_t>());
+				for (auto& light : i.lights) {
+					light.index = reader.read<uint32_t>();
+					light.is_shadow_casting = reader.read<uint32_t>();
+					light.color = reader.read<glm::u8vec4>();
+					light.intensity = reader.read<float>();
+					light.shadow_casting_start = reader.read<float>();
+					light.shadow_casting_end = reader.read<float>();
+					light.quadratic_falloff = reader.read<float>();
+					light.linear_falloff = reader.read<float>();
+					light.damping = reader.read<float>();
+				}
+			}
 
 			// Either a unit or an item
 			if (units_slk.row_headers.contains(i.id) || i.id == "sloc" || i.id == "uDNR" || i.id == "bDNR") {
@@ -227,7 +252,7 @@ export class Units {
 		BinaryWriter writer;
 
 		writer.write_string("W3do");
-		writer.write<uint32_t>(write_version);
+		writer.write<uint32_t>(file_version);
 		writer.write<uint32_t>(write_subversion);
 
 		writer.write<uint32_t>(units.size() + items.size());
@@ -241,6 +266,9 @@ export class Units {
 				writer.write<glm::vec3>(i.scale * 128.f);
 
 				writer.write_string(i.skin_id);
+				if (file_version >= 13) {
+					writer.write<uint32_t>(i.group_id);
+				}
 
 				writer.write<uint8_t>(i.flags);
 
@@ -289,6 +317,22 @@ export class Units {
 				writer.write<uint32_t>(i.custom_color);
 				writer.write<uint32_t>(i.waygate);
 				writer.write<uint32_t>(i.creation_number);
+				if (file_version >= 13) {
+					writer.write<float>(i.roll);
+					writer.write<float>(i.pitch);
+					writer.write<uint32_t>(i.lights.size());
+					for (const auto& light : i.lights) {
+						writer.write<uint32_t>(light.index);
+						writer.write<uint32_t>(light.is_shadow_casting);
+						writer.write<glm::u8vec4>(light.color);
+						writer.write<float>(light.intensity);
+						writer.write<float>(light.shadow_casting_start);
+						writer.write<float>(light.shadow_casting_end);
+						writer.write<float>(light.quadratic_falloff);
+						writer.write<float>(light.linear_falloff);
+						writer.write<float>(light.damping);
+					}
+				}
 			}
 		};
 

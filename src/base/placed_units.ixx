@@ -19,6 +19,7 @@ import std;
 import BinaryReader;
 import BinaryWriter;
 import Hierarchy;
+import Utilities;
 
 export namespace placed {
 
@@ -33,6 +34,7 @@ struct Unit {
 	float angle = 0;                // radians
 	float scale_x = 128, scale_y = 128, scale_z = 128; // stored = multiplier * 128
 	std::string skin_id;            // present iff version >= 8
+	uint32_t group_id = 0;          // present iff version >= 13
 
 	uint8_t flags = 2;
 	uint32_t player = 0;
@@ -57,6 +59,9 @@ struct Unit {
 	uint32_t custom_color = 0xFFFFFFFF; // -1 = none
 	uint32_t waygate = 0xFFFFFFFF;      // -1 = none
 	uint32_t creation_number = 0;
+	float roll = 0.f;               // present iff version >= 13
+	float pitch = 0.f;              // present iff version >= 13
+	std::vector<Light> lights;      // present iff version >= 13
 };
 
 struct File {
@@ -100,6 +105,9 @@ inline std::optional<File> load(std::string& err) {
 			u.scale_z = reader.read<float>();
 			if (file.has_skin) {
 				u.skin_id = reader.read_string(4);
+			}
+			if (file.version >= 13) {
+				u.group_id = reader.read<uint32_t>();
 			}
 			u.flags = reader.read<uint8_t>();
 			u.player = reader.read<uint32_t>();
@@ -147,6 +155,22 @@ inline std::optional<File> load(std::string& err) {
 			u.custom_color = reader.read<uint32_t>();
 			u.waygate = reader.read<uint32_t>();
 			u.creation_number = reader.read<uint32_t>();
+			if (file.version >= 13) {
+				u.roll = reader.read<float>();
+				u.pitch = reader.read<float>();
+				u.lights.resize(reader.read<uint32_t>());
+				for (auto& light : u.lights) {
+					light.index = reader.read<uint32_t>();
+					light.is_shadow_casting = reader.read<uint32_t>();
+					light.color = reader.read<glm::u8vec4>();
+					light.intensity = reader.read<float>();
+					light.shadow_casting_start = reader.read<float>();
+					light.shadow_casting_end = reader.read<float>();
+					light.quadratic_falloff = reader.read<float>();
+					light.linear_falloff = reader.read<float>();
+					light.damping = reader.read<float>();
+				}
+			}
 			file.units.push_back(std::move(u));
 		}
 		return file;
@@ -181,6 +205,9 @@ inline bool save(const File& file, std::string& err) {
 				const std::string& s = u.skin_id.empty() ? u.id : u.skin_id;
 				for (std::size_t i = 0; i < 4 && i < s.size(); ++i) skin4[i] = s[i];
 				writer.buffer.insert(writer.buffer.end(), skin4, skin4 + 4);
+			}
+			if (file.version >= 13) {
+				writer.write<uint32_t>(u.group_id);
 			}
 			writer.write<uint8_t>(u.flags);
 			writer.write<uint32_t>(u.player);
@@ -229,6 +256,22 @@ inline bool save(const File& file, std::string& err) {
 			writer.write<uint32_t>(u.custom_color);
 			writer.write<uint32_t>(u.waygate);
 			writer.write<uint32_t>(u.creation_number);
+			if (file.version >= 13) {
+				writer.write<float>(u.roll);
+				writer.write<float>(u.pitch);
+				writer.write<uint32_t>(static_cast<uint32_t>(u.lights.size()));
+				for (const auto& light : u.lights) {
+					writer.write<uint32_t>(light.index);
+					writer.write<uint32_t>(light.is_shadow_casting);
+					writer.write<glm::u8vec4>(light.color);
+					writer.write<float>(light.intensity);
+					writer.write<float>(light.shadow_casting_start);
+					writer.write<float>(light.shadow_casting_end);
+					writer.write<float>(light.quadratic_falloff);
+					writer.write<float>(light.linear_falloff);
+					writer.write<float>(light.damping);
+				}
+			}
 		}
 		hierarchy.map_file_write("war3mapUnits.doo", writer.buffer);
 		return true;

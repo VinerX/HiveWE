@@ -22,6 +22,7 @@ export struct Doodad {
 
 	std::string id;
 	std::string skin_id;
+	uint32_t group_id = 0;
 	int variation = 0;
 	glm::vec3 position = glm::vec3(0.f);
 	glm::vec3 scale = glm::vec3(1.f);
@@ -38,7 +39,11 @@ export struct Doodad {
 	int item_table_pointer = -1;
 	std::vector<ItemSet> item_sets;
 
+	uint32_t unknown = 0;
 	int creation_number;
+	float roll = 0.f;
+	float pitch = 0.f;
+	std::vector<Light> lights;
 
 	// Auxiliary data
 	SkeletalModelInstance skeleton;

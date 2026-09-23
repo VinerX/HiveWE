@@ -271,6 +271,18 @@ export auto read_file(const fs::path& path) -> std::expected<BinaryReader, std::
 	return BinaryReader(std::move(buffer));
 }
 
+export struct Light {
+	uint32_t index = 0;
+	uint32_t is_shadow_casting = 0;
+	glm::u8vec4 color = {0, 0, 0, 0};
+	float intensity = 0.f;
+	float shadow_casting_start = 0.f;
+	float shadow_casting_end = 0.f;
+	float quadratic_falloff = 0.f;
+	float linear_falloff = 0.f;
+	float damping = 0.f;
+};
+
 export struct ItemSet {
 	std::vector<std::pair<int, std::string>> items;
 };

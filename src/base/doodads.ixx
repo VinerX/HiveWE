@@ -50,6 +50,7 @@ export class Doodads {
 	static constexpr int write_version = 8;
 	static constexpr int write_subversion = 11;
 	static constexpr int write_special_version = 0;
+	uint32_t file_version = write_version;
 
   public:
 	std::vector<SpecialDoodad> special_doodads;
@@ -64,7 +65,8 @@ export class Doodads {
 			return false;
 		}
 		const uint32_t version = reader.read<uint32_t>();
-		if (version != 7 && version != 8) {
+		file_version = version;
+		if (version != 7 && version != 8 && version != 13) {
 			std::println("Unknown war3map.doo version: {} Attempting to load but may crash\nPlease send this map to eejin\n", version);
 		}
 
@@ -86,6 +88,9 @@ export class Doodads {
 			} else {
 				i.skin_id = i.id;
 			}
+			if (version >= 13) {
+				i.group_id = reader.read<uint32_t>();
+			}
 
 			i.state = static_cast<Doodad::State>(reader.read<uint8_t>());
 			i.life = reader.read<uint8_t>();
@@ -102,7 +107,26 @@ export class Doodads {
 				}
 			}
 
+			if (version >= 13) {
+				i.unknown = reader.read<uint32_t>();
+			}
 			i.creation_number = reader.read<uint32_t>();
+			if (version >= 13) {
+				i.roll = reader.read<float>();
+				i.pitch = reader.read<float>();
+				i.lights.resize(reader.read<uint32_t>());
+				for (auto& light : i.lights) {
+					light.index = reader.read<uint32_t>();
+					light.is_shadow_casting = reader.read<uint32_t>();
+					light.color = reader.read<glm::u8vec4>();
+					light.intensity = reader.read<float>();
+					light.shadow_casting_start = reader.read<float>();
+					light.shadow_casting_end = reader.read<float>();
+					light.quadratic_falloff = reader.read<float>();
+					light.linear_falloff = reader.read<float>();
+					light.damping = reader.read<float>();
+				}
+			}
 			Doodad::auto_increment = std::max(Doodad::auto_increment, i.creation_number);
 		}
 
@@ -123,7 +147,7 @@ export class Doodads {
 	void save(const Terrain& terrain) const {
 		BinaryWriter writer;
 		writer.write_string("W3do");
-		writer.write<uint32_t>(write_version);
+		writer.write<uint32_t>(file_version);
 		writer.write<uint32_t>(write_subversion);
 
 		writer.write<uint32_t>(doodads.size());
@@ -135,6 +159,9 @@ export class Doodads {
 			writer.write<glm::vec3>(i.scale);
 
 			writer.write_string(i.skin_id);
+			if (file_version >= 13) {
+				writer.write<uint32_t>(i.group_id);
+			}
 
 			writer.write<uint8_t>(static_cast<int>(i.state));
 			writer.write<uint8_t>(i.life);
@@ -149,7 +176,26 @@ export class Doodads {
 				}
 			}
 
+			if (file_version >= 13) {
+				writer.write<uint32_t>(i.unknown);
+			}
 			writer.write<uint32_t>(i.creation_number);
+			if (file_version >= 13) {
+				writer.write<float>(i.roll);
+				writer.write<float>(i.pitch);
+				writer.write<uint32_t>(i.lights.size());
+				for (const auto& light : i.lights) {
+					writer.write<uint32_t>(light.index);
+					writer.write<uint32_t>(light.is_shadow_casting);
+					writer.write<glm::u8vec4>(light.color);
+					writer.write<float>(light.intensity);
+					writer.write<float>(light.shadow_casting_start);
+					writer.write<float>(light.shadow_casting_end);
+					writer.write<float>(light.quadratic_falloff);
+					writer.write<float>(light.linear_falloff);
+					writer.write<float>(light.damping);
+				}
+			}
 		}
 
 		writer.write<uint32_t>(write_special_version);
