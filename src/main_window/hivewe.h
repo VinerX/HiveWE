@@ -69,6 +69,7 @@ private:
 	void moveEvent(QMoveEvent* event) override;
 
 	void switch_warcraft();
+	void launch_test_game(const fs::path& map_path);
 	void import_heightmap();
 	void save_window_state();
 	void restore_window_state();

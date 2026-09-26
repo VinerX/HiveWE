@@ -2,6 +2,8 @@
 
 #include <QSettings>
 #include <QFile>
+#include <QFileDialog>
+#include <QToolButton>
 
 import std;
 
@@ -13,7 +15,7 @@ void setTestArgs(Ui::SettingsEditor &ui) {
 		switch (x) { case 1: return "1"; default: return "0";} }(ui.testhd->currentIndex())) : "") +
 						(ui.testteen->currentText() != "Default" ? " -teen " + QString([](int x) {
 		switch (x) { case 1: return "1"; default: return "0"; } }(ui.testteen->currentIndex())) : "") +
-						" -testmapprofile " + ui.profile->text() + " -fixedseed " + (ui.fixedseed->isChecked() ? "1" : "0") + (ui.nowfpause->isChecked() ? " -nowfpause" : ""));
+						" -testmapprofile " + ui.profile->text() + " -fixedseed " + (ui.fixedseed->isChecked() ? "1" : "0") + (ui.nowfpause->isChecked() ? " -nowfpause" : "") + " -editor");
 };
 
 SettingsEditor::SettingsEditor(QWidget* parent)
@@ -35,6 +37,14 @@ SettingsEditor::SettingsEditor(QWidget* parent)
 	ui.profile->setText(settings.value("profile", "HiveWE").toString());
 	ui.fixedseed->setChecked(settings.value("fixedseed", "True").toString() != "False");
 	ui.nowfpause->setChecked(settings.value("nowfpause", "True").toString() != "False");
+	ui.luaBuildProject->setText(settings.value("luaBuildProject", "").toString());
+	connect(ui.browseLuaBuildProject, &QToolButton::clicked, this, [this]() {
+		const QString directory = QFileDialog::getExistingDirectory(
+			this, "Select Lua Source Project", ui.luaBuildProject->text());
+		if (!directory.isEmpty()) {
+			ui.luaBuildProject->setText(directory);
+		}
+	});
 
 	connect(ui.userArgs, &QLineEdit::textChanged, [&]() { setTestArgs(ui); });
 	connect(ui.diff, &QComboBox::currentTextChanged, [&]() { setTestArgs(ui); });
@@ -83,4 +93,5 @@ void SettingsEditor::save() const {
 	settings.setValue("fixedseed", ui.fixedseed->isChecked() ? "True" : "False");
 	settings.setValue("nowfpause", ui.nowfpause->isChecked() ? "True" : "False");
 	settings.setValue("testArgs", ui.testArgs->text());
+	settings.setValue("luaBuildProject", ui.luaBuildProject->text());
 }

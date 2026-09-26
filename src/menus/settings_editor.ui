@@ -298,13 +298,41 @@
              </property>
             </widget>
            </item>
-           <item row="8" column="1">
-            <widget class="QLineEdit" name="testArgs">
-             <property name="readOnly">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
+            <item row="8" column="1">
+             <widget class="QLineEdit" name="testArgs">
+              <property name="readOnly">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="0">
+             <widget class="QLabel" name="luaBuildProjectLabel">
+              <property name="text">
+               <string>Lua source project</string>
+              </property>
+              <property name="toolTip">
+               <string>Optional project folder containing build_map_lua.py. It is also detected automatically when the map is opened from that project.</string>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="1">
+             <layout class="QHBoxLayout" name="luaBuildProjectLayout">
+              <item>
+               <widget class="QLineEdit" name="luaBuildProject">
+                <property name="toolTip">
+                 <string>Project folder containing build_map_lua.py and map.w3x/_lua/monolith_split/manifest.json</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QToolButton" name="browseLuaBuildProject">
+                <property name="text">
+                 <string>...</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
           </layout>
          </item>
         </layout>

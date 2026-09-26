@@ -23,7 +23,7 @@ export struct GameCamera {
 	float dof_scale = 0.f;
 	float pos_absolute_z = 0.f;
 	std::string name;
-	uint32_t free_camera = 0;
+	u32 free_camera = 0;
 };
 
 export class GameCameras {

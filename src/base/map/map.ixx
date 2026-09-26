@@ -81,6 +81,8 @@ export class Map: public QObject {
 	bool loaded = false;
 	/// The map was newly created and has not been resaved yet
 	bool is_in_temp_dir = false;
+	/// Files with object data that HiveWE could not decode; these stay untouched on save.
+	std::vector<std::string> unparsed_object_data_files;
 
 	// Re-reads object data (base game SLK + the map's modification tables) from
 	// disk in place, keeping terrain, placements, triggers, etc. untouched. Used
@@ -95,7 +97,7 @@ export class Map: public QObject {
 			if (t) t->begin_reset();
 		}
 		load_base_object_data([](std::string_view) {});
-		load_map_object_data();
+		unparsed_object_data_files = load_map_object_data();
 		for (TableModel* t : tables) {
 			if (t) t->end_reset();
 		}
@@ -299,7 +301,9 @@ export class Map: public QObject {
 		std::println("Pathing loading: {:>5}ms", timer.elapsed_ms());
 		timer.reset();
 
-		run_phase("object data", [&] { load_map_object_data(); });
+		run_phase("object data", [&] {
+			unparsed_object_data_files = load_map_object_data();
+		});
 
 		profile_reset();
 		run_phase("doodad instances", [&] {
@@ -474,25 +478,32 @@ export class Map: public QObject {
 		terrain.save();
 		shadow_map.save();
 
-		save_modification_file("war3map.w3d", doodads_slk, doodads_meta_slk, true, false);
-		save_modification_file("war3mapSkin.w3d", doodads_slk, doodads_meta_slk, true, true);
-		save_modification_file("war3map.w3b", destructibles_slk, destructibles_meta_slk, false, false);
-		save_modification_file("war3mapSkin.w3b", destructibles_slk, destructibles_meta_slk, false, true);
+		const auto save_object_data_file = [&](const std::string_view file, const auto& data, const auto& meta, const bool optional_ints, const bool skin) {
+			if (std::ranges::find(unparsed_object_data_files, file) != unparsed_object_data_files.end()) {
+				std::println("Preserving unreadable object-data file {} without rewriting it.", file);
+				return;
+			}
+			save_modification_file(file, data, meta, optional_ints, skin);
+		};
+		save_object_data_file("war3map.w3d", doodads_slk, doodads_meta_slk, true, false);
+		save_object_data_file("war3mapSkin.w3d", doodads_slk, doodads_meta_slk, true, true);
+		save_object_data_file("war3map.w3b", destructibles_slk, destructibles_meta_slk, false, false);
+		save_object_data_file("war3mapSkin.w3b", destructibles_slk, destructibles_meta_slk, false, true);
 		doodads.save(terrain);
 
-		save_modification_file("war3map.w3u", units_slk, units_meta_slk, false, false);
-		save_modification_file("war3mapSkin.w3u", units_slk, units_meta_slk, false, true);
-		save_modification_file("war3map.w3t", items_slk, items_meta_slk, false, false);
-		save_modification_file("war3mapSkin.w3t", items_slk, items_meta_slk, false, true);
+		save_object_data_file("war3map.w3u", units_slk, units_meta_slk, false, false);
+		save_object_data_file("war3mapSkin.w3u", units_slk, units_meta_slk, false, true);
+		save_object_data_file("war3map.w3t", items_slk, items_meta_slk, false, false);
+		save_object_data_file("war3mapSkin.w3t", items_slk, items_meta_slk, false, true);
 		units.save(terrain);
 
-		save_modification_file("war3map.w3a", abilities_slk, abilities_meta_slk, true, false);
-		save_modification_file("war3mapSkin.w3a", abilities_slk, abilities_meta_slk, true, true);
+		save_object_data_file("war3map.w3a", abilities_slk, abilities_meta_slk, true, false);
+		save_object_data_file("war3mapSkin.w3a", abilities_slk, abilities_meta_slk, true, true);
 
-		save_modification_file("war3map.w3h", buff_slk, buff_meta_slk, false, false);
-		save_modification_file("war3mapSkin.w3h", buff_slk, buff_meta_slk, false, true);
-		save_modification_file("war3map.w3q", upgrade_slk, upgrade_meta_slk, true, false);
-		save_modification_file("war3mapSkin.w3q", upgrade_slk, upgrade_meta_slk, true, true);
+		save_object_data_file("war3map.w3h", buff_slk, buff_meta_slk, false, false);
+		save_object_data_file("war3mapSkin.w3h", buff_slk, buff_meta_slk, false, true);
+		save_object_data_file("war3map.w3q", upgrade_slk, upgrade_meta_slk, true, false);
+		save_object_data_file("war3mapSkin.w3q", upgrade_slk, upgrade_meta_slk, true, true);
 
 		regions.save(terrain.offset.x, terrain.offset.y);
 

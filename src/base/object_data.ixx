@@ -495,60 +495,38 @@ export void apply_object_merge(const ObjectMergePlan& plan, const std::array<Obj
 	}
 }
 
-export void load_map_object_data() {
-	if (hierarchy.map_file_exists("war3map.w3d")) {
-		load_modification_file("war3map.w3d", doodads_slk, doodads_meta_slk, true);
-	}
+export std::vector<std::string> load_map_object_data() {
+	std::vector<std::string> unparsed_files;
+	const auto load_file = [&](const char* file, slk::SLK& data, const slk::SLK& meta, const bool optional_ints) {
+		if (!hierarchy.map_file_exists(file)) {
+			return true;
+		}
+		try {
+			load_modification_file(file, data, meta, optional_ints);
+			return true;
+		} catch (const std::exception& error) {
+			unparsed_files.emplace_back(file);
+			std::println("Skipping unsupported object-data file {}: {}", file, error.what());
+			return false;
+		}
+	};
+	const auto load_pair = [&](const char* main_file, const char* skin_file, slk::SLK& data, const slk::SLK& meta, const bool optional_ints) {
+		if (!load_file(main_file, data, meta, optional_ints)) {
+			if (hierarchy.map_file_exists(skin_file)) {
+				unparsed_files.emplace_back(skin_file);
+				std::println("Skipping {} because its base object-data file could not be parsed.", skin_file);
+			}
+			return;
+		}
+		load_file(skin_file, data, meta, optional_ints);
+	};
 
-	if (hierarchy.map_file_exists("war3mapSkin.w3d")) {
-		load_modification_file("war3mapSkin.w3d", doodads_slk, doodads_meta_slk, true);
-	}
-
-	if (hierarchy.map_file_exists("war3map.w3b")) {
-		load_modification_file("war3map.w3b", destructibles_slk, destructibles_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3mapSkin.w3b")) {
-		load_modification_file("war3mapSkin.w3b", destructibles_slk, destructibles_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3map.w3u")) {
-		load_modification_file("war3map.w3u", units_slk, units_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3mapSkin.w3u")) {
-		load_modification_file("war3mapSkin.w3u", units_slk, units_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3map.w3t")) {
-		load_modification_file("war3map.w3t", items_slk, items_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3mapSkin.w3t")) {
-		load_modification_file("war3mapSkin.w3t", items_slk, items_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3map.w3a")) {
-		load_modification_file("war3map.w3a", abilities_slk, abilities_meta_slk, true);
-	}
-
-	if (hierarchy.map_file_exists("war3mapSkin.w3a")) {
-		load_modification_file("war3mapSkin.w3a", abilities_slk, abilities_meta_slk, true);
-	}
-
-	if (hierarchy.map_file_exists("war3map.w3h")) {
-		load_modification_file("war3map.w3h", buff_slk, buff_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3mapSkin.w3h")) {
-		load_modification_file("war3mapSkin.w3h", buff_slk, buff_meta_slk, false);
-	}
-
-	if (hierarchy.map_file_exists("war3map.w3q")) {
-		load_modification_file("war3map.w3q", upgrade_slk, upgrade_meta_slk, true);
-	}
-
-	if (hierarchy.map_file_exists("war3mapSkin.w3q")) {
-		load_modification_file("war3mapSkin.w3q", upgrade_slk, upgrade_meta_slk, true);
-	}
+	load_pair("war3map.w3d", "war3mapSkin.w3d", doodads_slk, doodads_meta_slk, true);
+	load_pair("war3map.w3b", "war3mapSkin.w3b", destructibles_slk, destructibles_meta_slk, false);
+	load_pair("war3map.w3u", "war3mapSkin.w3u", units_slk, units_meta_slk, false);
+	load_pair("war3map.w3t", "war3mapSkin.w3t", items_slk, items_meta_slk, false);
+	load_pair("war3map.w3a", "war3mapSkin.w3a", abilities_slk, abilities_meta_slk, true);
+	load_pair("war3map.w3h", "war3mapSkin.w3h", buff_slk, buff_meta_slk, false);
+	load_pair("war3map.w3q", "war3mapSkin.w3q", upgrade_slk, upgrade_meta_slk, true);
+	return unparsed_files;
 }

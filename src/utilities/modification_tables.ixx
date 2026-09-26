@@ -14,7 +14,15 @@ namespace fs = std::filesystem;
 
 constexpr int mod_table_write_version = 3;
 
-export void load_modification_table(BinaryReader& reader, const uint32_t version, slk::SLK& slk, const slk::SLK& meta_slk, const bool modification, const bool optional_ints) {
+export void load_modification_table(
+	BinaryReader& reader,
+	const uint32_t version,
+	slk::SLK& slk,
+	const slk::SLK& meta_slk,
+	const bool modification,
+	const bool optional_ints,
+	const std::string_view file_name = "<buffer>"
+) {
 	const uint32_t objects = reader.read<uint32_t>();
 	for (size_t i = 0; i < objects; i++) {
 		const std::string original_id = reader.read_string(4);
@@ -28,7 +36,21 @@ export void load_modification_table(BinaryReader& reader, const uint32_t version
 			const uint32_t set_flag = reader.read<uint32_t>();
 		}
 		if (modification && !slk.base_data.contains(modified_id)) {
-			slk.copy_row(original_id, modified_id, false);
+			if (slk.base_data.contains(original_id)) {
+				slk.copy_row(original_id, modified_id, false);
+			} else {
+				std::println(
+					"Missing base object '{}' for custom object '{}' in {}; preserving its map fields with an empty base row.",
+					original_id,
+					modified_id,
+					file_name
+				);
+				if (!slk.row_headers.contains(modified_id)) {
+					slk.add_row(modified_id);
+				}
+				slk.base_data.try_emplace(modified_id);
+				slk.set_shadow_data("oldid", modified_id, original_id);
+			}
 		}
 
 		const uint32_t modifications = reader.read<uint32_t>();
@@ -62,7 +84,15 @@ export void load_modification_table(BinaryReader& reader, const uint32_t version
 					data = reader.read_c_string();
 					break;
 				default:
-					std::println("Unknown data type {} while loading modification table.", type);
+					throw std::runtime_error(std::format(
+						"Unknown modification data type {} in {} (object '{}', field '{}'; metadata field '{}', type '{}')",
+						type,
+						file_name,
+						modified_id,
+						modification_id,
+						meta_slk.data<std::string_view>("field", modification_id),
+						meta_slk.data<std::string_view>("type", modification_id)
+					));
 			}
 			reader.advance(4);
 
@@ -82,14 +112,16 @@ export void load_modification_table(BinaryReader& reader, const uint32_t version
 
 export void load_modification_file(const std::string_view file_name, slk::SLK& base_data, const slk::SLK& meta_slk, const bool optional_ints) {
 	BinaryReader reader = hierarchy.map_file_read_or_throw(file_name, std::format("load_modification_file({})", file_name));
+	slk::SLK updated_data = base_data;
 
 	const int version = reader.read<uint32_t>();
 	if (version != 1 && version != 2 && version != 3) {
 		std::cout << "Unknown modification table version of " << version << " detected. Attempting to load, but may crash.\n";
 	}
 
-	load_modification_table(reader, version, base_data, meta_slk, false, optional_ints);
-	load_modification_table(reader, version, base_data, meta_slk, true, optional_ints);
+	load_modification_table(reader, version, updated_data, meta_slk, false, optional_ints, file_name);
+	load_modification_table(reader, version, updated_data, meta_slk, true, optional_ints, file_name);
+	base_data = std::move(updated_data);
 }
 
 // The idea of SLKs and mod files is quite bad, but I can deal with them

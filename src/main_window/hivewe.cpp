@@ -41,13 +41,38 @@ import "unit_palette.h";
 import "object_editor/icon_view.h";
 import "trigger_editor.h";
 #include "QMessageBox"
+#include "QCoreApplication"
 #include "QProcess"
+#include "QTemporaryFile"
 #include "QKeySequence"
 #include "QString"
 import "menus/gameplay_constants_editor.h";
 import "asset_manager/asset_manager.h";
 
 namespace fs = std::filesystem;
+
+namespace {
+	std::optional<fs::path> find_lua_source_project(const fs::path& map_directory) {
+		fs::path current = fs::absolute(map_directory);
+		while (!current.empty()) {
+			const fs::path builder = current / "build_map_lua.py";
+			const fs::path manifest = current / "map.w3x" / "_lua" / "monolith_split" / "manifest.json";
+			if (fs::is_regular_file(builder) && fs::is_regular_file(manifest)) {
+				return current;
+			}
+			const fs::path parent = current.parent_path();
+			if (parent == current) {
+				break;
+			}
+			current = parent;
+		}
+		return std::nullopt;
+	}
+
+	bool map_contains_split_lua_sources(const fs::path& map_directory) {
+		return fs::is_regular_file(map_directory / "_lua" / "monolith_split" / "manifest.json");
+	}
+}
 
 HiveWE::HiveWE(QWidget* parent) : QMainWindow(parent) {
 	setAutoFillBackground(true);
@@ -425,6 +450,15 @@ void HiveWE::load_map(const fs::path& directory) {
 	});
 
 	map->load(directory);
+	if (!map->unparsed_object_data_files.empty()) {
+		QString files;
+		for (const std::string& file : map->unparsed_object_data_files) {
+			files += "\n• " + QString::fromStdString(file);
+		}
+		QMessageBox::warning(this, "Some object data could not be read",
+			"The map opened, but HiveWE could not decode these files and will preserve them unchanged when saving:"
+			+ files + "\n\nDetails are recorded in hivewe.log.");
+	}
 
 	map->render_manager.resize_framebuffers(ui.widget->width(), ui.widget->height());
 	setWindowTitle("HiveWE (VinerX Edition) - " + QString::fromStdString(map->name) + " - " + QString::fromStdString(map->filesystem_path.string()));
@@ -798,22 +832,171 @@ void HiveWE::export_map() {
 }
 
 void HiveWE::play_test() {
-	emit saving_initiated();
-	if (!map->save(map->filesystem_path)) {
+	if (!map || !map->loaded) {
 		return;
 	}
-	QProcess* warcraft = new QProcess;
-	const QString warcraft_path = QString::fromStdString(fs::canonical(hierarchy.root_directory / "x86_64" / "Warcraft III.exe").string());
-	QStringList arguments;
-	arguments << "-launch"
-			  << "-loadfile" << QString::fromStdString(fs::canonical(map->filesystem_path).string());
 
+	const fs::path map_directory = map->filesystem_path;
+	const fs::path lua_build_helper = fs::path(QCoreApplication::applicationDirPath().toStdWString())
+		/ "data" / "tools" / "build_lua_for_test.py";
+	const bool lua_map = map->info.lua;
+	const bool map_has_split_sources = map_contains_split_lua_sources(map_directory);
 	QSettings settings;
-	if (settings.value("testArgs").toString() != "") {
-		arguments << settings.value("testArgs").toString().split(' ');
+	const QString configured_project = settings.value("luaBuildProject").toString().trimmed();
+	std::optional<fs::path> lua_project;
+
+	if (lua_map && !configured_project.isEmpty()) {
+		const fs::path configured_root = fs::absolute(configured_project.toStdWString());
+		const fs::path builder = configured_root / "build_map_lua.py";
+		const fs::path manifest = configured_root / "map.w3x" / "_lua" / "monolith_split" / "manifest.json";
+		if (!fs::is_regular_file(builder) || !fs::is_regular_file(manifest)) {
+			QMessageBox::critical(this, "Lua build project not found",
+				"The configured Lua source project must contain build_map_lua.py and "
+				"map.w3x/_lua/monolith_split/manifest.json:\n" + QString::fromStdString(configured_root.string()));
+			return;
+		}
+		lua_project = configured_root;
+	} else if (lua_map && map_has_split_sources) {
+		lua_project = find_lua_source_project(map_directory);
+		if (!lua_project) {
+			QMessageBox::critical(this, "Lua source project not found",
+				"This map has split Lua sources, but build_map_lua.py was not found in its parent folders. "
+				"Set the Lua source project in Settings → Testing before testing this map.");
+			return;
+		}
 	}
 
-	warcraft->start(warcraft_path, arguments);
+	if (lua_project && !fs::is_regular_file(lua_build_helper)) {
+		QMessageBox::critical(this, "Lua build helper not found",
+			"The HiveWE Lua build helper is missing:\n" + QString::fromStdString(lua_build_helper.string()));
+		return;
+	}
+
+	if (!lua_project) {
+		ui.ribbon->test_map->setEnabled(false);
+		emit saving_initiated();
+		if (!map->save(map_directory)) {
+			ui.ribbon->test_map->setEnabled(true);
+			return;
+		}
+		launch_test_game(map_directory);
+		return;
+	}
+
+	QTemporaryFile staged_lua(QDir::tempPath() + "/HiveWE-lua-build-XXXXXX.lua");
+	if (!staged_lua.open()) {
+		QMessageBox::critical(this, "Could not create Lua build staging file", staged_lua.errorString());
+		return;
+	}
+	staged_lua.setAutoRemove(false);
+	const fs::path staged_lua_path = staged_lua.fileName().toStdWString();
+	staged_lua.close();
+	setEnabled(false);
+	ui.ribbon->test_map->setEnabled(false);
+
+	auto* build_process = new QProcess(this);
+	connect(build_process, &QProcess::finished, this,
+		[this, build_process, map_directory, staged_lua_path](int exit_code, QProcess::ExitStatus exit_status) {
+			const QString output = QString::fromUtf8(build_process->readAllStandardOutput())
+				+ QString::fromUtf8(build_process->readAllStandardError());
+			build_process->deleteLater();
+			if (exit_status != QProcess::NormalExit || exit_code != 0) {
+				std::error_code ec;
+				fs::remove(staged_lua_path, ec);
+				setEnabled(true);
+				ui.ribbon->test_map->setEnabled(true);
+				QMessageBox::critical(this, "Lua build failed",
+					"The Lua source was not saved or launched because its build or syntax check failed.\n\n" + output);
+				return;
+			}
+
+			emit saving_initiated();
+			if (!map->save(map_directory)) {
+				setEnabled(true);
+				ui.ribbon->test_map->setEnabled(true);
+				QMessageBox::critical(this, "Map save failed",
+					"The map was not launched. The validated Lua build is preserved at:\n"
+					+ QString::fromStdWString(staged_lua_path.wstring()));
+				return;
+			}
+
+			std::error_code copy_error;
+			fs::copy_file(staged_lua_path, map_directory / "war3map.lua", fs::copy_options::overwrite_existing, copy_error);
+			if (copy_error) {
+				setEnabled(true);
+				ui.ribbon->test_map->setEnabled(true);
+				QMessageBox::critical(this, "Could not install rebuilt Lua",
+					"The map was saved, but the rebuilt war3map.lua could not be copied into it:\n"
+					+ QString::fromStdString(copy_error.message()) + "\n\nValidated build preserved at:\n"
+					+ QString::fromStdWString(staged_lua_path.wstring()));
+				return;
+			}
+			std::error_code cleanup_error;
+			fs::remove(staged_lua_path, cleanup_error);
+
+			setEnabled(true);
+			launch_test_game(map_directory);
+		});
+	connect(build_process, &QProcess::errorOccurred, this,
+		[this, build_process, staged_lua_path](QProcess::ProcessError error) {
+			if (error != QProcess::FailedToStart) {
+				return;
+			}
+			std::error_code ec;
+			fs::remove(staged_lua_path, ec);
+			setEnabled(true);
+			ui.ribbon->test_map->setEnabled(true);
+			QMessageBox::critical(this, "Lua build could not start",
+				"Could not start Python. Install Python and ensure `python` is available on PATH.");
+			build_process->deleteLater();
+		});
+	build_process->start("python", {
+		QString::fromStdString(lua_build_helper.string()),
+		"--project-root", QString::fromStdString(lua_project->string()),
+		"--output", QString::fromStdWString(staged_lua_path.wstring()),
+	});
+}
+
+void HiveWE::launch_test_game(const fs::path& map_path) {
+	const fs::path warcraft_executable = hierarchy.root_directory / "x86_64" / "Warcraft III.exe";
+	if (!fs::is_regular_file(warcraft_executable)) {
+		setEnabled(true);
+		ui.ribbon->test_map->setEnabled(true);
+		QMessageBox::critical(this, "Warcraft III not found",
+			"Could not find the selected Warcraft III executable:\n" + QString::fromStdString(warcraft_executable.string()));
+		return;
+	}
+
+	QStringList arguments {
+		"-launch",
+		"-loadfile",
+		QString::fromStdString(fs::absolute(map_path).string()),
+	};
+	QSettings settings;
+	const QString extra_arguments = settings.value("testArgs").toString();
+	QStringList parsed_extra_arguments;
+	if (!extra_arguments.trimmed().isEmpty()) {
+		parsed_extra_arguments = extra_arguments.split(' ', Qt::SkipEmptyParts);
+	}
+	parsed_extra_arguments.removeAll("-editor");
+	arguments << parsed_extra_arguments << "-editor";
+
+	auto* warcraft = new QProcess;
+	connect(warcraft, &QProcess::started, this, [this]() {
+		ui.ribbon->test_map->setEnabled(true);
+	});
+	connect(warcraft, &QProcess::errorOccurred, this, [this, warcraft, warcraft_executable](QProcess::ProcessError error) {
+		if (error != QProcess::FailedToStart) {
+			return;
+		}
+		ui.ribbon->test_map->setEnabled(true);
+		QMessageBox::critical(this, "Warcraft III could not start",
+			"Failed to launch:\n" + QString::fromStdString(warcraft_executable.string())
+			+ "\n\n" + warcraft->errorString());
+		warcraft->deleteLater();
+	});
+	connect(warcraft, &QProcess::finished, warcraft, &QObject::deleteLater);
+	warcraft->start(QString::fromStdString(warcraft_executable.string()), arguments);
 }
 
 void HiveWE::closeEvent(QCloseEvent* event) {
