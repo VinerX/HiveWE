@@ -147,9 +147,10 @@ std::string display_name(const slk::SLK& slk, const std::string& id) {
 
 // ---- bootstrap ------------------------------------------------------------
 
-// Opens CASC, loads the WorldEdit strings, points the hierarchy at the map and
-// loads base + map object data. Returns an error message on failure.
-std::optional<std::string> bootstrap(const std::string& warcraft, const std::string& map_dir, bool hd) {
+// Opens CASC and loads the base Warcraft object data. This path deliberately
+// does not require a map folder, so a snapshot can be exported once and reused
+// in environments that do not have Warcraft III installed.
+std::optional<std::string> bootstrap_base(const std::string& warcraft, bool hd) {
 	hierarchy.ptr = false;
 	hierarchy.hd = hd;
 	hierarchy.teen = false;
@@ -165,11 +166,60 @@ std::optional<std::string> bootstrap(const std::string& warcraft, const std::str
 	world_edit_data.substitute(world_edit_game_strings, "WorldEditStrings");
 	world_edit_data.substitute(world_edit_strings, "WorldEditStrings");
 
-	hierarchy.map_directory = std::filesystem::absolute(map_dir);
-
 	load_base_object_data([](std::string_view) {});
+	return std::nullopt;
+}
+
+// Loads base data first, then overlays one unpacked map's modification tables.
+std::optional<std::string> bootstrap(const std::string& warcraft, const std::string& map_dir, bool hd) {
+	if (const auto err = bootstrap_base(warcraft, hd)) {
+		return err;
+	}
+
+	hierarchy.map_directory = std::filesystem::absolute(map_dir);
 	load_map_object_data();
 	return std::nullopt;
+}
+
+// Stream one SLK table as deterministic JSON. Keeping ids and columns sorted
+// makes snapshots stable in git and easy for agents/tools to diff.
+std::size_t write_snapshot_type(std::ostream& out, const char* type_name, const slk::SLK& table) {
+	std::vector<std::string> ids;
+	ids.reserve(table.row_headers.size());
+	for (const auto& [id, index] : table.row_headers) {
+		(void)index;
+		ids.push_back(id);
+	}
+	std::sort(ids.begin(), ids.end());
+
+	std::vector<std::string> columns;
+	columns.reserve(table.column_headers.size());
+	for (const auto& [column, index] : table.column_headers) {
+		(void)index;
+		columns.push_back(column);
+	}
+	std::sort(columns.begin(), columns.end());
+
+	out << jstr(type_name) << ":{\"objects\":{";
+	for (std::size_t i = 0; i < ids.size(); ++i) {
+		if (i) out << ",";
+		const std::string& id = ids[i];
+		out << jstr(id) << ":{\"name\":" << jstr(display_name(table, id)) << ",\"fields\":{";
+
+		bool first_field = true;
+		for (const auto& column : columns) {
+			const std::string value = table.data<std::string>(column, id);
+			if (value.empty()) {
+				continue;
+			}
+			if (!first_field) out << ",";
+			first_field = false;
+			out << jstr(column) << ":" << jstr(value);
+		}
+		out << "}}";
+	}
+	out << "},\"count\":" << ids.size() << "}";
+	return ids.size();
 }
 
 } // namespace
@@ -200,6 +250,85 @@ export std::string hivewe_object_command(int argc, char* argv[], const std::stri
 		o.boolean("ok", true);
 		o.str("command", args.command);
 		o.raw("types", arr);
+		ok = true;
+		return o.dump();
+	}
+
+	// ---- dump-base-data ----
+	// Export textual Warcraft object data once so CI/agents can inspect rawcodes,
+	// names, stats, ability lists and model *paths* without copying any game assets.
+	if (args.command == "dump-base-data") {
+		const auto out_opt = args.get("out");
+		if (!out_opt) {
+			return error("missing required option: --out <snapshot.json>");
+		}
+
+		std::string warcraft;
+		if (const auto w = args.get("warcraft")) {
+			warcraft = *w;
+		} else if (!warcraft_fallback.empty()) {
+			warcraft = warcraft_fallback;
+		} else {
+			return error("could not determine Warcraft III directory; pass --warcraft <dir>");
+		}
+
+		try {
+			if (const auto err = bootstrap_base(warcraft, args.has_flag("hd"))) {
+				return error(*err);
+			}
+		} catch (const std::exception& e) {
+			return error(std::string("failed to load base object data: ") + e.what());
+		}
+
+		std::vector<std::string> selected_types;
+		if (const auto type_opt = args.get("type")) {
+			if (!type_for(*type_opt)) {
+				return error("unknown object type: " + *type_opt);
+			}
+			selected_types.push_back(to_lower(*type_opt));
+		} else {
+			for (const char* name : kTypeNames) selected_types.emplace_back(name);
+		}
+
+		const std::filesystem::path out_path = std::filesystem::absolute(*out_opt);
+		std::error_code ec;
+		if (out_path.has_parent_path()) {
+			std::filesystem::create_directories(out_path.parent_path(), ec);
+			if (ec) {
+				return error("failed to create snapshot directory: " + ec.message());
+			}
+		}
+
+		std::ofstream stream(out_path, std::ios::binary | std::ios::trunc);
+		if (!stream) {
+			return error("failed to open snapshot for writing: " + out_path.string());
+		}
+
+		JsonObject counts;
+		std::size_t total = 0;
+		stream << "{\"schema_version\":1,\"source\":\"warcraft-casc\",\"hd\":"
+			   << (args.has_flag("hd") ? "true" : "false") << ",\"types\":{";
+		for (std::size_t i = 0; i < selected_types.size(); ++i) {
+			if (i) stream << ",";
+			const auto info = type_for(selected_types[i]);
+			if (!info) continue; // validated above; defensive only
+			const std::size_t count = write_snapshot_type(stream, selected_types[i].c_str(), *info->slk);
+			counts.number(selected_types[i], count);
+			total += count;
+		}
+		stream << "}}";
+		stream.flush();
+		if (!stream) {
+			return error("failed while writing snapshot: " + out_path.string());
+		}
+
+		JsonObject o;
+		o.boolean("ok", true);
+		o.str("command", args.command);
+		o.str("out", out_path.string());
+		o.boolean("hd", args.has_flag("hd"));
+		o.number("objects", total);
+		o.raw("counts", counts.dump());
 		ok = true;
 		return o.dump();
 	}
