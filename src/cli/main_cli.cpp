@@ -370,7 +370,7 @@ int main(int argc, char* argv[]) {
 		emit({{"ok", true},
 			  {"tool", "HiveWE_cli"},
 			  {"commands", json::array({"build-map", "run-map", "validate-script",
-									   "list-object-types", "search-objects", "get-object", "set-field"})},
+									   "list-object-types", "search-objects", "get-object", "set-field", "dump-base-data"})},
 			  {"usage", json::object({
 				   {"build-map", "--map <dir> [--out <file.w3x>]"},
 				   {"run-map", "--map <dir|.w3x> --warcraft <dir> [--ptr] [--args \"...\"]"},
@@ -379,6 +379,7 @@ int main(int argc, char* argv[]) {
 				   {"search-objects", "--map <dir> --type <unit|item|ability|doodad|destructible|upgrade|buff> --query <substr> [--warcraft <dir>] [--limit N] [--hd]"},
 				   {"get-object", "--map <dir> --type <...> --id <id> [--warcraft <dir>] [--fields a,b,c] [--hd]"},
 				   {"set-field", "--map <dir> --type <...> --id <id> --field <col> --value <v> [--warcraft <dir>] [--hd]"},
+				   {"dump-base-data", "--out <snapshot.json> [--type <unit|item|ability|doodad|destructible|upgrade|buff>] [--warcraft <dir>] [--hd]"},
 			   })}});
 	}
 
@@ -389,7 +390,8 @@ int main(int argc, char* argv[]) {
 	} else if (args.command == "validate-script") {
 		cmd_validate_script(args);
 	} else if (args.command == "list-object-types" || args.command == "search-objects" ||
-			   args.command == "get-object" || args.command == "set-field") {
+			   args.command == "get-object" || args.command == "set-field" ||
+			   args.command == "dump-base-data") {
 		bool ok = false;
 		const std::string result = hivewe_object_command(argc, argv, warcraft_dir_from_registry(), ok);
 		std::fputs(result.c_str(), stdout);
