@@ -82,6 +82,7 @@ POD-контейнер без QObject/рендера:
 | `list-types` | какие категории объектов есть |
 | `search-objects --type unit --name "гоблин"` | id + отображаемые имена (резолв имён) |
 | `get-object <id>` | все поля (base+shadow), с человеческими именами |
+| `dump-base-data --out <snapshot.json>` | одноразовый снимок базовых object-data Warcraft из CASC для офлайн-анализа без игровых ассетов |
 | `list-fields --type unit` | коды полей + имена + meta (тип, min/max) |
 | `resolve-field "хп" --type unit` | код(ы) поля по синониму |
 | `list-triggers` / `get-trigger <name>` | дерево триггеров; чтение custom-text/JASS |
